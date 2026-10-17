@@ -23,7 +23,9 @@ import ru.finney.pet.domain.model.TaskOutcome
 import ru.finney.pet.domain.period.PeriodRules
 import ru.finney.pet.domain.pet.Emotion
 import ru.finney.pet.domain.pet.PetRules
+import ru.finney.pet.domain.progress.LevelUnlocks
 import ru.finney.pet.domain.progress.Progression
+import ru.finney.pet.domain.progress.Unlocks
 import ru.finney.pet.domain.tasks.TaskDetails
 import ru.finney.pet.domain.tasks.TaskEngines
 import ru.finney.pet.domain.tasks.TaskEvaluation
@@ -221,6 +223,27 @@ class Game(
     fun tasksUnlockedBetween(from: Int, to: Int): List<TaskDefinition> =
         content.tasks.filter { it.unlockLevel in (from + 1)..to }
 
+    // ---------- Открытия по уровням ----------
+
+    /** Что открывается на уровне [level]: игры, вещи, цели, звание. */
+    fun unlocksAt(level: Int): LevelUnlocks = Unlocks.at(level, content)
+
+    /** Что открылось при переходе с уровня [from] на [to] — для итога уровня. Уровни без новинок пропущены. */
+    fun unlocksBetween(from: Int, to: Int): List<LevelUnlocks> =
+        ((from + 1)..to).map(::unlocksAt).filterNot { it.isEmpty }
+
+    /** Ближайший уровень с новинками после текущего — «что дальше» на главном; null — открыто всё. */
+    fun nextUnlocks(state: GameState): LevelUnlocks? = Unlocks.next(level(state), content)
+
+    /** Звание питомца сейчас; null — званий в контенте нет. */
+    fun title(state: GameState): String? = Unlocks.title(level(state), content)
+
+    /** Продаётся ли вещь на этом уровне. В демо-режиме открыто всё. */
+    fun isUnlocked(state: GameState, item: ShopItem): Boolean = state.isDemo || item.unlockLevel <= level(state)
+
+    /** Можно ли выбрать цель на этом уровне. В демо-режиме открыто всё. */
+    fun isUnlocked(state: GameState, goal: Goal): Boolean = state.isDemo || goal.unlockLevel <= level(state)
+
     fun goalProgress(state: GameState, goalId: String? = state.activeGoalId): GoalProgress? {
         val goal = goalId?.let(content::goal) ?: return null
         val saved = state.goalSaved(goal.id)
@@ -297,6 +320,7 @@ class Game(
         if (state.sleepingSince != null && item.feedsOrWashes) return reject(Rejection.Asleep)
         if (state.currentPeriod.phase != PeriodPhase.ACTIVE) return reject(Rejection.PlanNotConfirmed)
         content.goalFor(item.id)?.let { return reject(Rejection.NotForSale(item.id, it.label)) }
+        if (!isUnlocked(state, item)) return reject(Rejection.Locked(item.unlockLevel))
         // Аксессуар и игрушка покупаются один раз: они остаются у питомца.
         if (item.kind != ItemKind.CONSUMABLE && state.owns(item.id)) return reject(Rejection.AlreadyOwned)
         if (item.price > state.balance) return reject(Rejection.InsufficientFunds(item.price, state.balance))
@@ -467,8 +491,10 @@ class Game(
 
     // ---------- Накопления ----------
 
+    /** Закрытую цель не выбрать, но выбранная раньше — на старом сохранении — остаётся. */
     fun selectGoal(state: GameState, goalId: String): GameResult {
-        if (content.goal(goalId) == null) return reject(Rejection.UnknownGoal(goalId))
+        val goal = content.goal(goalId) ?: return reject(Rejection.UnknownGoal(goalId))
+        if (!isUnlocked(state, goal)) return reject(Rejection.Locked(goal.unlockLevel))
         if (state.isGoalCompleted(goalId)) return reject(Rejection.GoalAlreadyCompleted)
         return ok(state.copy(activeGoalId = goalId))
     }

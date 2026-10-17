@@ -1,8 +1,8 @@
 [
   { "id": "goal_crown",             "label": "Ковбойская шляпа", "price": 90,  "moodBonus": 20, "reward": "hat_cowboy" },
-  { "id": "goal_glasses_black",     "label": "Очки",             "price": 110, "moodBonus": 20, "reward": "glasses_black" },
-  { "id": "goal_bike",              "label": "Пиратская шляпа",  "price": 125, "moodBonus": 25, "reward": "hat_pirate" },
-  { "id": "goal_glasses_star",      "label": "Очки-звёзды",      "price": 140, "moodBonus": 30, "reward": "glasses_star" },
-  { "id": "goal_glasses_pineapple", "label": "Очки-ананасы",     "price": 160, "moodBonus": 35, "reward": "glasses_pineapple" },
-  { "id": "goal_house",             "label": "Шляпа волшебника", "price": 170, "moodBonus": 40, "reward": "hat_wizard" }
+  { "id": "goal_glasses_black",     "label": "Очки",             "price": 110, "moodBonus": 20, "reward": "glasses_black", "unlockLevel": 3 },
+  { "id": "goal_bike",              "label": "Пиратская шляпа",  "price": 125, "moodBonus": 25, "reward": "hat_pirate", "unlockLevel": 5 },
+  { "id": "goal_glasses_star",      "label": "Очки-звёзды",      "price": 140, "moodBonus": 30, "reward": "glasses_star", "unlockLevel": 7 },
+  { "id": "goal_glasses_pineapple", "label": "Очки-ананасы",     "price": 160, "moodBonus": 35, "reward": "glasses_pineapple", "unlockLevel": 9 },
+  { "id": "goal_house",             "label": "Шляпа волшебника", "price": 170, "moodBonus": 40, "reward": "hat_wizard", "unlockLevel": 11 }
 ]

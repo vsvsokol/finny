@@ -54,6 +54,16 @@ object ContentValidator {
         if (needs.none { it.effect.hygiene > 0 }) add("shop.json: нет обязательного товара, поднимающего чистоту")
 
         duplicates(content.goals.map { it.id }).forEach { add("goals.json: повторяется id $it") }
+
+        // Открытия по уровням (docs/economy.md, раздел 8). План на первом же уровне — во всех трёх
+        // направлениях (ТЗ п. 2.5.5), поэтому нужное, хоть одна радость и хоть одна цель открыты сразу.
+        if (e.stageTitles.isNotEmpty() && e.stageTitles.size != stages) add("economy.json: stageTitles — нужно $stages значения, по числу стадий")
+        if (e.stageTitles.any { it.isBlank() }) add("economy.json: stageTitles — пустое звание")
+        content.shop.filter { it.unlockLevel !in 1..e.maxLevel }.forEach { add("shop.json: ${it.id} — unlockLevel должен быть от 1 до ${e.maxLevel}") }
+        content.goals.filter { it.unlockLevel !in 1..e.maxLevel }.forEach { add("goals.json: ${it.id} — unlockLevel должен быть от 1 до ${e.maxLevel}") }
+        needs.filter { it.unlockLevel != 1 }.forEach { add("shop.json: ${it.id} — нужное открыто всегда, unlockLevel только 1") }
+        if (content.forSale.none { it.category == Category.WANTS && it.unlockLevel == 1 }) add("shop.json: на уровне 1 нечего купить из «хочется» — план не составить")
+        if (content.goals.none { it.unlockLevel == 1 }) add("goals.json: на уровне 1 нет цели — копилку в плане не заполнить")
         content.goals.filter { it.price <= 0 }.forEach { add("goals.json: ${it.id} — цена должна быть > 0") }
 
         duplicates(content.glossary.map { it.id }).forEach { add("glossary.json: повторяется id $it") }

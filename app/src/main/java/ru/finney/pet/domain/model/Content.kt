@@ -54,6 +54,8 @@ data class ShopItem(
     val effect: StatEffect = StatEffect(),
     /** Только у аксессуара: куда он надевается. */
     val slot: AccessorySlot = AccessorySlot.HEAD,
+    /** С какого уровня продаётся. Купленное раньше остаётся. docs/economy.md, раздел 8. */
+    val unlockLevel: Int = 1,
 )
 
 @Serializable
@@ -68,6 +70,8 @@ data class Goal(
      * не продаётся: её можно только накопить.
      */
     val reward: String? = null,
+    /** С какого уровня цель можно выбрать. Выбранная раньше остаётся. docs/economy.md, раздел 8. */
+    val unlockLevel: Int = 1,
 )
 
 /** glossary.json — справочник терминов, ТЗ п. 2.5.11. */

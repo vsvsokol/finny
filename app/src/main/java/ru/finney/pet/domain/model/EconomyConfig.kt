@@ -20,6 +20,8 @@ data class EconomyConfig(
     val demoLevelGameRequired: Boolean = true,
     val maxLevel: Int,
     val stageStartLevels: List<Int>,
+    /** Звание питомца на каждой стадии — за навык, который ребёнок к ней освоил. Пусто — без званий. */
+    val stageTitles: List<String> = emptyList(),
     val pet: PetRule,
     val play: PlayRule = PlayRule(),
     val sleepCards: SleepCardRule = SleepCardRule(),
