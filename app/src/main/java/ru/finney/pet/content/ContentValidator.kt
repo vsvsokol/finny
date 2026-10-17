@@ -2,7 +2,9 @@ package ru.finney.pet.content
 
 import ru.finney.pet.domain.model.Category
 import ru.finney.pet.domain.model.GameContent
+import ru.finney.pet.domain.model.GoalRaceTask
 import ru.finney.pet.domain.model.ItemKind
+import ru.finney.pet.domain.model.ReserveTask
 import ru.finney.pet.domain.tasks.TaskChecks
 
 /**
@@ -65,6 +67,14 @@ object ContentValidator {
             if (task.unlockPeriod < 1) add("$at — unlockPeriod должен быть ≥ 1")
             if (task.unlockLevel !in 1..e.maxLevel) add("$at — unlockLevel должен быть от 1 до ${e.maxLevel}")
             addAll(TaskChecks.problems(task))
+            // «Пройдено, но можно лучше» — своим текстом, иначе экран скажет «ничего не отменили».
+            if (task is ReserveTask) {
+                if (task.explainDropped.isNullOrBlank()) add("$at — нет explainDropped: что сказать, если желаемое отложили ради сюрприза")
+                if (task.explainNoJoy.isNullOrBlank()) add("$at — нет explainNoJoy: что сказать, если в плане не было желаемого")
+            }
+            if (task is GoalRaceTask && task.explainSad.isNullOrBlank()) {
+                add("$at — нет explainSad: что сказать, если цель набрана, а Финни загрустил")
+            }
         }
 
         for (variants in content.taskSeries) {

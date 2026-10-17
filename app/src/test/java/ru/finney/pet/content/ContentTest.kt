@@ -204,8 +204,9 @@ class ContentTest {
                 .first { items -> items.sumOf { it.price } <= task.limit && task.rules.all { TaskEngines.ruleMet(task, it, items.map { i -> i.id }.toSet()) } }
             TaskInput.Basket(win.map { it.id }.toSet()) to TaskInput.Basket(emptySet())
         }
-        // Проигрыш — «откладывать всё»: копилка полная, а Финни грустный. Так игра не учит «никогда ничего не тратить».
-        is GoalRaceTask -> TaskInput.DailyDeposits(TaskEngines.raceSolution(task)!!) to TaskInput.DailyDeposits(List(task.days) { task.incomePerDay })
+        // Проигрыш — ничего не откладывать: цель не набрана. «Откладывать всё» — не проигрыш,
+        // а пройдено без бонуса (проверяет TaskChecks).
+        is GoalRaceTask -> TaskInput.DailyDeposits(TaskEngines.raceSolution(task)!!) to TaskInput.DailyDeposits(List(task.days) { 0 })
         is ReserveTask -> {
             val needs = task.spendings.filter { it.category == Category.NEEDS }.map { it.id }.toSet()
             // Неудача: все желаемые, какие влезают, без запаса; на сюрпризы приходится переносить нужное.

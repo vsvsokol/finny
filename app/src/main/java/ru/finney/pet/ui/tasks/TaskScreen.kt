@@ -41,6 +41,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ru.finney.pet.domain.model.TaskOutcome
 import ru.finney.pet.domain.model.TaskTheme
+import ru.finney.pet.domain.tasks.TaskEngines
 import ru.finney.pet.ui.components.AlertBadge
 import ru.finney.pet.ui.components.CheckBadge
 import ru.finney.pet.ui.components.Coin
@@ -304,7 +305,7 @@ private fun TaskResultScene(state: TaskUiState.Ready, onReplay: () -> Unit, onDo
                 // Объяснение — репликой питомца во всю ширину, хвостиком к нему: так оно
                 // отделено от пунктов и читается как совет, а не как ещё один абзац.
                 Bubble(
-                    if (success) state.task.explainOk else state.task.explainFail,
+                    TaskEngines.explanation(state.task, result.outcome, result.details),
                     Tail.DOWN_RIGHT,
                     Modifier.fillMaxWidth(),
                     maxWidth = 600.dp,

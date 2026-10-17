@@ -131,7 +131,7 @@ class MiniGamesTest {
     @Test
     fun `goal_race — сумма взносов против цены, соблазны считаются по потраченному`() {
         assertEquals(
-            TaskEvaluation.Done(TaskOutcome.SUCCESS, TaskDetails.GoalRace(saved = 50, shortfall = 0, eventsTaken = 1, mood = 2)),
+            TaskEvaluation.Done(TaskOutcome.SUCCESS, TaskDetails.GoalRace(saved = 50, shortfall = 0, eventsTaken = 1, mood = 2), bonus = true),
             TaskEngines.evaluate(race, TaskInput.DailyDeposits(listOf(10, 10, 10, 5, 5, 10))),
         )
         assertEquals(
@@ -151,13 +151,16 @@ class MiniGamesTest {
     @Test
     fun `goal_race — откладывать всё больше не лучшая стратегия`() {
         val saveAll = raceOf(moodRace, 10, 10, 10, 10, 10, 10)
-        // Копилка полнее всех, но Финни ни разу себя не порадовал — и цель не засчитана.
-        assertEquals(TaskOutcome.FAIL, saveAll.outcome)
+        // Копилка полнее всех, но Финни ни разу себя не порадовал: отказ — не провал,
+        // цель засчитана, но без бонуса.
+        assertEquals(TaskOutcome.SUCCESS, saveAll.outcome)
+        assertFalse(saveAll.bonus)
         assertEquals(TaskDetails.GoalRace(saved = 60, shortfall = 0, eventsTaken = 0, mood = 0), saveAll.details)
 
-        // Одна маленькая радость — и цель, и настроение.
+        // Одна маленькая радость — и цель, и настроение, и бонус.
         val balanced = raceOf(moodRace, 10, 5, 10, 10, 10, 10)
         assertEquals(TaskOutcome.SUCCESS, balanced.outcome)
+        assertTrue(balanced.bonus)
         assertEquals(1, (balanced.details as TaskDetails.GoalRace).mood)
 
         // Всё на радости — Финни счастлив, но цель не набрана.
@@ -178,14 +181,16 @@ class MiniGamesTest {
         )
         // Два отказа подряд — ноль. Радость в последний день уже не выручает.
         assertEquals(listOf(1, 0, 0, 0, 0, 0), TaskEngines.raceMood(lateOnly, listOf(10, 10, 10, 10, 10, 5)))
-        assertEquals(TaskOutcome.FAIL, raceOf(lateOnly, 10, 10, 10, 10, 10, 5).outcome)
+        val late = raceOf(lateOnly, 10, 10, 10, 10, 10, 5)
+        assertEquals(TaskOutcome.SUCCESS, late.outcome)
+        assertFalse(late.bonus)
     }
 
     @Test
     fun `goal_race — решатель находит путь с радостями, если он есть`() {
         val plan = TaskEngines.raceSolution(moodRace)!!
-        assertEquals(TaskOutcome.SUCCESS, raceOf(moodRace, *plan.toIntArray()).outcome)
-        // Свободных монет нет вовсе: копить можно только всё, а это грусть — выиграть нельзя.
+        assertTrue(raceOf(moodRace, *plan.toIntArray()).bonus)
+        // Свободных монет нет вовсе: копить можно только всё, а это грусть — бонус не получить.
         assertEquals(null, TaskEngines.raceSolution(moodRace.copy(goal = RaceGoal("Самокат", 60))))
     }
 
@@ -230,10 +235,10 @@ class MiniGamesTest {
     }
 
     @Test
-    fun `reserve — пустой план — неделя без радостей, неудача`() {
+    fun `reserve — пустой план — неделя без радостей, пройдено без бонуса`() {
         assertEquals(
             TaskEvaluation.Done(
-                TaskOutcome.FAIL,
+                TaskOutcome.SUCCESS,
                 TaskDetails.Reserve(reserve = 30, shortage = 0, surprises = 15, keptWants = 0, left = 15),
             ),
             TaskEngines.evaluate(rainy, TaskInput.Reserve(setOf("food", "soap"), emptySet())),
@@ -241,10 +246,10 @@ class MiniGamesTest {
     }
 
     @Test
-    fun `reserve — жадный план — сюрприз заставил отменить желаемое, неудача`() {
+    fun `reserve — жадный план — желаемое отложили ради сюрприза, пройдено без бонуса`() {
         assertEquals(
             TaskEvaluation.Done(
-                TaskOutcome.FAIL,
+                TaskOutcome.SUCCESS,
                 TaskDetails.Reserve(reserve = 5, shortage = 10, surprises = 15, keptWants = 1, left = 10, droppedWants = 2),
             ),
             TaskEngines.evaluate(
@@ -255,7 +260,7 @@ class MiniGamesTest {
     }
 
     @Test
-    fun `reserve — мало запаса — приходится переносить нужное, и это неудача`() {
+    fun `reserve — нужное отложили — неудача`() {
         val all = setOf("food", "soap", "ball", "stickers", "icecream")
         assertEquals(
             TaskEvaluation.Done(
@@ -293,6 +298,30 @@ class MiniGamesTest {
         assertEquals(TaskInputError.NeedsNotPlanned("soap"), TaskEngines.evaluate(rainy, TaskInput.Reserve(setOf("food"), emptySet())).error())
         assertEquals(TaskInputError.NotPlanned("ball"), TaskEngines.evaluate(rainy, TaskInput.Reserve(setOf("food", "soap"), setOf("ball"))).error())
         assertEquals(TaskInputError.SurpriseNotCovered(5), TaskEngines.evaluate(rainy, TaskInput.Reserve(all, setOf("icecream"))).error())
+    }
+
+    @Test
+    fun `объяснение итога — своё для «пройдено, но можно лучше»`() {
+        val texts = rainy.copy(explainOk = "ok", explainFail = "fail", explainDropped = "dropped", explainNoJoy = "nojoy")
+        fun explain(planned: Set<String>, dropped: Set<String>): String {
+            val done = TaskEngines.evaluate(texts, TaskInput.Reserve(planned, dropped)) as TaskEvaluation.Done
+            return TaskEngines.explanation(texts, done.outcome, done.details)
+        }
+        val all = setOf("food", "soap", "ball", "stickers", "icecream")
+        assertEquals("ok", explain(setOf("food", "soap", "ball"), emptySet()))
+        assertEquals("dropped", explain(all, setOf("ball", "stickers")))
+        assertEquals("nojoy", explain(setOf("food", "soap"), emptySet()))
+        assertEquals("fail", explain(all, setOf("soap")))
+        // Текста нет в контенте — общий explainOk.
+        val plain = texts.copy(explainDropped = null)
+        val done = TaskEngines.evaluate(plain, TaskInput.Reserve(all, setOf("ball", "stickers"))) as TaskEvaluation.Done
+        assertEquals("ok", TaskEngines.explanation(plain, done.outcome, done.details))
+
+        val sad = moodRace.copy(explainOk = "ok", explainSad = "sad")
+        val saveAll = raceOf(sad, 10, 10, 10, 10, 10, 10)
+        assertEquals("sad", TaskEngines.explanation(sad, saveAll.outcome, saveAll.details))
+        val balanced = raceOf(sad, 10, 5, 10, 10, 10, 10)
+        assertEquals("ok", TaskEngines.explanation(sad, balanced.outcome, balanced.details))
     }
 
     // ---------- stand ----------
