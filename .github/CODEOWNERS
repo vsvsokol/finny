@@ -2,9 +2,6 @@
 # Действует только при включённой защите ветки Main:
 # Settings -> Branches -> Add rule -> Require review from Code Owners
 
-# По умолчанию — владелец репозитория
-*                           @vsvsokol
-
 # Ядро: экономика, состояние питомца, хранилище, навигация.
 # Только @lemonke68. Правки сюда от других не принимаются без его ревью.
 /app/src/main/java/**/core/        @lemonke68
