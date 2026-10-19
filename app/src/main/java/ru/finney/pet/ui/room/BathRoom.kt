@@ -700,6 +700,9 @@ private fun NumberBadge(number: Int, modifier: Modifier = Modifier) {
 /** «Купить» на плитке, где кончилось: персиковая, как кнопки, с тележкой. */
 @Composable
 private fun BuyPill() {
+    // На крупном шрифте (130 %) тележка со словом не влезали в плитку, и слово резалось
+    // до «Купит». Слово важнее значка: его и оставляем, а персиковая плашка остаётся кнопкой.
+    val roomy = LocalDensity.current.fontScale < 1.15f
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -707,9 +710,9 @@ private fun BuyPill() {
             .clip(RoundedCornerShape(50))
             .background(FinneyPeach)
             .border(StrokeThin, FinneyInk, RoundedCornerShape(50))
-            .padding(horizontal = 8.dp, vertical = 1.dp),
+            .padding(horizontal = if (roomy) 8.dp else 6.dp, vertical = 1.dp),
     ) {
-        FinneyIcon(FinneyIcons.Cart, size = 16.dp)
+        if (roomy) FinneyIcon(FinneyIcons.Cart, size = 16.dp)
         Text("Купить", style = MaterialTheme.typography.bodyMedium, color = FinneyInk, maxLines = 1)
     }
 }
