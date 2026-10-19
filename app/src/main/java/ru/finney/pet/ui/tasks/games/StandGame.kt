@@ -6,6 +6,12 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import ru.finney.pet.ui.progress.coins
+import ru.finney.pet.ui.motion.LocalAnimations
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -290,7 +296,7 @@ private fun Day(task: StandTask, character: PetCharacter, count: Int, money: Int
                     if (done) {
                         FinneyButton(text = "Закрыть лавку", onClick = onDone, fillWidth = false)
                     } else {
-                        PourButton(task.cupPrice, onPour = ::pour)
+                        PourButton(task.cupPrice, pulse = served == 0, onPour = ::pour)
                     }
                 }
             }
@@ -465,25 +471,46 @@ private fun Stall(character: PetCharacter, cupPrice: Int) {
                 .background(Color.White)
                 .border(4.dp, FinneyInk, RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center,
-        ) { OutlinedText("Стакан: $cupPrice монет", style = MaterialTheme.typography.titleLarge) }
+        ) { OutlinedText("Стакан: ${coins(cupPrice)}", style = MaterialTheme.typography.titleLarge) }
     }
 }
 
 /**
- * Большая круглая кнопка со стаканом и подпись «Налить · +5» под ней: сколько
+ * Большая круглая кнопка со стаканом и подпись «Налить: +5 монет» под ней: сколько
  * принесёт стакан, видно до нажатия. Кнопка из кита — сжимается под пальцем,
  * как все: прежний плоский круг не отзывался, и казалось, что нажатие не прошло.
+ *
+ * Плейтест 02.10: «Налить за 5» с монеткой читали как цену, а не заработок, и не
+ * понимали, что жать надо её. Поэтому заработок словами, а пока не налит первый
+ * стакан, кнопка пульсирует. Без анимаций (ТЗ п. 3.6) — стоит на месте.
  */
 @Composable
-private fun PourButton(cupPrice: Int, onPour: () -> Unit) {
+private fun PourButton(cupPrice: Int, pulse: Boolean, onPour: () -> Unit) {
+    val beatAnim by rememberInfiniteTransition(label = "pour").animateFloat(
+        initialValue = 1f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(tween(550), RepeatMode.Reverse),
+        label = "beat",
+    )
+    val beat = if (pulse && LocalAnimations.current) beatAnim else 1f
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        FinneyIconButton(onClick = onPour, contentDescription = "Налить лимонад, плюс $cupPrice", size = 96.dp, sound = null) {
+        FinneyIconButton(
+            onClick = onPour,
+            contentDescription = "Налить лимонад: плюс ${coins(cupPrice)}",
+            size = 96.dp,
+            sound = null,
+            modifier = Modifier.graphicsLayer {
+                scaleX = beat
+                scaleY = beat
+            },
+        ) {
             CupIcon(44.dp, full = true)
         }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.clearAndSetSemantics {}) {
-            OutlinedText("Налить за $cupPrice", style = MaterialTheme.typography.titleMedium)
-            Coin(size = 20.dp)
-        }
+        OutlinedText(
+            "Налить: +${coins(cupPrice)}",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.clearAndSetSemantics {},
+        )
     }
 }
 
