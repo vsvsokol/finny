@@ -169,9 +169,11 @@ import ru.finney.pet.ui.room.WALK_MS
 import ru.finney.pet.ui.room.RoomScene
 import ru.finney.pet.ui.room.RoomSpot
 import ru.finney.pet.ui.room.InteriorPart
+import ru.finney.pet.ui.room.EditTab
 import ru.finney.pet.ui.room.InteriorPicker
 import ru.finney.pet.ui.room.InteriorPickerHeight
 import ru.finney.pet.ui.room.InteriorPreview
+import ru.finney.pet.ui.room.PetLook
 import ru.finney.pet.ui.room.TAKE_ALL_STEP_MS
 import ru.finney.pet.ui.room.focusOf
 import ru.finney.pet.ui.room.themeOf
@@ -256,6 +258,9 @@ fun HomeScreen(
             onSleep = viewModel::sleep,
             onWake = viewModel::wake,
             onPlay = viewModel::play,
+            onWear = viewModel::wear,
+            onTakeOff = viewModel::takeOff,
+            onColour = viewModel::setBodyColor,
             purchased = purchased,
             onHidePurchased = { purchased = null },
             rejectShown = rejected != null,
@@ -332,6 +337,9 @@ internal fun HomeContent(
     onSleep: () -> Unit = {},
     onWake: () -> Unit = {},
     onPlay: (toyId: String, shakes: Int) -> Unit = { _, _ -> },
+    onWear: (itemId: String) -> Unit = {},
+    onTakeOff: (itemId: String) -> Unit = {},
+    onColour: (BodyColor) -> Unit = {},
     onOpenGlossary: () -> Unit = {},
     purchased: ActionFeedback? = null,
     onHidePurchased: () -> Unit = {},
@@ -437,9 +445,9 @@ internal fun HomeContent(
     // Панель «Игры уровня»: обязательная игра и две по желанию.
     var gamesOpen by rememberSaveable { mutableStateOf(false) }
 
-    // Выбор интерьера: какая вкладка открыта; null — панель закрыта. Пока выбирают,
-    // интерфейс главной расступается, а камера подлетает к выбранной вещи.
-    var roomEdit by rememberSaveable { mutableStateOf<InteriorPart?>(null) }
+    // Панель «Финни / Комната»: какая вкладка открыта; null — панель закрыта. Пока
+    // выбирают, интерфейс главной расступается, а камера подлетает к питомцу или вещи.
+    var roomEdit by rememberSaveable { mutableStateOf<EditTab?>(null) }
     val editing = roomEdit != null
     val editScope = rememberCoroutineScope()
 
@@ -720,12 +728,14 @@ internal fun HomeContent(
             },
             asleep = sleeping,
             // Сам гуляет по залу, пока с ним ничего не делают — и не играют игрушкой.
-            wander = playing == null && care == null && heldToy == null,
+            // В панели «Финни / Комната» стоит на месте: камера держит его крупно.
+            wander = playing == null && care == null && heldToy == null && !editing,
             // Без анимаций прыжок мелькнул бы по кадру на шаг — не прыгаем вовсе.
             onHop = { if (animations) animation.playJoy() },
             toys = state.toys,
             toysEnabled = !sleeping && playing == null && care == null && !editing,
-            focus = roomEdit?.let { InteriorPreview.current.focusOf(it) },
+            focus = roomEdit?.room?.let { InteriorPreview.current.focusOf(it) },
+            focusPet = roomEdit?.pet == true,
             focusBottom = pickerCovers,
             onToyDrag = ::onToyDrag,
             onToyDrop = ::onToyDrop,
@@ -862,7 +872,8 @@ internal fun HomeContent(
                         onDismiss = { menuOpen = false },
                         onOpenHelp = onOpenHelp,
                         onOpenBudget = onOpenBudget,
-                        onOpenWardrobe = onOpenWardrobe,
+                        // Гардероб теперь в панели «Финни»; на кухне и в ванной, где панели нет, — экраном.
+                        onOpenWardrobe = if (spot == RoomSpot.LIVING && !sleeping) ({ roomEdit = EditTab.OUTFIT }) else onOpenWardrobe,
                         onOpenGlossary = onOpenGlossary,
                         onOpenSettings = onOpenSettings,
                     )
@@ -879,7 +890,7 @@ internal fun HomeContent(
                 alpha = hudAlpha, hintTargets = hintTargets, onOpenGoals = onOpenGoals,
                 onOpenGames = { gamesOpen = true },
                 // Обустраивают зал днём: во сне свет выключен, а на кухне и в ванной нет торшера.
-                onOpenRoom = if (spot == RoomSpot.LIVING && !sleeping) ({ roomEdit = InteriorPart.WALL }) else null,
+                onOpenRoom = if (spot == RoomSpot.LIVING && !sleeping) ({ roomEdit = EditTab.WALL }) else null,
                 onSavingsBounds = { if (savingsBounds != it) savingsBounds = it },
                 onGamesBounds = { if (gamesBounds != it) gamesBounds = it },
             )
@@ -1405,16 +1416,17 @@ internal fun HomeContent(
             exit = slideOutVertically(tween(250)) { it },
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
-            var shownPart by remember { mutableStateOf(InteriorPart.WALL) }
-            roomEdit?.let { shownPart = it }
+            var shownTab by remember { mutableStateOf(EditTab.WALL) }
+            roomEdit?.let { shownTab = it }
             InteriorPicker(
                 interior = InteriorPreview.current,
-                part = shownPart,
-                onPart = { roomEdit = it },
+                look = PetLook(state.appearance.character, state.appearance.bodyColor, state.worn, state.outfit),
+                tab = shownTab,
+                onTab = { roomEdit = it },
                 onPick = { part, theme -> InteriorPreview.current = InteriorPreview.current.withPart(part, theme) },
                 onTakeAll = { theme ->
                     // Тему целиком — со стены: камера отъезжает, и видно, как меняется всё по очереди.
-                    roomEdit = InteriorPart.WALL
+                    roomEdit = EditTab.WALL
                     editScope.launch {
                         for (part in InteriorPart.entries) {
                             if (InteriorPreview.current.themeOf(part) == theme) continue
@@ -1422,6 +1434,13 @@ internal fun HomeContent(
                             InteriorPreview.current = InteriorPreview.current.withPart(part, theme)
                         }
                     }
+                },
+                onColour = onColour,
+                onWear = onWear,
+                onTakeOff = onTakeOff,
+                onLocked = {
+                    roomEdit = null
+                    onOpenGoals()
                 },
                 onDone = { roomEdit = null },
             )

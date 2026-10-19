@@ -46,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -69,20 +70,28 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import ru.finney.pet.R
+import ru.finney.pet.domain.model.BodyColor
+import ru.finney.pet.domain.model.PetCharacter
 import ru.finney.pet.ui.components.FinneyButton
-import ru.finney.pet.ui.components.OutlinedText
+import ru.finney.pet.ui.components.FinneyIcon
+import ru.finney.pet.ui.components.FinneyIcons
 import ru.finney.pet.ui.components.buttonFill
 import ru.finney.pet.ui.motion.LocalAnimations
+import ru.finney.pet.ui.pet.PetMood
+import ru.finney.pet.ui.pet.PetPose
+import ru.finney.pet.ui.pet.PetView
+import ru.finney.pet.ui.pet.accessoryArt
 import ru.finney.pet.ui.sound.LocalSounds
 import ru.finney.pet.ui.sound.Sfx
 import ru.finney.pet.ui.theme.FinneyCream
@@ -94,10 +103,11 @@ import ru.finney.pet.ui.theme.FinneyYellow
 import ru.finney.pet.ui.theme.StrokeBold
 import ru.finney.pet.ui.theme.StrokeRegular
 
-// Выбор интерьера: панель снизу с вкладками «Стена / Окно / Торшер» и рядом
-// карточек. Комната над панелью остаётся видна, и камера подлетает к той
-// вещи, что выбирают (RoomScene, focus), — ребёнок меняет то, что видит.
-// Выбор ставится в комнату сразу, без «Применить»: так его и пробуют.
+// Панель «Финни / Комната»: снизу, с переключателем на рамке, строкой вкладок
+// и рядом карточек. У Финни вкладки «Окрас / Одежда», у комнаты «Стена / Окно /
+// Торшер». Комната над панелью остаётся видна, и камера подлетает к тому, что
+// выбирают (RoomScene, focus и focusPet), — ребёнок меняет то, что видит.
+// Выбор ставится сразу, без «Применить»: так его и пробуют.
 
 /** Высота панели без системной полоски снизу: по ней комната знает, сколько закрыто. */
 val InteriorPickerHeight = 214.dp
@@ -108,21 +118,50 @@ private const val OFFER_MS = 4_500L
 /** Пауза между частями, когда тему ставят целиком: каждая смена успевает быть замеченной. */
 const val TAKE_ALL_STEP_MS = 420L
 
+/** Вкладка панели. У питомца [room] нет, у комнаты — часть интерьера. */
+enum class EditTab(val label: String, val room: InteriorPart?) {
+    COLOUR("Окрас", null),
+    OUTFIT("Одежда", null),
+    WALL("Стена", InteriorPart.WALL),
+    WINDOW("Окно", InteriorPart.WINDOW),
+    LAMP("Торшер", InteriorPart.LAMP),
+    ;
+
+    val pet: Boolean get() = room == null
+}
+
+/** Шляпа или очки в панели: и свои, и ещё не полученные — те с замком. */
+data class Outfit(val id: String, val label: String, val owned: Boolean)
+
+/** Как выглядит питомец сейчас — для карточек «Окрас» и «Одежда». */
+data class PetLook(
+    val character: PetCharacter,
+    val bodyColor: BodyColor,
+    val worn: List<String>,
+    val outfit: List<Outfit>,
+)
+
 /**
- * Панель выбора интерьера.
+ * Панель выбора облика питомца и интерьера.
  *
- * @param part открытая вкладка.
- * @param onPick ребёнок выбрал для [part] вещь из темы.
+ * @param tab открытая вкладка.
+ * @param onPick ребёнок выбрал для части комнаты вещь из темы.
  * @param onTakeAll поставить из темы всё: после выбора одной вещи панель предлагает
  *   взять остальные из той же темы — «Вся комната — «Цирк»?».
+ * @param onLocked нажали вещь, которой ещё нет: её получают за цель в копилке.
  */
 @Composable
 fun InteriorPicker(
     interior: RoomInterior,
-    part: InteriorPart,
-    onPart: (InteriorPart) -> Unit,
+    look: PetLook,
+    tab: EditTab,
+    onTab: (EditTab) -> Unit,
     onPick: (InteriorPart, RoomInterior) -> Unit,
     onTakeAll: (RoomInterior) -> Unit,
+    onColour: (BodyColor) -> Unit,
+    onWear: (String) -> Unit,
+    onTakeOff: (String) -> Unit,
+    onLocked: () -> Unit,
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -135,6 +174,12 @@ fun InteriorPicker(
         delay(OFFER_MS)
         offer = null
     }
+    // Ушли к питомцу — предложение про комнату уже ни к чему.
+    LaunchedEffect(tab.pet) { if (tab.pet) offer = null }
+    // Возвращаются на ту вкладку половины, где были.
+    var lastPet by remember { mutableStateOf(EditTab.COLOUR) }
+    var lastRoom by remember { mutableStateOf(EditTab.WALL) }
+    if (tab.pet) lastPet = tab else lastRoom = tab
 
     Column(modifier = modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.height(64.dp), contentAlignment = Alignment.BottomCenter) {
@@ -171,14 +216,14 @@ fun InteriorPicker(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    InteriorPart.entries.forEach { p ->
-                        PartTab(p, selected = p == part, onClick = { onPart(p) }, modifier = Modifier.weight(1f))
+                    EditTab.entries.filter { it.pet == tab.pet }.forEach { t ->
+                        PartTab(t, selected = t == tab, onClick = { onTab(t) }, modifier = Modifier.weight(1f))
                     }
                 }
 
                 val list = rememberLazyListState()
                 // Новая вкладка — ряд с начала: иначе он открывался прокрученным с прошлой.
-                LaunchedEffect(part) { list.scrollToItem(0) }
+                LaunchedEffect(tab) { list.scrollToItem(0) }
                 LazyRow(
                     state = list,
                     flingBehavior = rememberSnapFlingBehavior(list),
@@ -186,32 +231,95 @@ fun InteriorPicker(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxWidth().weight(1f),
                 ) {
-                    items(Interiors.all, key = { it.id }) { theme ->
-                        val chosen = interior.themeOf(part) == theme
-                        ThemeCard(
-                            theme = theme,
-                            part = part,
-                            selected = chosen,
-                            animate = animations,
-                            onClick = {
-                                if (chosen) return@ThemeCard
-                                sounds.play(Sfx.Tap)
-                                onPick(part, theme)
-                                val rest = InteriorPart.entries.filter { it != part }
-                                offer = theme.takeIf { rest.any { p -> interior.themeOf(p) != theme } }
-                            },
-                        )
+                    when (tab) {
+                        EditTab.COLOUR -> items(BodyColor.entries, key = { it.name }) { colour ->
+                            PickCard(
+                                description = "Окрас: ${BodyColorLabels.getValue(colour)}",
+                                selected = look.bodyColor == colour,
+                                animate = animations,
+                                onClick = {
+                                    if (look.bodyColor == colour) return@PickCard
+                                    sounds.play(Sfx.Tap)
+                                    onColour(colour)
+                                },
+                            ) {
+                                PetView(
+                                    character = look.character,
+                                    bodyColor = colour,
+                                    mood = PetMood.HAPPY,
+                                    pose = StillPose,
+                                    modifier = Modifier.padding(top = 6.dp).size(80.dp),
+                                )
+                            }
+                        }
+
+                        EditTab.OUTFIT -> items(look.outfit, key = { it.id }) { item ->
+                            val worn = item.id in look.worn
+                            PickCard(
+                                description = item.label,
+                                state = if (worn) "надето" else if (item.owned) "не надето" else "ещё нет",
+                                selected = worn,
+                                locked = !item.owned,
+                                animate = animations,
+                                onClick = {
+                                    sounds.play(Sfx.Tap)
+                                    when {
+                                        !item.owned -> onLocked()
+                                        worn -> onTakeOff(item.id)
+                                        else -> onWear(item.id)
+                                    }
+                                },
+                            ) {
+                                accessoryArt(item.id)?.let { art ->
+                                    Image(
+                                        painter = painterResource(art.res),
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .padding(top = 10.dp)
+                                            .size(74.dp, 72.dp)
+                                            .alpha(if (item.owned) 1f else 0.45f),
+                                    )
+                                }
+                            }
+                        }
+
+                        else -> {
+                            val part = tab.room!!
+                            items(Interiors.all, key = { it.id }) { theme ->
+                                val chosen = interior.themeOf(part) == theme
+                                PickCard(
+                                    description = "${part.label}: ${theme.label}",
+                                    label = theme.label,
+                                    selected = chosen,
+                                    animate = animations,
+                                    onClick = {
+                                        if (chosen) return@PickCard
+                                        sounds.play(Sfx.Tap)
+                                        onPick(part, theme)
+                                        val rest = InteriorPart.entries.filter { it != part }
+                                        offer = theme.takeIf { rest.any { p -> interior.themeOf(p) != theme } }
+                                    },
+                                ) {
+                                    PartThumb(theme, part, Modifier.padding(top = 6.dp).size(74.dp, 80.dp))
+                                }
+                            }
+                        }
                     }
                 }
-
             }
 
-            // Заголовок висит на рамке, как в ките.
-            OutlinedText(
-                "Моя комната",
-                style = MaterialTheme.typography.headlineMedium,
-                modifier = Modifier.align(Alignment.TopCenter).offset(y = (-26).dp),
-            )
+            // Переключатель висит на рамке, где раньше был заголовок.
+            Row(
+                modifier = Modifier.align(Alignment.TopStart).offset(x = 14.dp, y = (-26).dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                SideTab("Финни", selected = tab.pet, onClick = { onTab(lastPet) }) {
+                    PetView(look.character, PetMood.HAPPY, StillPose, Modifier.size(32.dp), bodyColor = look.bodyColor)
+                }
+                SideTab("Комната", selected = !tab.pet, onClick = { onTab(lastRoom) }) {
+                    Canvas(Modifier.size(26.dp)) { houseIcon() }
+                }
+            }
             // «Готово» — круглой кнопкой на рамке, а не рядом снизу: панель ниже,
             // и над ней видно больше комнаты.
             DoneButton(onDone, Modifier.align(Alignment.TopEnd).offset(x = (-14).dp, y = (-28).dp))
@@ -221,9 +329,54 @@ fun InteriorPicker(
 
 private val PanelShape = RoundedCornerShape(topStart = 36.dp, topEnd = 36.dp)
 
+private val StillPose: () -> PetPose = { PetPose() }
+
+private val BodyColorLabels = mapOf(
+    BodyColor.A to "родной",
+    BodyColor.B to "тёплый",
+    BodyColor.C to "свежий",
+)
+
+/** Половина панели на рамке: «Финни» или «Комната». Выбранная — как основная кнопка кита. */
+@Composable
+private fun SideTab(label: String, selected: Boolean, onClick: () -> Unit, icon: @Composable () -> Unit) {
+    val sounds = LocalSounds.current
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val shape = RoundedCornerShape(percent = 50)
+    Row(
+        modifier = Modifier
+            .height(48.dp)
+            .graphicsLayer {
+                val s = if (pressed) 0.96f else 1f
+                scaleX = s
+                scaleY = s
+            }
+            .clip(shape)
+            .then(
+                if (selected) {
+                    Modifier.buttonFill(pressed, round = false)
+                } else {
+                    Modifier.background(if (pressed) FinneyCream else FinneySand).border(StrokeRegular, FinneyInk, shape)
+                },
+            )
+            .clickable(interactionSource = source, indication = null, role = Role.Tab) {
+                if (!selected) sounds.play(Sfx.Tap)
+                onClick()
+            }
+            .semantics { this.selected = selected }
+            .padding(start = 8.dp, end = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        icon()
+        Text(label, style = MaterialTheme.typography.titleMedium, color = FinneyInk, maxLines = 1)
+    }
+}
+
 /** Вкладка: выбранная — как основная кнопка кита, остальные — спокойные, песочные. */
 @Composable
-private fun PartTab(part: InteriorPart, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun PartTab(tab: EditTab, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val sounds = LocalSounds.current
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
@@ -254,17 +407,31 @@ private fun PartTab(part: InteriorPart, selected: Boolean, onClick: () -> Unit, 
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Canvas(Modifier.size(24.dp)) { partIcon(part) }
-        Text(part.label, style = MaterialTheme.typography.titleMedium, color = FinneyInk, maxLines = 1)
+        if (tab == EditTab.OUTFIT) {
+            FinneyIcon(FinneyIcons.Hanger, size = 24.dp)
+        } else {
+            Canvas(Modifier.size(24.dp)) { tabIcon(tab) }
+        }
+        Text(tab.label, style = MaterialTheme.typography.titleMedium, color = FinneyInk, maxLines = 1)
     }
 }
 
 /**
- * Карточка темы: в ней нарисована сама вещь, а не цветная плашка. Выбранная
+ * Карточка выбора: в ней нарисована сама вещь, а не цветная плашка. Выбранная
  * приподнимается, желтеет и несёт галочку — не только цвет (ТЗ п. 3.6).
+ * Вещь, которой ещё нет, бледная и с замком.
  */
 @Composable
-private fun ThemeCard(theme: RoomInterior, part: InteriorPart, selected: Boolean, animate: Boolean, onClick: () -> Unit) {
+private fun PickCard(
+    description: String,
+    selected: Boolean,
+    animate: Boolean,
+    onClick: () -> Unit,
+    label: String? = null,
+    state: String? = null,
+    locked: Boolean = false,
+    picture: @Composable () -> Unit,
+) {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val lift by animateDpAsState(
@@ -293,42 +460,65 @@ private fun ThemeCard(theme: RoomInterior, part: InteriorPart, selected: Boolean
                 .border(if (selected) StrokeBold else StrokeRegular, FinneyInk, shape)
                 .clickable(interactionSource = source, indication = null, role = Role.Button, onClick = onClick)
                 .semantics {
-                    contentDescription = "${part.label}: ${theme.label}"
+                    contentDescription = description
+                    state?.let { stateDescription = it }
                     this.selected = selected
                 },
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            PartThumb(theme, part, Modifier.padding(top = 6.dp).size(74.dp, 80.dp))
-            Text(
-                theme.label,
-                style = MaterialTheme.typography.titleMedium,
-                color = FinneyInk,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-            )
-        }
-        if (selected) {
-            Box(
-                Modifier
-                    .align(Alignment.TopEnd)
-                    .offset(x = 8.dp, y = (-10).dp)
-                    .size(32.dp)
-                    .clip(CircleShape)
-                    .background(FinneyYellow)
-                    .border(StrokeRegular, FinneyInk, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Canvas(Modifier.size(16.dp)) {
-                    val path = Path().apply {
-                        moveTo(size.width * 0.12f, size.height * 0.55f)
-                        lineTo(size.width * 0.4f, size.height * 0.82f)
-                        lineTo(size.width * 0.9f, size.height * 0.2f)
-                    }
-                    drawPath(path, FinneyInk, style = Stroke(3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
-                }
+            picture()
+            label?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = FinneyInk,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                )
             }
         }
+        if (selected) {
+            Badge(Modifier.align(Alignment.TopEnd).offset(x = 8.dp, y = (-10).dp)) { tick() }
+        } else if (locked) {
+            Badge(Modifier.align(Alignment.TopEnd).padding(6.dp), FinneyCream) { lock() }
+        }
     }
+}
+
+/** Кружок в углу карточки: галочка выбранного или замок. */
+@Composable
+private fun Badge(modifier: Modifier, fill: Color = FinneyYellow, mark: DrawScope.() -> Unit) {
+    Box(
+        modifier
+            .size(32.dp)
+            .clip(CircleShape)
+            .background(fill)
+            .border(StrokeRegular, FinneyInk, CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.size(16.dp), onDraw = mark)
+    }
+}
+
+private fun DrawScope.tick() {
+    val path = Path().apply {
+        moveTo(size.width * 0.12f, size.height * 0.55f)
+        lineTo(size.width * 0.4f, size.height * 0.82f)
+        lineTo(size.width * 0.9f, size.height * 0.2f)
+    }
+    drawPath(path, FinneyInk, style = Stroke(3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+}
+
+private fun DrawScope.lock() {
+    val u = size.width / 16f
+    val stroke = Stroke(2.4f * u, cap = StrokeCap.Round, join = StrokeJoin.Round)
+    drawRoundRect(FinneyInk, Offset(2.5f * u, 7 * u), Size(11 * u, 8 * u), CornerRadius(1.5f * u), style = stroke)
+    val shackle = Path().apply {
+        moveTo(5 * u, 7 * u); lineTo(5 * u, 5 * u)
+        cubicTo(5 * u, 1.5f * u, 11 * u, 1.5f * u, 11 * u, 5 * u)
+        lineTo(11 * u, 7 * u)
+    }
+    drawPath(shackle, FinneyInk, style = stroke)
 }
 
 /** Круглая кнопка кита с галочкой: закрыть выбор, всё выбранное уже стоит в комнате. */
@@ -483,12 +673,22 @@ private fun thumbBitmap(@DrawableRes res: Int): ImageBitmap? {
     return image
 }
 
-/** Значки вкладок обводкой ink: обои в кирпичик, окно с перекладиной, торшер. */
-private fun DrawScope.partIcon(part: InteriorPart) {
+/** Значки вкладок обводкой ink: капля краски, обои в кирпичик, окно с перекладиной, торшер. */
+private fun DrawScope.tabIcon(tab: EditTab) {
     val u = size.width / 26f
     val path = Path()
-    when (part) {
-        InteriorPart.WALL -> {
+    when (tab) {
+        EditTab.COLOUR -> {
+            path.moveTo(13 * u, 3 * u)
+            path.cubicTo(17 * u, 9 * u, 20 * u, 12 * u, 20 * u, 16 * u)
+            path.cubicTo(20 * u, 25 * u, 6 * u, 25 * u, 6 * u, 16 * u)
+            path.cubicTo(6 * u, 12 * u, 9 * u, 9 * u, 13 * u, 3 * u)
+            path.close()
+        }
+
+        EditTab.OUTFIT -> Unit
+
+        EditTab.WALL -> {
             path.addRect(Rect(3 * u, 4 * u, 23 * u, 22 * u))
             path.moveTo(3 * u, 10 * u); path.lineTo(23 * u, 10 * u)
             path.moveTo(3 * u, 16 * u); path.lineTo(23 * u, 16 * u)
@@ -497,19 +697,30 @@ private fun DrawScope.partIcon(part: InteriorPart) {
             path.moveTo(10 * u, 16 * u); path.lineTo(10 * u, 22 * u)
         }
 
-        InteriorPart.WINDOW -> {
+        EditTab.WINDOW -> {
             path.addRect(Rect(5 * u, 4 * u, 21 * u, 23 * u))
             path.moveTo(13 * u, 4 * u); path.lineTo(13 * u, 23 * u)
             path.moveTo(5 * u, 13 * u); path.lineTo(21 * u, 13 * u)
             path.moveTo(2 * u, 3 * u); path.lineTo(24 * u, 3 * u)
         }
 
-        InteriorPart.LAMP -> {
+        EditTab.LAMP -> {
             path.moveTo(7 * u, 3 * u); path.lineTo(19 * u, 3 * u); path.lineTo(22 * u, 11 * u)
             path.lineTo(4 * u, 11 * u); path.close()
             path.moveTo(13 * u, 11 * u); path.lineTo(13 * u, 22 * u)
             path.moveTo(8 * u, 23 * u); path.lineTo(18 * u, 23 * u)
         }
+    }
+    drawPath(path, FinneyInk, style = Stroke(2.6f * u, cap = StrokeCap.Round, join = StrokeJoin.Round))
+}
+
+/** Домик для половины «Комната». */
+private fun DrawScope.houseIcon() {
+    val u = size.width / 26f
+    val path = Path().apply {
+        moveTo(3 * u, 12 * u); lineTo(13 * u, 4 * u); lineTo(23 * u, 12 * u)
+        moveTo(6 * u, 10 * u); lineTo(6 * u, 22 * u); lineTo(20 * u, 22 * u); lineTo(20 * u, 10 * u)
+        moveTo(11 * u, 22 * u); lineTo(11 * u, 16 * u); lineTo(15 * u, 16 * u); lineTo(15 * u, 22 * u)
     }
     drawPath(path, FinneyInk, style = Stroke(2.6f * u, cap = StrokeCap.Round, join = StrokeJoin.Round))
 }
@@ -568,10 +779,15 @@ private fun InteriorPickerPreview() {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
             InteriorPicker(
                 interior = Interiors.Default.withPart(InteriorPart.WINDOW, Interiors.Circus),
-                part = InteriorPart.WINDOW,
-                onPart = {},
+                look = PetLook(PetCharacter.PUSHISTIK, BodyColor.B, listOf("hat_pirate"), listOf(Outfit("hat_pirate", "Пиратская шляпа", true))),
+                tab = EditTab.WINDOW,
+                onTab = {},
                 onPick = { _, _ -> },
                 onTakeAll = {},
+                onColour = {},
+                onWear = {},
+                onTakeOff = {},
+                onLocked = {},
                 onDone = {},
             )
         }
