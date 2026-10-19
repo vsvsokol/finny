@@ -60,11 +60,17 @@ abstract class GameDao {
     @Insert
     abstract suspend fun insertAttempts(attempts: List<TaskAttemptEntity>)
 
+    @Insert
+    abstract suspend fun insertUses(uses: List<ItemUseEntity>)
+
     @Query("SELECT COUNT(*) FROM ledger WHERE profileId = :profileId")
     abstract suspend fun ledgerCount(profileId: Long): Int
 
     @Query("SELECT COUNT(*) FROM task_attempts WHERE profileId = :profileId")
     abstract suspend fun attemptCount(profileId: Long): Int
+
+    @Query("SELECT COUNT(*) FROM item_uses WHERE profileId = :profileId")
+    abstract suspend fun useCount(profileId: Long): Int
 
     @Query("DELETE FROM profiles WHERE id = :profileId")
     abstract suspend fun deleteProfile(profileId: Long)
@@ -81,6 +87,9 @@ abstract class GameDao {
     @Query("DELETE FROM task_attempts WHERE profileId = :profileId")
     abstract suspend fun deleteAttempts(profileId: Long)
 
+    @Query("DELETE FROM item_uses WHERE profileId = :profileId")
+    abstract suspend fun deleteUses(profileId: Long)
+
     @Transaction
     open suspend fun createGame(profile: ProfileEntity, game: GameRows): Long {
         val profileId = insertProfile(profile)
@@ -89,7 +98,7 @@ abstract class GameDao {
     }
 
     /**
-     * Операции и попытки заданий в domain только дописываются, поэтому в базу добавляется
+     * Операции, попытки заданий и расход с полки в domain только дописываются, поэтому в базу добавляется
      * только хвост, которого там ещё нет. Периоды и шкалы перезаписываются целиком.
      */
     @Transaction
@@ -106,14 +115,19 @@ abstract class GameDao {
         val storedAttempts = attemptCount(profileId)
         check(storedAttempts <= game.attempts.size) { "Попыток в базе $storedAttempts, в состоянии ${game.attempts.size}" }
         insertAttempts(game.attempts.drop(storedAttempts))
+
+        val storedUses = useCount(profileId)
+        check(storedUses <= game.uses.size) { "Расхода с полки в базе $storedUses, в состоянии ${game.uses.size}" }
+        insertUses(game.uses.drop(storedUses))
     }
 
-    /** Сброс прогресса: периоды, операции и попытки профиля стираются и пишутся заново. Профиль тот же. */
+    /** Сброс прогресса: периоды, операции, попытки и расход с полки стираются и пишутся заново. Профиль тот же. */
     @Transaction
     open suspend fun replaceGame(profileId: Long, game: GameRows) {
         deletePeriods(profileId)
         deleteLedger(profileId)
         deleteAttempts(profileId)
+        deleteUses(profileId)
         writeGame(profileId, game)
     }
 }
@@ -127,11 +141,13 @@ data class GameRows(
     val periods: List<PeriodEntity>,
     val ledger: List<LedgerEntryEntity>,
     val attempts: List<TaskAttemptEntity>,
+    val uses: List<ItemUseEntity> = emptyList(),
 ) {
     fun withProfileId(profileId: Long) = copy(
         pet = pet.copy(profileId = profileId),
         periods = periods.map { it.copy(profileId = profileId) },
         ledger = ledger.map { it.copy(profileId = profileId) },
         attempts = attempts.map { it.copy(profileId = profileId) },
+        uses = uses.map { it.copy(profileId = profileId) },
     )
 }
