@@ -444,10 +444,22 @@ class MiniGamesTest {
         )
         // Оба сока отмечены, а лишний только один.
         assertEquals(TaskOutcome.FAIL, checkOf(check, "l1", "l2", "l3", change = true).outcome())
-        // Сдача верная, а её отметили.
+    }
+
+    @Test
+    fun `receipt — сдача от чека с ошибкой — верно и отметить, и не отмечать`() {
+        // Кассир отсчитал 50 − 33 = 17 честно от своего чека, а по ценникам сдача 50 − 21 = 29.
         val fairChange = check.copy(change = 17)
+        assertEquals(ReceiptErrors(lines = setOf("l2", "l3"), changeShort = 0, changeEither = true), TaskEngines.receiptErrors(fairChange))
         assertEquals(TaskOutcome.SUCCESS, checkOf(fairChange, "l2", "l3", change = false).outcome())
-        assertEquals(1, (checkOf(fairChange, "l2", "l3", change = true) as TaskEvaluation.Done).details.let { (it as TaskDetails.Receipt).extra })
+        assertEquals(
+            TaskEvaluation.Done(TaskOutcome.SUCCESS, TaskDetails.Receipt(found = 2, missed = 0, extra = 0, refund = 12, lost = 0)),
+            checkOf(fairChange, "l2", "l3", change = true),
+        )
+        // Строки всё равно нужно найти.
+        assertEquals(TaskOutcome.FAIL, checkOf(fairChange, "l3", change = true).outcome())
+        // Недодача сдачи — по-прежнему ошибка, которую нужно отметить.
+        assertEquals(false, TaskEngines.receiptErrors(check).changeEither)
     }
 
     @Test
