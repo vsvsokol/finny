@@ -151,7 +151,7 @@ private fun Bag(cart: List<ReceiptItem>) {
                     ItemPicture(item, item.label, 48.dp)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         PriceTag(item.price.toString())
-                        if (item.qty > 1) Text("× ${item.qty}", style = MaterialTheme.typography.labelLarge, color = FinneyInk)
+                        if (item.qty > 1) Text("${item.qty} шт.", style = MaterialTheme.typography.labelLarge, color = FinneyInk)
                     }
                 }
             }

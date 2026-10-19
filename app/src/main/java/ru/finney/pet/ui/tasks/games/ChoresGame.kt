@@ -336,7 +336,7 @@ private fun Clocks(count: Int) {
 
 /**
  * Дело плиткой: рисунок, награда и часики. Название — для TalkBack, на плитке его
- * заменяет рисунок. «×2» — сколько раз ещё дают. Нажатие кладёт дело в выбранный день.
+ * заменяет рисунок. «ещё 2» — сколько раз ещё дают (не «×2»: знак читали как умножение). Нажатие кладёт дело в выбранный день.
  * [gain] меньше [fee] — дело рядом с таким же днём: плитка голубая, плата — уменьшенная,
  * а обычная рядом зачёркнута.
  */
@@ -389,7 +389,7 @@ private fun ChoreTile(chore: Chore, fee: Int, gain: Int, left: Int?, enabled: Bo
         if (left != null) {
             Box(
                 fade.clip(RoundedCornerShape(8.dp)).background(FinneyCream).border(2.dp, FinneyInk, RoundedCornerShape(8.dp)).padding(horizontal = 4.dp),
-            ) { Text("×$left", style = MaterialTheme.typography.labelLarge, color = FinneyInk) }
+            ) { Text("ещё $left", style = MaterialTheme.typography.labelLarge, color = FinneyInk) }
         }
     }
 }

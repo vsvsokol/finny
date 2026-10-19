@@ -233,8 +233,9 @@ fun ColumnScope.ResultBody(task: TaskDefinition, details: TaskDetails, input: Ta
             // так «+40», «−12» и «28» стоят разряд под разрядом, как в чеке.
             val widest = amounts.maxBy { it.length }
             LedgerRow("+", FinneyYellow, "Продал ${cupCount(details.sold)}", amounts[0], widest)
-            // Название сырья приходит из контента в одной форме, поэтому «× 7», а не «7 лимон».
-            LedgerRow("−", FinneyPeach, "Купил: ${stand?.ingredient?.label?.lowercase().orEmpty()} × ${details.spent / (stand?.ingredient?.price ?: 1)}", amounts[1], widest)
+            // Название сырья приходит из контента в одной форме, поэтому «лимон, 7 шт.», а не «7 лимон».
+            // Не «× 7»: знак читали как умножение (плейтест 02.10).
+            LedgerRow("−", FinneyPeach, "Купил: ${stand?.ingredient?.label?.lowercase().orEmpty()}, ${details.spent / (stand?.ingredient?.price ?: 1)} шт.", amounts[1], widest)
             LedgerRow("=", Color.White, "Заработал", amounts[2], widest, highlight = true)
             val notes = listOfNotNull(
                 details.leftover.takeIf { it > 0 }?.let { "${cupCount(it)} не купили" },
@@ -247,7 +248,7 @@ fun ColumnScope.ResultBody(task: TaskDefinition, details: TaskDetails, input: Ta
                     stand?.ingredient,
                     notes.joinToString(", "),
                     ok = false,
-                    note = "На всех хватило бы: ${stand?.ingredient?.label?.lowercase().orEmpty()} × ${details.best}",
+                    note = "На всех хватило бы: ${stand?.ingredient?.label?.lowercase().orEmpty()}, ${details.best} шт.",
                 )
             }
         }

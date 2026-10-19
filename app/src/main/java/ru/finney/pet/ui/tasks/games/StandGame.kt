@@ -174,7 +174,7 @@ private fun Morning(
                 // числом не пишем: сколько выйдет на всех гостей, ребёнок считает сам —
                 // иначе он жал «+», пока два числа не совпадут, и не думал.
                 Stock(i, count)
-                Equation("Закупка: ${i.label.lowercase()} × $count, всего ${count * i.price}") {
+                Equation("Закупка: ${i.label.lowercase()}, $count шт., всего ${count * i.price}") {
                     ItemPicture(i, i.label, 28.dp)
                     EqText("× $count = ${count * i.price}")
                     Coin(size = 22.dp)
@@ -528,7 +528,7 @@ private fun Stock(ingredient: StandIngredient, count: Int) {
             .fillMaxWidth()
             .defaultMinSize(minHeight = 44.dp)
             .clearAndSetSemantics {
-                contentDescription = "Куплено: ${ingredient.label.lowercase()} × $count, это ${cupCount(count * ingredient.yields)}"
+                contentDescription = "Куплено: ${ingredient.label.lowercase()}, $count шт., это ${cupCount(count * ingredient.yields)}"
             },
     ) {
         repeat(count) {

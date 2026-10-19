@@ -530,7 +530,7 @@ private fun ReserveJar(amount: Int) {
             drawRoundRect(FinneyInk, Offset(4.dp.toPx(), 0f), Size(size.width - 8.dp.toPx(), lid), CornerRadius(4.dp.toPx()), style = Stroke(stroke))
         }
         Column {
-            OutlinedText("Запас · $amount", style = MaterialTheme.typography.titleLarge)
+            OutlinedText("Запас: $amount", style = MaterialTheme.typography.titleLarge)
             Text("деньги на всякий случай", style = MaterialTheme.typography.bodyMedium, color = FinneyInk)
         }
     }
