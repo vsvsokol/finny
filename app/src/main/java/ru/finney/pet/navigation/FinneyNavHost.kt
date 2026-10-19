@@ -101,7 +101,12 @@ fun FinneyNavHost(
         }
 
         composable<BudgetRoute> {
-            BudgetScreen(onBack = { navController.back() })
+            BudgetScreen(
+                onBack = { navController.back() },
+                onOpenShop = { navController.go(ShopRoute) },
+                onOpenGoals = { navController.go(GoalsRoute) },
+                onOpenTasks = { navController.go(TasksRoute) },
+            )
         }
 
         composable<ShopRoute> {
@@ -146,6 +151,12 @@ fun FinneyNavHost(
             PeriodResultScreen(
                 periodNumber = route.periodNumber,
                 onBack = { navController.back() },
+                onOpenBudget = {
+                    if (navController.ready) navController.navigate(BudgetRoute) {
+                        popUpTo<HomeRoute>()
+                        launchSingleTop = true
+                    }
+                },
             )
         }
 

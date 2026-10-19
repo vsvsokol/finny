@@ -91,6 +91,7 @@ import ru.finney.pet.ui.theme.StrokeRegular
 fun PeriodResultScreen(
     periodNumber: Int,
     onBack: () -> Unit,
+    onOpenBudget: () -> Unit = onBack,
     viewModel: PeriodResultViewModel = viewModel(factory = PeriodResultViewModel.factory(periodNumber)),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -110,7 +111,7 @@ fun PeriodResultScreen(
             FinneyButton(text = "На главный", onClick = onBack)
         }
 
-        is PeriodResultUiState.Ready -> PeriodResultContent(state = s, onBack = onBack)
+        is PeriodResultUiState.Ready -> PeriodResultContent(state = s, onBack = onBack, onOpenBudget = onOpenBudget)
     }
 }
 
@@ -118,7 +119,7 @@ fun PeriodResultScreen(
 private class Condition(val label: String, val spoken: String, val done: Boolean, val icon: @Composable () -> Unit)
 
 @Composable
-private fun PeriodResultContent(state: PeriodResultUiState.Ready, onBack: () -> Unit) {
+internal fun PeriodResultContent(state: PeriodResultUiState.Ready, onBack: () -> Unit, onOpenBudget: () -> Unit = onBack) {
     val conditions = buildList {
         state.levelGame?.let { game ->
             val need = if (state.gameRequired) "обязательно" else "по желанию"
@@ -159,7 +160,13 @@ private fun PeriodResultContent(state: PeriodResultUiState.Ready, onBack: () -> 
         backdrop = MenuBackdrop.SHAPES,
         scrollable = true,
         verticalArrangement = Arrangement.spacedBy(16.dp),
-        bottom = { FinneyButton(text = if (state.passed) "Дальше!" else "На главный", onClick = onBack) },
+        bottom = {
+            FinneyButton(
+                text = if (state.canPlanNext) "Составить следующий план" else "На главный",
+                onClick = if (state.canPlanNext) onOpenBudget else onBack,
+                textStyle = MaterialTheme.typography.titleMedium,
+            )
+        },
     ) {
         OutlinedText("Итоги уровня ${state.playedLevel}", style = MaterialTheme.typography.headlineLarge)
 
@@ -178,6 +185,23 @@ private fun PeriodResultContent(state: PeriodResultUiState.Ready, onBack: () -> 
                 style = MaterialTheme.typography.titleLarge,
                 color = FinneyInk,
             )
+        }
+
+        state.growth?.let { growth ->
+            FinneyPanel(title = "Что нового") {
+                growth.changes.forEach {
+                    Text(it, style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
+                }
+                val next = growth.next
+                if (next != null) {
+                    Text("Впереди, на уровне ${next.level}:",
+                        style = MaterialTheme.typography.titleMedium, color = FinneyInk)
+                    Text(next.changes.first(), style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
+                } else {
+                    Text("Ты на самом высоком уровне. Можно дальше играть и копить.",
+                        style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
+                }
+            }
         }
 
         val met = listOf(state.needsCovered, state.planMatched, state.savingsAdded).count { it }
@@ -235,7 +259,11 @@ private fun PeriodResultContent(state: PeriodResultUiState.Ready, onBack: () -> 
             // Деньги нового уровня приходят и после «почти». Плейтест 29.09: не видя
             // их, ребёнок решил, что денег не дали вовсе.
             if (state.income > 0) {
-                MoneyLine(if (state.passed) "На новый уровень" else "На новую попытку", "+${state.income}", highlight = true)
+                MoneyLine("Уже получено в кошелёк", "+${state.income}", highlight = true)
+                Text(
+                    "Это новый доход для следующего плана. Платить за переход уровня не нужно.",
+                    style = MaterialTheme.typography.bodyLarge, color = FinneyInk,
+                )
             }
             MoneyLine("Сейчас в кошельке", state.balance.toString())
         }

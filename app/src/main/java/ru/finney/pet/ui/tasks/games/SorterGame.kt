@@ -122,6 +122,10 @@ internal fun SorterGame(
     GameScene(backdrop = Backdrop.DOTS, onClose = onClose, money = money) {
         Column(modifier = Modifier.fillMaxSize().padding(top = HudHeight)) {
             Progress(task.items, index, answers)
+            Text(
+                item?.let { "Куда положить: ${it.label}? Перетащи в корзину внизу или нажми корзину." }.orEmpty(),
+                style = MaterialTheme.typography.bodyLarge, color = FinneyInk,
+            )
             Spacer(Modifier.height(12.dp))
 
             // Лента выше всего остального: вещь, которую тянут вниз, рисуется поверх питомца и корзин.
@@ -139,7 +143,7 @@ internal fun SorterGame(
                 val wrong = mistake
                 if (wrong == null) {
                     // Вопрос «"Яблоко" — это что?» убран: вещь на ленте и две корзины понятны без слов.
-                    if (item != null) ScenePet(character, 140.dp, Modifier.width(140.dp))
+                    if (item != null) ScenePet(character, 96.dp, Modifier.width(96.dp))
                 } else {
                     MistakePanel(wrong, onMove = ::moveOver)
                 }

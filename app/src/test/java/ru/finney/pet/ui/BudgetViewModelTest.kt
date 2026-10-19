@@ -13,12 +13,29 @@ import ru.finney.pet.domain.model.PetAppearance
 import ru.finney.pet.domain.model.PetCharacter
 import ru.finney.pet.ui.budget.BudgetUiState
 import ru.finney.pet.ui.budget.BudgetViewModel
+import ru.finney.pet.ui.budget.PlanVerdict
 
 class BudgetViewModelTest : ViewModelTest() {
 
     private suspend fun viewModel(): BudgetViewModel {
         session.createProfile("Финни", PetAppearance(PetCharacter.PUSHISTIK, BodyColor.A, EyesVariant.ROUND))
         return BudgetViewModel(session, game, Fixtures.content)
+    }
+
+    @Test
+    fun `совет учитывает уже заработанные деньги и направляет к недостающему взносу`() = test {
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        session.execute { selectGoal(it, "bike") }
+        viewModel.setSavings(10)
+        viewModel.confirm()
+        settle()
+        session.execute { buy(it, "apple") }
+        session.submitTask("t1", Fixtures.success)
+        settle()
+        val state = viewModel.uiState.value as BudgetUiState.Active
+        assertEquals(0, state.incomeToRecover)
+        assertEquals(PlanVerdict.SavingsShort(10), state.verdict)
     }
 
     @Test

@@ -113,9 +113,9 @@ internal fun MoneyPair(balance: Int, saved: Int, move: SavingsMove?, modifier: M
             modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            MoneyBox("в кошельке", shownBalance, balance, Modifier.weight(1f).fillMaxHeight()) { Coin(size = 40.dp) }
+            MoneyBox("в кошельке", shownBalance, balance, Modifier.weight(1f).fillMaxHeight()) { Coin(size = 24.dp) }
             MoneyBox("в копилке", shownSaved, saved, Modifier.weight(1f).fillMaxHeight()) {
-                FinneyIcon(FinneyIcons.Piggy, size = 44.dp)
+                FinneyIcon(FinneyIcons.Piggy, size = 24.dp)
             }
         }
 
@@ -166,20 +166,18 @@ private fun DeltaTag(text: String, alpha: Float, modifier: Modifier) {
 @Composable
 private fun MoneyBox(caption: String, shown: Int, amount: Int, modifier: Modifier, icon: @Composable () -> Unit) {
     val shape = RoundedCornerShape(RadiusCard)
-    Column(
-        modifier = modifier
-            .clip(shape)
-            .background(Color.White)
-            .border(StrokeRegular, FinneyInk, shape)
+    Row(
+        modifier = modifier.clip(shape).background(Color.White).border(StrokeRegular, FinneyInk, shape)
             .clearAndSetSemantics { contentDescription = "$caption $amount финок" }
-            .padding(vertical = 8.dp, horizontal = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        // Значки разной высоты — в одинаковой клетке, чтобы числа стояли на одной линии.
-        Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) { icon() }
-        OutlinedText(shown.toString(), style = MaterialTheme.typography.headlineMedium)
-        Text(caption, style = MaterialTheme.typography.labelMedium, color = FinneyInk)
+        icon()
+        Column(Modifier.weight(1f)) {
+            Text(shown.toString(), style = MaterialTheme.typography.titleLarge, color = FinneyInk)
+            Text(caption, style = MaterialTheme.typography.labelMedium, color = FinneyInk)
+        }
     }
 }
 

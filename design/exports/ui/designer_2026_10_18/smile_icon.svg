@@ -1,0 +1,25 @@
+<svg width="92" height="92" viewBox="0 0 92 92" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <clipPath id="face">
+      <circle cx="46" cy="46" r="36"/>
+    </clipPath>
+  </defs>
+
+  <!-- Фиолетовая обводка -->
+  <circle cx="46" cy="46" r="46" fill="#382C92"/>
+
+  <!-- Лицо: оранжевая тень снизу + жёлтая основа -->
+  <g clip-path="url(#face)">
+    <circle cx="46" cy="46" r="36" fill="#FA987C"/>
+    <circle cx="46" cy="32" r="36" fill="#F7DC8B"/>
+    <!-- Блик -->
+    <ellipse cx="28.9" cy="24.8" rx="14.85" ry="6.8" transform="rotate(139.6 28.9 24.8)" fill="#fff" fill-opacity="0.7"/>
+  </g>
+
+  <!-- Глаза -->
+  <circle cx="31.9" cy="38.8" r="3.8" fill="#382C92"/>
+  <circle cx="60.1" cy="38.8" r="3.8" fill="#382C92"/>
+
+  <!-- Улыбка -->
+  <path d="M35.7 48 A10.3 10.3 0 0 0 56.3 48" stroke="#382C92" stroke-width="5.2" stroke-linecap="round"/>
+</svg>

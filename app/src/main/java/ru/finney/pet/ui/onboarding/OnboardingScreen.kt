@@ -190,13 +190,13 @@ private fun MeetPage() {
         )
     }
     Body(
-        "Это твой питомец. Ему нужны еда, чистота, сон и радость.",
-        "Спит он бесплатно, а за остальное платят финками — это игровые монетки. Как их тратить, решаешь ты.",
+        "Помоги Финни вырасти и накопить на цель.",
+        "Планируй игровые монетки. Покупай еду, ухаживай и откладывай.",
     )
 }
 
 /** Белый круг под питомцем на первой странице. */
-private val MeetStage = 220.dp
+private val MeetStage = 160.dp
 
 @Composable
 private fun DecisionsPage() {
@@ -218,7 +218,7 @@ private val ArtCircle = 64.dp
 private fun IconCircle(icon: FinneyIcons) {
     Box(
         contentAlignment = Alignment.Center,
-        modifier = Modifier.size(ArtCircle).clip(CircleShape).buttonFill(pressed = false, round = true),
+        modifier = Modifier.size(ArtCircle).clip(CircleShape).background(Color.White),
     ) {
         FinneyIcon(icon, size = 36.dp)
     }

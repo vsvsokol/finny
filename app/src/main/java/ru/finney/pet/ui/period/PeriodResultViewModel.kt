@@ -62,6 +62,8 @@ sealed interface PeriodResultUiState {
         val gameRequired: Boolean = true,
         /** Сколько пришло на следующий уровень — при любом исходе: ребёнок должен это видеть. */
         val income: Int = 0,
+        val canPlanNext: Boolean = false,
+        val growth: PeriodGrowth? = null,
     ) : PeriodResultUiState {
         /** Перерасход по нужному и желаемому сверх плана; 0, если уложились. */
         val overspend: Int
@@ -108,6 +110,8 @@ class PeriodResultViewModel(
             passed = game.isPassed(period) == true,
             level = after,
             leveledUp = after > before,
+            growth = periodGrowth(content, before, after, period.number, state.isDemo,
+                isLatest = state.currentPeriod.number == period.number + 1),
             balance = state.balance,
             levelGame = levelTask?.title,
             levelGameIcon = levelTask?.let(::taskIcon),
@@ -117,6 +121,8 @@ class PeriodResultViewModel(
             income = state.ledger
                 .filter { it.periodNumber == period.number + 1 && it.type == EntryType.INCOME }
                 .sumOf { it.balanceDelta },
+            canPlanNext = state.currentPeriod.number == period.number + 1 &&
+                state.currentPeriod.phase == ru.finney.pet.domain.model.PeriodPhase.PLANNING,
         )
     }
 

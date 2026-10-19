@@ -11,6 +11,11 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
+import ru.finney.pet.domain.model.ItemKind
+import ru.finney.pet.ui.components.ActionFeedbackSummary
+import ru.finney.pet.ui.components.FeedbackSound
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,7 +74,7 @@ fun ShopScreen(
 }
 
 @Composable
-private fun ShopContent(
+internal fun ShopContent(
     state: ShopUiState.Ready,
     onSelect: (String) -> Unit,
     onBuy: (String) -> Unit,
@@ -79,6 +84,10 @@ private fun ShopContent(
     onOpenHistory: () -> Unit,
 ) {
     val selected = (state.needs + state.wants + state.toys).firstOrNull { it.item.id == state.selectedId }
+    FeedbackSound(state.feedback, null)
+    LaunchedEffect(state.feedback) {
+        if (state.feedback != null) { delay(4_000); onDismiss() }
+    }
     FinneyScreen(
         scrollable = true,
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -88,10 +97,16 @@ private fun ShopContent(
         top = { ShopHeader(balance = state.balance, onBack = onBack) },
         // Кнопка «Купить» одна на весь магазин и всегда на виду: раньше в каждой из трёх
         // панелей стояла своя, а в ней — подсказка «Выбери, что купить» вместо действия.
-        bottom = { BuyBar(state, selected, onBuy, onOpenBudget) },
+        bottom = {
+            state.feedback?.let {
+                ActionFeedbackSummary(it)
+                Text(it.why, style = MaterialTheme.typography.bodyMedium, color = FinneyInk)
+            }
+            BuyBar(state, selected, onBuy, onOpenBudget)
+        },
     ) {
         FeedbackDialog(
-            feedback = state.feedback,
+            feedback = null,
             rejection = state.rejection,
             onDismiss = onDismiss,
             actionLabel = if (state.rejection is Rejection.PlanNotConfirmed) "К плану расходов" else null,
@@ -193,10 +208,23 @@ private fun BuyBar(state: ShopUiState.Ready, selected: PurchasePreview?, onBuy: 
             FinneyButton(text = "К плану расходов", onClick = onOpenBudget)
         }
         selected == null -> PickHint()
-        else -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ItemPicture(selected.item.id, itemFallback(selected.item.id), size = 48.dp)
-            CoinAmount(amount = selected.item.price)
-            FinneyButton(text = "Купить", onClick = { onBuy(selected.item.id) }, modifier = Modifier.weight(1f))
+        else -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                when (selected.item.kind) {
+                    ItemKind.TOY -> "Игрушка останется в зале. Играй с ней рядом с Финни."
+                    ItemKind.ACCESSORY -> "Вещь останется в гардеробе."
+                    ItemKind.CONSUMABLE -> "${selected.item.label}: Финни использует покупку сразу."
+                },
+                style = MaterialTheme.typography.bodyLarge, color = FinneyInk,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                CoinAmount(amount = selected.item.price)
+                FinneyButton(
+                    text = if (selected.item.kind == ItemKind.CONSUMABLE) "Купить и использовать" else "Купить",
+                    onClick = { onBuy(selected.item.id) }, modifier = Modifier.weight(1f),
+                    textStyle = MaterialTheme.typography.titleMedium,
+                )
+            }
         }
     }
 }

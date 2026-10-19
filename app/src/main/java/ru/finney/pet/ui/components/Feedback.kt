@@ -240,8 +240,6 @@ fun ActionFeedbackSummary(feedback: ActionFeedback, modifier: Modifier = Modifie
                 feedback.title,
                 style = MaterialTheme.typography.titleMedium,
                 color = FinneyInk,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
         }

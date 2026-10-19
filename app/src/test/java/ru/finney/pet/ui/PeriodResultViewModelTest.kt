@@ -22,6 +22,25 @@ class PeriodResultViewModelTest : ViewModelTest() {
     private fun viewModel(periodNumber: Int) = PeriodResultViewModel(periodNumber, session, game, Fixtures.content)
 
     @Test
+    fun `переход к плану доступен только после последнего закрытия и до подтверждения`() = test {
+        startProfile()
+        session.execute { confirmPlan(it, needs = 20, wants = 10, savings = 0) }
+        session.execute { closePeriod(it) }
+        val viewModel = viewModel(periodNumber = 1)
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        settle()
+        assertTrue((viewModel.uiState.value as PeriodResultUiState.Ready).canPlanNext)
+
+        session.execute { confirmPlan(it, needs = 20, wants = 10, savings = 0) }
+        settle()
+        assertFalse((viewModel.uiState.value as PeriodResultUiState.Ready).canPlanNext)
+
+        session.execute { closePeriod(it) }
+        settle()
+        assertFalse((viewModel.uiState.value as PeriodResultUiState.Ready).canPlanNext)
+    }
+
+    @Test
     fun `итоги закрытого периода — план, факт и очки`() = test {
         startProfile()
         session.execute { confirmPlan(it, needs = 20, wants = 10, savings = 0) }

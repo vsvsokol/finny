@@ -102,26 +102,15 @@ fun Modifier.pointHere(active: Boolean, corner: Dp? = null): Modifier = if (!act
             label = "tap",
         )
     } else null
-    val requester = remember { BringIntoViewRequester() }
-    LaunchedEffect(Unit) { requester.bringIntoView() }
-    bringIntoViewRequester(requester).drawWithContent {
+    drawWithContent {
         drawContent()
-        val c = cycle?.value
-        // Подводит палец, нажимает (рука чуть сжимается, от кольца идёт волна), отводит.
-        val distance = when {
-            c == null -> 0.5f
-            c < 0.35f -> 1f - FastOutSlowInEasing.transform(c / 0.35f)
-            c < 0.5f -> 0f
-            else -> FastOutSlowInEasing.transform((c - 0.5f) / 0.5f)
-        }
-        val press = if (c != null && c in 0.35f..0.5f) sin(((c - 0.35f) / 0.15f) * PI).toFloat() else 0f
-        val wave = if (c != null && c > 0.45f) (c - 0.45f) / 0.55f else 0f
-        val rect = Rect(Offset.Zero, size)
-        val gap = PointRingGap.toPx()
-        if (wave > 0f) drawRing(rect, corner, gap + 10.dp.toPx() * wave, 1f - wave)
-        drawRing(rect, corner, gap, 1f)
-        val tip = Offset(size.width / 2f, -(gap + 4.dp.toPx() + PointHandTravel.toPx() * distance))
-        drawPointingHand(tip, up = false, press = press)
+        // Внутренняя обводка не залезает на подписи соседей и не обрезается прокруткой.
+        val fade = cycle?.value?.let { 0.7f + 0.3f * sin(it * PI).toFloat() } ?: 1f
+        val inset = 5.dp.toPx()
+        val rect = Rect(Offset.Zero, size).deflate(inset)
+        val radius = corner?.toPx()?.minus(inset)?.coerceAtLeast(0f) ?: min(rect.width, rect.height) / 2f
+        val path = Path().apply { addRoundRect(RoundRect(rect, CornerRadius(radius))) }
+        drawPath(path, FinneyYellow.copy(alpha = fade), style = Stroke(3.dp.toPx()))
     }
 }
 

@@ -71,7 +71,7 @@ class GoalsViewModelTest : ViewModelTest() {
         assertEquals(35, state.balance)
         assertNull(state.pendingWithdraw)
         assertNull("снятие — не событие, окна нет", state.feedback)
-        assertEquals("Сняли 5. До цели осталось 85.", state.note)
+        assertEquals("Взяли 5 монет.", state.note)
     }
 
     @Test
