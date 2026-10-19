@@ -664,6 +664,40 @@ economy.json (3). Цели для копилки выбираются прямо
    - **Супа второго нет**: «Суп» в магазине уже есть — `food_bowl`. Рисунок `item_food_soup`
      можно отдать ему вместо миски.
    - **Яйцу нужна картинка в `res/`**: PNG есть в `design/exports/items/`, WebP ещё не собран.
+6. **Подработка: три цели вместо одной** (чек-лист рывка, раздел 5) — предложение [@lemonke68]
+   для `tasks.json`. Кода не нужно: `goal` пишется как `oneOf` (docs/minigames.md, `chores`), и каждая
+   попытка берёт одну цель. Цены — как сейчас у варианта, рисунки уже есть в `res/`.
+
+   | Вариант | Цели | Цена |
+   |---|---|---|
+   | `game_chores` | Мяч, Наклейки, Кубик | 60–70 |
+   | `game_chores_2` | Конструктор, Джойстик, Ролики | 90–100 |
+   | `game_chores_3` | Самокат, Ролики, Джойстик | 100–110 |
+
+   В текстах вместо «мяч» — `«{goal.label}»`: «Финни копит на «{goal.label}»», «Набери на «{goal.label}»».
+   В `explainOk` первого варианта — «На «{goal.label}» заработано…», чтобы не зависеть от рода.
+   Проверено: с этими записями в `tasks.json` все тесты проходят, включая «случайные игры решаемы на любом зерне».
+
+   ```jsonc
+   // game_chores
+   "goal": { "oneOf": [
+     {"label": "Мяч", "price": {"min": 60, "max": 70, "step": 10}, "art": "item_toy_ball"},
+     {"label": "Наклейки", "price": {"min": 60, "max": 70, "step": 10}, "art": "item_toy_stickers"},
+     {"label": "Кубик", "price": {"min": 60, "max": 70, "step": 10}, "art": "item_toy_dice"}
+   ] }
+   // game_chores_2
+   "goal": { "oneOf": [
+     {"label": "Конструктор", "price": {"min": 90, "max": 100, "step": 10}, "art": "item_toy_blocks"},
+     {"label": "Джойстик", "price": {"min": 90, "max": 100, "step": 10}, "art": "item_toy_gamepad"},
+     {"label": "Ролики", "price": {"min": 90, "max": 100, "step": 10}, "art": "item_toy_rollers"}
+   ] }
+   // game_chores_3
+   "goal": { "oneOf": [
+     {"label": "Самокат", "price": {"min": 100, "max": 110, "step": 10}, "art": "item_toy_scooter"},
+     {"label": "Ролики", "price": {"min": 100, "max": 110, "step": 10}, "art": "item_toy_rollers"},
+     {"label": "Джойстик", "price": {"min": 100, "max": 110, "step": 10}, "art": "item_toy_gamepad"}
+   ] }
+   ```
 
 [@lemonke68]: https://github.com/lemonke68
 [@Lix2w78]: https://github.com/Lix2w78

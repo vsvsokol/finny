@@ -11,6 +11,7 @@ import org.junit.Test
 import ru.finney.pet.content.ContentException
 import ru.finney.pet.content.ContentParser
 import ru.finney.pet.domain.game.Game
+import ru.finney.pet.domain.model.ChoresTask
 import ru.finney.pet.domain.model.ReserveTask
 import ru.finney.pet.domain.model.StandTask
 import ru.finney.pet.domain.model.TaskDefinition
@@ -177,6 +178,32 @@ class TaskGeneratorTest {
             }
             assertTrue("$id: числа не меняются", tasks.toSet().size > 1)
         }
+    }
+
+    /**
+     * Подработка: цель — `oneOf` из нескольких, у каждой свой разброс цены (чек-лист рывка, раздел 5).
+     * Цели меняются от зерна, имя подставляется в текст, и каждая набирается.
+     */
+    @Test
+    fun `подработка — цель из нескольких, каждая решаема и подставляется в текст`() {
+        val goals = Json.parseToJsonElement(
+            """{ "oneOf": [
+                { "label": "Мяч", "price": { "min": 60, "max": 70, "step": 10 } },
+                { "label": "Наклейки", "price": { "min": 60, "max": 70, "step": 10 } },
+                { "label": "Кубик", "price": { "min": 60, "max": 70, "step": 10 } }
+            ] }""",
+        )
+        val intro = Json.parseToJsonElement("\"Финни копит на «{goal.label}»\"")
+        val template = JsonObject(content.taskTemplates.getValue("game_chores") + mapOf("goal" to goals, "intro" to intro))
+
+        val tasks = (1L..60L).map { TaskGenerator.generate(template, it) as ChoresTask }
+
+        assertEquals(setOf("Мяч", "Наклейки", "Кубик"), tasks.map { it.goal.label }.toSet())
+        tasks.forEach { task ->
+            assertEquals(emptyList<String>(), TaskChecks.problems(task))
+            assertEquals("Финни копит на «${task.goal.label}»", task.intro)
+        }
+        assertEquals("без случайности — первая цель", "Мяч", (TaskGenerator.base(template) as ChoresTask).goal.label)
     }
 
     /** «Дождливый день» на фиксированных зёрнах: пусто — неудача, разумно — успех с бонусом, жадно — неудача. */
