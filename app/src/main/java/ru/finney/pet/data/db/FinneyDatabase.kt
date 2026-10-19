@@ -10,7 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 /**
  * Схема каждой версии экспортируется в app/schemas и коммитится.
  *
- * С версии 3 изменения переносятся миграциями — [MIGRATION_3_4] … [MIGRATION_11_12]. Базы версий 1–2
+ * С версии 3 изменения переносятся миграциями — [MIGRATION_3_4] … [MIGRATION_12_13]. Базы версий 1–2
  * пересоздаются с нуля: версия 3 переименовала питомцев, а перенести старые значения было бы
  * возможно только храня прежние имена прямо в коде.
  */
@@ -23,7 +23,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TaskAttemptEntity::class,
         ItemUseEntity::class,
     ],
-    version = 12,
+    version = 13,
     exportSchema = true,
 )
 abstract class FinneyDatabase : RoomDatabase() {
@@ -35,7 +35,7 @@ abstract class FinneyDatabase : RoomDatabase() {
 
         fun create(context: Context): FinneyDatabase =
             Room.databaseBuilder(context.applicationContext, FinneyDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
 
@@ -140,6 +140,25 @@ abstract class FinneyDatabase : RoomDatabase() {
                         "SELECT profileId, periodNumber, itemId, createdAt FROM ledger " +
                         "WHERE type = 'PURCHASE' AND itemId IS NOT NULL ORDER BY id",
                 )
+            }
+        }
+
+        /**
+         * 12 → 13: один учёт расхода на еду и ванну. У расхода — сколько раз взято (`portions`).
+         * У строк версии 12 — NULL, «вся покупка»: это старые покупки, применённые сразу, и съеденная
+         * еда, у которой раз и есть вся штука. Мытьё версии 12 записывалось в ledger как WASH —
+         * переносится сюда по одному разу, а из ledger удаляется вместе с мытьём водой: денег оно
+         * не трогало, и в истории операций его не показывали.
+         */
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE item_uses ADD COLUMN portions INTEGER")
+                db.execSQL(
+                    "INSERT INTO item_uses (profileId, periodNumber, itemId, createdAt, portions) " +
+                        "SELECT profileId, periodNumber, itemId, createdAt, 1 FROM ledger " +
+                        "WHERE type = 'WASH' AND itemId IS NOT NULL ORDER BY id",
+                )
+                db.execSQL("DELETE FROM ledger WHERE type = 'WASH'")
             }
         }
     }

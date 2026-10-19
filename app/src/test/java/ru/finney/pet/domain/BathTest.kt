@@ -7,8 +7,8 @@ import org.junit.Test
 import ru.finney.pet.domain.game.Game
 import ru.finney.pet.domain.game.Rejection
 import ru.finney.pet.domain.model.Category
-import ru.finney.pet.domain.model.EntryType
 import ru.finney.pet.domain.model.GameContent
+import ru.finney.pet.domain.model.ItemUse
 import ru.finney.pet.domain.model.ShopItem
 import ru.finney.pet.domain.model.StatEffect
 import ru.finney.pet.domain.period.PeriodRules
@@ -48,7 +48,39 @@ class BathTest {
         assertEquals(bought.pet.hygiene + 50, s.pet.hygiene)
         assertEquals(bought.balance, s.balance)
         assertEquals(1, game.stock(s, "bar"))
-        assertEquals(EntryType.WASH, s.ledger.last().type)
+        // Расход — в общем учёте полки, как у еды, а не в журнале денег.
+        assertEquals(bought.ledger, s.ledger)
+        assertEquals(listOf("bar" to 1), s.uses.map { it.itemId to it.portions })
+    }
+
+    @Test
+    fun `вода ничего не тратит и ничего не записывает`() {
+        val dirty = planned.copy(pet = planned.pet.copy(hygiene = 10))
+        val s = game.wash(dirty, null).state()
+
+        assertEquals(10 + Fixtures.economy.bath.water, s.pet.hygiene)
+        assertEquals(dirty.ledger, s.ledger)
+        assertTrue(s.uses.isEmpty())
+    }
+
+    @Test
+    fun `один учёт — еда и мыло на одной полке`() {
+        var s = game.buy(planned, "bar").state()
+        s = game.buyToShelf(s, "apple").state()
+
+        assertEquals(listOf("apple" to 1, "bar" to 2), game.shelf(s).map { it.item.id to it.count })
+        s = game.wash(game.use(s, "apple").state(), "bar").state()
+        assertEquals(listOf("bar" to 1), game.shelf(s).map { it.item.id to it.count })
+    }
+
+    @Test
+    fun `покупка мыла до базы 12 — уже вся потрачена, бесплатного запаса нет`() {
+        val old = game.buy(planned, "bar").state()
+        // Так миграция 11 → 12 записала каждую старую покупку: применена сразу, целиком.
+        val migrated = old.copy(uses = listOf(ItemUse(1, "bar", 0L, portions = null)))
+
+        assertEquals(0, game.stock(migrated, "bar"))
+        assertEquals(Rejection.NoStock("bar"), game.wash(migrated.copy(pet = migrated.pet.copy(hygiene = 10)), "bar").reason())
     }
 
     @Test

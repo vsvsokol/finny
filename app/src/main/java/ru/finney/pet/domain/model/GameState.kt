@@ -85,8 +85,9 @@ enum class EntryType {
     GOAL_COMPLETE,
 
     /**
-     * Мытьё: денег не трогает, тратит один раз мыла с полочки ([LedgerEntry.itemId]; null — водой).
-     * Запас мыла не хранится, а считается по журналу, как баланс: см. [ru.finney.pet.domain.game.Game.stock].
+     * Не пишется с базы версии 13: расход мыла, щётки и пасты — в [GameState.uses], как у еды,
+     * миграция 12 → 13 перенесла туда прежние записи. Значение оставлено, пока на него
+     * ссылаются экраны истории.
      */
     WASH,
 }
@@ -122,13 +123,19 @@ data class TaskAttempt(
 )
 
 /**
- * Расходник взят с полки — съеден или использован. Покупка и использование — разные факты:
- * купленное может лежать на полке ([GameState.onShelf]). База версии 12.
+ * Расходник взят с полки: съеден, мыло потрачено на мытьё, щётка с пастой — на зубы. Покупка
+ * и расход — разные факты, запас — их разность ([ru.finney.pet.domain.game.Game.stock]). Один
+ * учёт на еду и ванну. Денег не трогает, поэтому живёт не в [GameState.ledger]. База версии 12.
+ *
+ * [portions] — сколько раз взято; у еды раз — вся штука, у мыла — одно мытьё
+ * ([ShopItem.uses]). null — вся покупка целиком: до версии 12 купленное применялось сразу,
+ * и миграция пишет каждой старой покупке такой расход.
  */
 data class ItemUse(
     val periodNumber: Int,
     val itemId: String,
     val createdAt: Long,
+    val portions: Int? = 1,
 )
 
 /** Полное состояние одного профиля. Меняется только через [ru.finney.pet.domain.game.Game]. */
@@ -149,7 +156,7 @@ data class GameState(
     val playMood: Int = 0,
     /** Когда началась текущая сессия игры, мс; null — сессии нет. */
     val playSince: Long? = null,
-    /** Что взято с полки, по порядку. Только дописывается, как [ledger]. */
+    /** Что взято с полки — еда и ванна, по порядку. Только дописывается, как [ledger]. */
     val uses: List<ItemUse> = emptyList(),
 ) {
     val currentPeriod: Period get() = periods.last()
@@ -167,13 +174,6 @@ data class GameState(
 
     fun isGoalCompleted(goalId: String): Boolean =
         ledger.any { it.type == EntryType.GOAL_COMPLETE && it.goalId == goalId }
-
-    /**
-     * Сколько штук расходника лежит на полке: куплено минус взято. Для вещей, которые
-     * не расходуются, число не имеет смысла — их наличие проверяет [owns].
-     */
-    fun onShelf(itemId: String): Int =
-        ledger.count { it.type == EntryType.PURCHASE && it.itemId == itemId } - uses.count { it.itemId == itemId }
 
     /** Вещь куплена или получена за достигнутую цель. */
     fun owns(itemId: String): Boolean = ledger.any {
