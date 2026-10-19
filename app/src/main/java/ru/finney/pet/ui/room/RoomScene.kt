@@ -7,6 +7,9 @@ import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.StartOffset
@@ -131,7 +134,7 @@ private const val TWINKLE_MS = 1_800
 private const val TWINKLE_LOW = 0.35f
 
 /** Фон неба в экспорте, им же залиты края полосы. */
-private val SkyColor = Color(0xFF261F46)
+internal val SkyColor = Color(0xFF261F46)
 
 /**
  * Паузы между пролётами НЛО, мс. Первая короткая — чтобы ребёнок успел его
@@ -214,7 +217,12 @@ private val UfoPauseMs = 20_000L..45_000L
  * @param onToyDrop игрушку отпустили.
  * @param toyNudge сдвиг рисунка игрушки в пикселях — показ и подпрыгивание, см. [RoomToy].
  * @param onToyPlaced где игрушка на экране.
- * @param interior задник, окно и торшер. Пока выбирается только в отладке ([InteriorPreview]).
+ * @param interior задник, окно и торшер. Сменённая часть не подменяется, а меняется
+ *   с анимацией: стену прокатывает валик, окно схлопывается и раскрывается, торшер
+ *   падает сверху и мигает, включаясь.
+ * @param focus что показать крупно, пока выбирают интерьер ([focusOf]); null — обычный вид.
+ * @param focusBottom сколько снизу закрыто панелью выбора: часть [focus] встаёт
+ *   посередине того, что над ней осталось.
  */
 @Composable
 fun RoomScene(
@@ -233,6 +241,8 @@ fun RoomScene(
     toyNudge: (toyId: String) -> Offset = { Offset.Zero },
     onToyPlaced: (toyId: String, bounds: Rect) -> Unit = { _, _ -> },
     interior: RoomInterior = InteriorPreview.current,
+    focus: RelRect? = null,
+    focusBottom: Dp = 0.dp,
     pet: @Composable BoxScope.() -> Unit = {},
 ) {
     // Где питомец в зале сейчас: сдвиг от его обычного места, доля ширины холста.
@@ -260,6 +270,17 @@ fun RoomScene(
     val currentSpot by rememberUpdatedState(spot)
     LaunchedEffect(flyer) { flyer.fly(onStart = { life -> if (currentSpot.hasWindow) life.sound?.let(sounds::play) }) }
     val animations = LocalAnimations.current
+
+    // Смена частей интерьера: у каждой своя анимация и свой звук. Звуки игрушек
+    // сюда не берём — их узнают сразу («кубик Рубика»), а это не игрушка.
+    val walls = rememberPartSwap(interior.wall, WALL_SWAP_MS) { sounds.play(Sfx.Pour) }
+    val windows = rememberPartSwap(interior.window, WINDOW_SWAP_MS) { sounds.play(Sfx.WashClean) }
+    val lamps = rememberPartSwap(interior.lamp, LAMP_SWAP_MS) {
+        delay((LAMP_SWAP_MS * LAMP_LANDS).toLong())
+        sounds.play(Sfx.CapsuleDoor)
+        delay((LAMP_SWAP_MS * (LAMP_FLICKERS - LAMP_LANDS)).toLong())
+        sounds.play(Sfx.Tap)
+    }
 
     // Отход ко сну: питомец прыгает в капсулу (walk 0 → 1), камера наезжает,
     // закрывается дверь, гаснет свет. Живёт на всю сцену, а не на зал:
@@ -378,6 +399,46 @@ fun RoomScene(
             )
         }
 
+        // Камера выбора интерьера: выбранная часть крупно над панелью выбора.
+        // Масштаб не меньше «холст во всю ширину» и сдвиг зажат, как у камеры сна:
+        // за краем холста пусто, и показывать это нельзя.
+        val edit = with(density) {
+            val target = focus?.let { rect ->
+                val w = maxWidth.toPx()
+                val h = (maxHeight - focusBottom).toPx().coerceAtLeast(1f)
+                val left = shiftX.toPx()
+                val top = shiftY.toPx()
+                val cw = canvasW.toPx()
+                val ch = canvasH.toPx()
+                val pad = FOCUS_PAD.toPx()
+                val rw = cw * rect.width
+                val rh = ch * rect.height
+                val s = minOf((w - 2 * pad) / rw, (h - 2 * pad) / rh, FOCUS_MAX_ZOOM).coerceAtLeast(w / cw)
+                val cx = left + cw * (rect.left + rect.width / 2f)
+                val cy = top + ch * (rect.top + rect.height / 2f)
+                val x = (w / 2f - s * cx).coerceIn(minOf(w - s * (left + cw), -s * left), -s * left)
+                val y = (h / 2f - s * cy).coerceIn(minOf(h - s * (top + ch), -s * top), -s * top)
+                Triple(s, x, y)
+            } ?: Triple(1f, 0f, 0f)
+            val spec = if (animations) spring<Float>(dampingRatio = 0.8f, stiffness = Spring.StiffnessVeryLow) else snap()
+            Triple(
+                animateFloatAsState(target.first, spec, label = "focusScale"),
+                animateFloatAsState(target.second, spec, label = "focusX"),
+                animateFloatAsState(target.third, spec, label = "focusY"),
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    transformOrigin = TransformOrigin(0f, 0f)
+                    scaleX = edit.first.value
+                    scaleY = edit.first.value
+                    translationX = edit.second.value
+                    translationY = edit.third.value
+                },
+        ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -400,7 +461,9 @@ fun RoomScene(
                     canvasH = canvasH,
                     shiftX = shiftX,
                     shiftY = shiftY,
-                    interior = interior,
+                    walls = walls,
+                    windows = windows,
+                    lamps = lamps,
                     flyer = flyer,
                     capsule = capsule,
                     walk = { walk.value },
@@ -425,6 +488,7 @@ fun RoomScene(
             }
         }
 
+        }
         }
 
         // Ночь поверх комнаты: свет выключен. Лежит вне камеры — увеличенная
@@ -468,7 +532,9 @@ private fun RoomCanvas(
     canvasH: Dp,
     shiftX: Dp,
     shiftY: Dp,
-    interior: RoomInterior,
+    walls: PartSwap<WallSkin>,
+    windows: PartSwap<WindowSkin>,
+    lamps: PartSwap<LampSkin>,
     flyer: WindowFlyer,
     capsule: Boolean,
     walk: () -> Float,
@@ -495,11 +561,12 @@ private fun RoomCanvas(
                 .requiredSize(canvasW, canvasH),
         ) {
             Box(modifier = Modifier.fillMaxSize().roomLight(lighting)) {
-                Layer(interior.wall.back, canvasW, canvasH)
-                // key: у окон разный набор картинок, и сменённое окно собирается заново.
-                if (room.hasWindow) key(interior.window) { Window(interior.window, canvasW, canvasH, flyer) }
-                if (room.hasLamp) Layer(interior.lamp.layer, canvasW, canvasH)
+                WallSwap(walls, canvasW, canvasH)
+                if (room.hasWindow) WindowSwap(windows, canvasW, canvasH, flyer)
+                if (room.hasLamp) LampSwap(lamps, canvasW, canvasH)
             }
+            // Искры и вспышки — поверх света: свет ночной и приглушил бы их.
+            SwapEffects(walls, windows.takeIf { room.hasWindow }, lamps.takeIf { room.hasLamp })
 
             val visibility = petVisibility
             val ground = Room.petGround(room).let { if (room == RoomSpot.LIVING) it.shiftedX(stroll()) else it }
@@ -620,7 +687,7 @@ private fun Pet(
  * Все движения читаются только на отрисовке и не пересобирают окно.
  */
 @Composable
-private fun Window(window: WindowSkin, canvasW: Dp, canvasH: Dp, flyer: WindowFlyer) {
+internal fun Window(window: WindowSkin, canvasW: Dp, canvasH: Dp, flyer: WindowFlyer) {
     val hole = window.hole
     val animations = LocalAnimations.current
     val clock = rememberInfiniteTransition(label = "window")
@@ -768,7 +835,7 @@ private fun DrawScope.drawRoomImage(
  * У окна без летуна пролётов нет.
  */
 @Stable
-private class WindowFlyer(private val window: WindowSkin) {
+internal class WindowFlyer(private val window: WindowSkin) {
     private val life = window.life as? WindowLife.Flyer
 
     var flight by mutableStateOf<UfoFlight?>(null)
@@ -839,7 +906,7 @@ private class WindowFlyer(private val window: WindowSkin) {
  * за противоположным», высота 0..1 от верха проёма до низа.
  */
 @Immutable
-private data class UfoFlight(
+internal data class UfoFlight(
     val durationMs: Int,
     val fromLeft: Boolean,
     val startHeight: Float,
@@ -1029,7 +1096,7 @@ private fun LitLayer(
 }
 
 @Composable
-private fun Layer(layer: RoomLayer, canvasW: Dp, canvasH: Dp) {
+internal fun Layer(layer: RoomLayer, canvasW: Dp, canvasH: Dp) {
     Image(
         painter = painterResource(layer.image),
         contentDescription = null,

@@ -144,7 +144,8 @@ object Interiors {
     /** Комната, с которой всё начиналось: ночное небо, НЛО, торшер-«Сатурн». */
     val Default = RoomInterior(
         id = "default",
-        label = "Как было",
+        // В выборе ребёнок видит темы по имени: эта — про ночное небо и планету.
+        label = "Космос",
         wall = WallSkin(Room.Back, floorTop = Room.FLOOR_TOP),
         window = WindowSkin(
             frame = Room.WindowFrame,
@@ -260,12 +261,47 @@ object Interiors {
     val all = listOf(Default, Circus, Honey, Sea, Forest, Town)
 }
 
+/** Что в комнате меняется по отдельности: вкладки выбора и куда смотрит камера. */
+enum class InteriorPart(val label: String) { WALL("Стена"), WINDOW("Окно"), LAMP("Торшер") }
+
+/** Тема, из которой взята часть [part]. У смешанной комнаты у каждой части своя. */
+fun RoomInterior.themeOf(part: InteriorPart): RoomInterior = Interiors.all.firstOrNull { theme ->
+    when (part) {
+        InteriorPart.WALL -> theme.wall == wall
+        InteriorPart.WINDOW -> theme.window == window
+        InteriorPart.LAMP -> theme.lamp == lamp
+    }
+} ?: Interiors.Default
+
 /**
- * Временный выбор интерьера из отладки — посмотреть темы на телефоне.
- *
- * Только вид и только до перезапуска: в игре интерьер пока не покупается и не
- * хранится. Когда в Game появятся слоты обстановки, интерьер будет приходить
- * из состояния игры, а это уйдёт.
+ * Эта комната, где часть [part] взята из темы [from]. Все три части из одной
+ * темы — это сама тема; из разных — своя комната ребёнка.
+ */
+fun RoomInterior.withPart(part: InteriorPart, from: RoomInterior): RoomInterior {
+    val mixed = when (part) {
+        InteriorPart.WALL -> copy(wall = from.wall)
+        InteriorPart.WINDOW -> copy(window = from.window)
+        InteriorPart.LAMP -> copy(lamp = from.lamp)
+    }
+    return Interiors.all.firstOrNull { it.wall == mixed.wall && it.window == mixed.window && it.lamp == mixed.lamp }
+        ?: mixed.copy(id = "mix", label = "Своя комната")
+}
+
+/**
+ * Что показать крупно, пока выбирают часть [part], — доли холста. Стена — вся,
+ * от потолка до шва с полом и чуть ниже: обои и пол меняются вместе.
+ */
+fun RoomInterior.focusOf(part: InteriorPart): RelRect = when (part) {
+    InteriorPart.WALL -> RelRect(0f, 0f, 1f, wall.floorTop + 0.15f)
+    InteriorPart.WINDOW -> window.frame.rect
+    InteriorPart.LAMP -> lamp.layer.rect
+}
+
+/**
+ * Выбранный интерьер — пока только на экране и до перезапуска: в игре интерьер
+ * не покупается и не хранится. Когда в Game появятся слоты обстановки, интерьер
+ * будет приходить из состояния игры, а это уйдёт. Пишут сюда выбор комнаты
+ * на главной ([InteriorPicker]) и отладка.
  */
 object InteriorPreview {
     var current by mutableStateOf(Interiors.Default)

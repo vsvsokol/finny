@@ -168,6 +168,20 @@ import ru.finney.pet.ui.room.DOOR_MS
 import ru.finney.pet.ui.room.WALK_MS
 import ru.finney.pet.ui.room.RoomScene
 import ru.finney.pet.ui.room.RoomSpot
+import ru.finney.pet.ui.room.InteriorPart
+import ru.finney.pet.ui.room.InteriorPicker
+import ru.finney.pet.ui.room.InteriorPickerHeight
+import ru.finney.pet.ui.room.InteriorPreview
+import ru.finney.pet.ui.room.TAKE_ALL_STEP_MS
+import ru.finney.pet.ui.room.focusOf
+import ru.finney.pet.ui.room.themeOf
+import ru.finney.pet.ui.room.withPart
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import ru.finney.pet.ui.theme.FinneyInk
 import ru.finney.pet.ui.theme.FinneySand
 import ru.finney.pet.ui.theme.RadiusField
@@ -423,11 +437,18 @@ internal fun HomeContent(
     // Панель «Игры уровня»: обязательная игра и две по желанию.
     var gamesOpen by rememberSaveable { mutableStateOf(false) }
 
+    // Выбор интерьера: какая вкладка открыта; null — панель закрыта. Пока выбирают,
+    // интерфейс главной расступается, а камера подлетает к выбранной вещи.
+    var roomEdit by rememberSaveable { mutableStateOf<InteriorPart?>(null) }
+    val editing = roomEdit != null
+    val editScope = rememberCoroutineScope()
+
     // «Назад» закрывает открытую панель, а не приложение: плейтест 29.09 — из
     // панели непройденного уровня было не выйти.
-    BackHandler(enabled = levelOpen || gamesOpen) {
+    BackHandler(enabled = levelOpen || gamesOpen || editing) {
         levelOpen = false
         gamesOpen = false
+        roomEdit = null
     }
 
     // Игра ухода: что выбрали в панели и теперь бросают в рот или трут о питомца.
@@ -602,7 +623,8 @@ internal fun HomeContent(
     val toyBounds = remember { mutableStateMapOf<String, Rect>() }
     var toyShown by rememberSaveable { mutableStateOf(false) }
     val roomCalm = spot == RoomSpot.LIVING && !sleeping && playing == null && care == null &&
-        heldToy == null && !levelOpen && dreamCard == null && purchased == null && !rejectShown && !menuOpen && !moodHint && !gamesOpen
+        heldToy == null && !levelOpen && dreamCard == null && purchased == null && !rejectShown && !menuOpen && !moodHint && !gamesOpen &&
+        !editing
     val showToy = !state.toyPlayed && !toyShown && state.toys.isNotEmpty() && roomCalm
     LaunchedEffect(showToy, animations) {
         if (!showToy) return@LaunchedEffect
@@ -657,7 +679,17 @@ internal fun HomeContent(
     // сам FinneyScreen не трогаем, на нём держатся пять других экранов.
     val guideStep = if (sleep != null) NextStep.WAKE.takeIf { now >= sleep.enoughAt } else state.nextStep
     val guideBusy = playing != null || care != null || levelOpen || debugOpen || rejectShown ||
-        menuOpen || moodHint || dreamCard != null || gamesOpen
+        menuOpen || moodHint || dreamCard != null || gamesOpen || editing
+    // Интерфейс главной расступается, пока выбирают интерьер, — комната целиком
+    // принадлежит выбору. Читается на отрисовке.
+    val hudShown by animateFloatAsState(
+        if (editing) 0f else 1f,
+        if (animations) spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow) else snap(),
+        label = "hudShown",
+    )
+    // Сколько снизу закрывает панель выбора: камера ставит вещь посередине того, что над ней.
+    // Заголовок и «Готово» висят над рамкой — их высота тоже закрыта.
+    val pickerCovers = InteriorPickerHeight + 36.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -692,7 +724,9 @@ internal fun HomeContent(
             // Без анимаций прыжок мелькнул бы по кадру на шаг — не прыгаем вовсе.
             onHop = { if (animations) animation.playJoy() },
             toys = state.toys,
-            toysEnabled = !sleeping && playing == null && care == null,
+            toysEnabled = !sleeping && playing == null && care == null && !editing,
+            focus = roomEdit?.let { InteriorPreview.current.focusOf(it) },
+            focusBottom = pickerCovers,
             onToyDrag = ::onToyDrag,
             onToyDrop = ::onToyDrop,
             toyNudge = showcase::offsetFor,
@@ -729,6 +763,19 @@ internal fun HomeContent(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .graphicsLayer {
+                    alpha = hudShown
+                    val s = 0.85f + 0.15f * hudShown
+                    scaleX = s
+                    scaleY = s
+                }
+                // Пока выбирают интерьер, кнопки главной не нажимаются: они растаяли,
+                // а палец, попавший в невидимую кнопку, увёл бы с экрана.
+                .then(if (editing) Modifier.pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+                    }
+                } else Modifier)
                 .systemBarsPadding()
                 .padding(horizontal = 8.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -831,6 +878,8 @@ internal fun HomeContent(
                 state = state, layout = actionLayout, enabled = !sleeping && playing == null,
                 alpha = hudAlpha, hintTargets = hintTargets, onOpenGoals = onOpenGoals,
                 onOpenGames = { gamesOpen = true },
+                // Обустраивают зал днём: во сне свет выключен, а на кухне и в ванной нет торшера.
+                onOpenRoom = if (spot == RoomSpot.LIVING && !sleeping) ({ roomEdit = InteriorPart.WALL }) else null,
                 onSavingsBounds = { if (savingsBounds != it) savingsBounds = it },
                 onGamesBounds = { if (gamesBounds != it) gamesBounds = it },
             )
@@ -1029,7 +1078,7 @@ internal fun HomeContent(
         // Подсказка говорит одна: всё, что уже открыто поверх комнаты или ещё объясняет
         // своё (окно отказа, меню, подсказка настроения, сон-загадка), её глушит.
         val busy = playing != null || care != null || levelOpen || debugOpen || rejectShown ||
-            menuOpen || moodHint || dreamCard != null || gamesOpen
+            menuOpen || moodHint || dreamCard != null || gamesOpen || editing
         val tutorial = state.level == 1 && guided
         // Итог покупки на обучении — не отдельной карточкой, а в пузыре подсказки,
         // над следующим шагом: «Купили: каша, −10 · +40» и «Дальше: сыграй в игру».
@@ -1346,6 +1395,36 @@ internal fun HomeContent(
                     modifier = Modifier.pointerInput(Unit) { detectTapGestures { } },
                 )
             }
+        }
+
+        // Выбор интерьера: панель выезжает снизу на пружине, над ней — комната.
+        // Выбранное сразу встаёт в комнату; «Готово» и «Назад» просто закрывают.
+        AnimatedVisibility(
+            visible = editing,
+            enter = slideInVertically(spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMediumLow)) { it },
+            exit = slideOutVertically(tween(250)) { it },
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
+            var shownPart by remember { mutableStateOf(InteriorPart.WALL) }
+            roomEdit?.let { shownPart = it }
+            InteriorPicker(
+                interior = InteriorPreview.current,
+                part = shownPart,
+                onPart = { roomEdit = it },
+                onPick = { part, theme -> InteriorPreview.current = InteriorPreview.current.withPart(part, theme) },
+                onTakeAll = { theme ->
+                    // Тему целиком — со стены: камера отъезжает, и видно, как меняется всё по очереди.
+                    roomEdit = InteriorPart.WALL
+                    editScope.launch {
+                        for (part in InteriorPart.entries) {
+                            if (InteriorPreview.current.themeOf(part) == theme) continue
+                            delay(TAKE_ALL_STEP_MS)
+                            InteriorPreview.current = InteriorPreview.current.withPart(part, theme)
+                        }
+                    }
+                },
+                onDone = { roomEdit = null },
+            )
         }
 
         // Карточка завершает переход даже после очистки разового события.

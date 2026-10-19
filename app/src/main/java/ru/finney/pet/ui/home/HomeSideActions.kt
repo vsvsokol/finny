@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import ru.finney.pet.ui.pet.accessoryArt
+import ru.finney.pet.ui.room.RoomEditButton
 import ru.finney.pet.ui.theme.*
 
 internal enum class HomeActionLayout { RIGHT_COLUMN, SPLIT }
@@ -29,6 +30,7 @@ internal fun BoxScope.HomeSideActions(
     state: HomeUiState.Ready, layout: HomeActionLayout, enabled: Boolean, alpha: Float,
     hintTargets: HintTargets, onOpenGoals: () -> Unit, onOpenGames: () -> Unit,
     onSavingsBounds: (Rect) -> Unit, onGamesBounds: (Rect) -> Unit,
+    onOpenRoom: (() -> Unit)? = null,
 ) {
     val goal = state.goal
     val savings: @Composable () -> Unit = {
@@ -46,6 +48,11 @@ internal fun BoxScope.HomeSideActions(
             HomeMoneyBadge(state.totalSavings, Modifier.padding(top = 3.dp)
                 .testTag("home-savings-money").semantics { contentDescription = "Накоплено ${state.totalSavings} монет" })
             if (goal == null && !state.reserveMode) ActionCaption("Выбрать цель")
+            // Обустроить комнату — под копилкой: слева столбец про «моё», справа — про уровень.
+            if (onOpenRoom != null) {
+                RoomEditButton(onOpenRoom, Modifier.padding(top = 14.dp))
+                ActionCaption("Комната")
+            }
         }
     }
     val games: @Composable () -> Unit = {
