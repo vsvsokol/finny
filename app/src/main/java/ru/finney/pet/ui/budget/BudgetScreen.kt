@@ -211,10 +211,8 @@ internal fun PlanningContent(
         )
         // Не «бонус»: монет за план нет. Соблюдённый план — одна из трёх звёзд итога уровня
         // (уход, план, копилка), сколько бы очков ни давал points.planMatched для истории.
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FinneyIcon(FinneyIcons.Star, size = 24.dp)
-            Text("Уложишься в план — звезда к уровню", style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
-        }
+        // Без значка звезды: звезда в плане уже значит «Желаемое».
+        Text("Уложишься в план — звезда к уровню", style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
 
         // Каждый уровень план собирается заново, и на плейтесте это было скучно:
         // одной кнопкой — как в прошлый раз, а дальше подправить «−/+».
@@ -231,6 +229,7 @@ internal fun PlanningContent(
         // Первый план: зачем каждая часть, одной фразой от Финни прямо в строке (чек-лист 20.10).
         // Дальше фразы уходят, остаётся «?» у строки.
         val first = state.periodNumber == 1
+        val savingsSays = "Откладывай понемногу, и мы накопим на мечту."
 
         AmountRow(
             icon = categoryIcon(Category.NEEDS),
@@ -277,6 +276,7 @@ internal fun PlanningContent(
         if (target.goalLabel == null) {
             FinneyCard {
                 CategoryTitle(SavingsIcon, "Копилка", helpText = target.savingsHelp)
+                if (first) Text("Финни: «$savingsSays»", style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
                 Text("На что копим? Выбери сам — любую:", style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
                 target.goals.forEach { goal ->
                     GoalChoice(goal, onClick = { if (interactive) { awaitingGoal = true; onSelectGoal(goal.id) } })
@@ -292,7 +292,7 @@ internal fun PlanningContent(
                 canAdd = target.remainder >= STEP,
                 budget = target.budget,
                 subtitle = if (target.reserveMode) "Запас: монеты на потом" else "Цель: «${target.goalLabel}»",
-                finneySays = if (first && !target.reserveMode) "Откладывай понемногу, и мы накопим на мечту." else null,
+                finneySays = if (first && !target.reserveMode) savingsSays else null,
                 helpText = target.savingsHelp,
                 )
         }
