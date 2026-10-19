@@ -16,6 +16,8 @@ import ru.finney.pet.domain.tasks.TaskInputError
 import ru.finney.pet.ui.tasks.TaskPhase
 import ru.finney.pet.ui.tasks.TaskUiState
 import ru.finney.pet.ui.tasks.TaskViewModel
+import ru.finney.pet.ui.tasks.progressLine
+import ru.finney.pet.ui.tasks.rewardLine
 
 class TaskViewModelTest : ViewModelTest() {
 
@@ -56,6 +58,27 @@ class TaskViewModelTest : ViewModelTest() {
         state = viewModel.ready()
         assertEquals(TaskOutcome.SUCCESS, state.result?.outcome)
         assertTrue("пройдено", state.completed)
+    }
+
+    @Test
+    fun `карточка перед игрой говорит, что попадёт в кошелёк`() = test {
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.uiState.collect {} }
+        settle()
+        assertTrue(viewModel.ready().firstTry)
+        assertEquals("+15 монет в кошелёк Финни. Не выйдет — всё равно\u00A0+5.", rewardLine(viewModel.ready()))
+        assertEquals("Монеты пригодятся для плана и копилки.", progressLine(viewModel.ready()))
+
+        viewModel.start()
+        viewModel.submit(Fixtures.failure)
+        settle()
+        assertFalse("за вторую неудачу монет нет", viewModel.ready().firstTry)
+        assertEquals("+15 монет в кошелёк Финни.", rewardLine(viewModel.ready()))
+
+        viewModel.replay()
+        viewModel.submit(Fixtures.success)
+        settle()
+        assertEquals("Награда уже в кошельке. Сыграй ещё — для тренировки.", rewardLine(viewModel.ready()))
     }
 
     @Test

@@ -38,6 +38,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -78,6 +79,7 @@ import ru.finney.pet.ui.theme.StrokeThin
 import ru.finney.pet.ui.theme.StrokeRegular
 import ru.finney.pet.ui.sound.LocalSounds
 import ru.finney.pet.ui.sound.Sfx
+import ru.finney.pet.ui.progress.coins
 
 /** Подпись темы задания — те же три темы, что в ТЗ п. 2.5.8. */
 fun TaskTheme.label(): String = when (this) {
@@ -159,11 +161,17 @@ internal fun TaskIntro(state: TaskUiState.Ready, onStart: () -> Unit, onBack: ()
             // Без заголовка на рамке: персиковое «Что делать» стояло вплотную к панели и
             // спорило с названием игры того же цвета (плейтест 29.09). Что это правила,
             // говорят номера шагов. Тема ребёнку ничего не говорит — она у взрослого.
+            // Карточка «Ты — … · Сделай … · Получишь …» (плейтест 02.10): ребёнок не понимал,
+            // кто он в игре и зачем играть. Поэтому видно и то, что игра даёт уровню.
             ScenePanel(title = null, modifier = Modifier.fillMaxWidth()) {
-                Text(gameHelp(state.task).role, style = MaterialTheme.typography.bodyMedium, color = FinneyInk)
+                Text(gameHelp(state.task).role, style = MaterialTheme.typography.titleMedium, color = FinneyInk)
+                CardLabel("Сделай")
                 IntroSteps(state.task.intro)
+                CardLabel("Получишь")
+                Text(rewardLine(state), style = MaterialTheme.typography.titleMedium, color = FinneyInk)
+                Text(progressLine(state), style = MaterialTheme.typography.bodyMedium, color = FinneyInk)
                 Text(
-                    "Монеты внутри игры — для тренировки. В кошелёк Финни поступает только награда.",
+                    "Монеты внутри игры — учебные.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = FinneyInk,
                 )
@@ -199,6 +207,33 @@ internal fun TaskIntro(state: TaskUiState.Ready, onStart: () -> Unit, onBack: ()
             }
         }
     }
+}
+
+/** Подпись части карточки перед игрой: «Сделай», «Получишь». */
+@Composable
+private fun CardLabel(text: String) {
+    Text(text, style = MaterialTheme.typography.labelLarge, color = FinneyInk.copy(alpha = 0.7f),
+        modifier = Modifier.padding(top = 4.dp).semantics { heading() })
+}
+
+/** Что попадёт в кошелёк. Правила — как в [ru.finney.pet.domain.game.Game.submitTask]. */
+internal fun rewardLine(state: TaskUiState.Ready): String {
+    val r = state.reward
+    return when {
+        state.completed -> "Награда уже в кошельке. Сыграй ещё — для тренировки."
+        state.firstTry && r.fail > 0 ->
+            "+${coins(r.success)} в кошелёк Финни. Не выйдет — всё равно\u00A0+${r.fail}."
+        else -> "+${coins(r.success)} в кошелёк Финни."
+    }
+}
+
+/** Как игра двигает уровень: игру уровня нужно пройти, остальные дают монеты на план и копилку. */
+internal fun progressLine(state: TaskUiState.Ready): String = when {
+    !state.isLevelGame -> "Монеты пригодятся для плана и копилки."
+    state.levelGamePassed -> "Это игра уровня, она уже пройдена."
+    state.levelGameRequired -> "Это игра уровня: пройди её, чтобы закрыть уровень."
+    // В демо игра уровня не обязательна — не обещаем, что без неё уровень не закрыть.
+    else -> "Это игра уровня."
 }
 
 /**

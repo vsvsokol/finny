@@ -65,6 +65,12 @@ sealed interface TaskUiState {
         val result: TaskOutcomeUi?,
         val inputError: TaskInputError?,
         val isLevelGame: Boolean = false,
+        /** Игру уровня нужно пройти, чтобы закрыть уровень (в демо — нет). */
+        val levelGameRequired: Boolean = false,
+        /** Игра уровня уже пройдена в этом уровне. */
+        val levelGamePassed: Boolean = false,
+        /** Попыток ещё не было: и неудачная первая принесёт [TaskReward.fail]. */
+        val firstTry: Boolean = true,
     ) : TaskUiState
 }
 
@@ -126,6 +132,8 @@ class TaskViewModel(
     private fun toUiState(saved: SavedGame, local: Local): TaskUiState {
         val task = task(local.seed) ?: return TaskUiState.NotFound
         val state = saved.state
+        val isLevelGame = state.currentPeriod.levelTaskId == taskId
+        val check = if (isLevelGame) game.levelCheck(state) else null
         return TaskUiState.Ready(
             task = task,
             character = saved.profile.appearance.character,
@@ -141,7 +149,10 @@ class TaskViewModel(
             attempt = local.attempt,
             result = local.result,
             inputError = local.inputError,
-            isLevelGame = state.currentPeriod.levelTaskId == taskId,
+            isLevelGame = isLevelGame,
+            levelGameRequired = check?.gameRequired == true,
+            levelGamePassed = check?.gamePassed == true,
+            firstTry = state.attempts.none { it.taskId == taskId },
         )
     }
 
