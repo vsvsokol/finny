@@ -4,5 +4,10 @@
   { "id": "goal_bike",              "label": "Пиратская шляпа",  "price": 125, "moodBonus": 25, "reward": "hat_pirate", "unlockLevel": 5 },
   { "id": "goal_glasses_star",      "label": "Очки-звёзды",      "price": 140, "moodBonus": 30, "reward": "glasses_star", "unlockLevel": 7 },
   { "id": "goal_glasses_pineapple", "label": "Очки-ананасы",     "price": 160, "moodBonus": 35, "reward": "glasses_pineapple", "unlockLevel": 9 },
-  { "id": "goal_house",             "label": "Шляпа волшебника", "price": 170, "moodBonus": 40, "reward": "hat_wizard", "unlockLevel": 11 }
+  { "id": "goal_house",             "label": "Шляпа волшебника", "price": 170, "moodBonus": 40, "reward": "hat_wizard", "unlockLevel": 11 },
+  { "id": "goal_glasses_3d",        "label": "3D-очки",          "price": 180, "moodBonus": 40, "reward": "glasses_3d", "unlockLevel": 13 },
+  { "id": "goal_hat_flowers",       "label": "Шляпка с цветами", "price": 195, "moodBonus": 45, "reward": "hat_flowers", "unlockLevel": 15 },
+  { "id": "goal_goggles_ski",       "label": "Лыжная маска",     "price": 210, "moodBonus": 45, "reward": "goggles_ski", "unlockLevel": 17 },
+  { "id": "goal_hat_sun",           "label": "Шляпа с бантом",   "price": 225, "moodBonus": 50, "reward": "hat_sun", "unlockLevel": 19 },
+  { "id": "goal_hat_top",           "label": "Цилиндр",          "price": 240, "moodBonus": 50, "reward": "hat_top", "unlockLevel": 21 }
 ]

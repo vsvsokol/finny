@@ -34,7 +34,9 @@ import ru.finney.pet.ui.motion.LocalAnimations
 import ru.finney.pet.ui.period.PeriodResultContent
 import ru.finney.pet.ui.period.PeriodResultUiState
 import ru.finney.pet.ui.progress.NextProgress
+import ru.finney.pet.ui.shop.ShelfRow
 import ru.finney.pet.ui.shop.ShopContent
+import ru.finney.pet.ui.shop.ShopShelf
 import ru.finney.pet.ui.shop.ShopUiState
 import ru.finney.pet.ui.theme.FinneyTheme
 import java.io.File
@@ -76,7 +78,7 @@ class ProgressionScreenTest {
         var fromWants = ""
         var bought = ""
         show {
-            ShopContent(ShopUiState.Ready(50, true, listOf(preview), emptyList(), emptyList(), item.id,
+            ShopContent(ShopUiState.Ready(50, true, listOf(ShelfRow(ShopShelf.FOOD, listOf(preview))), item.id,
                 0, 30, null, null, upcoming, mapOf(item.id to 10)), {}, { bought = it }, {}, {}, {}, {},
                 onBuyFromWants = { fromWants = it })
         }

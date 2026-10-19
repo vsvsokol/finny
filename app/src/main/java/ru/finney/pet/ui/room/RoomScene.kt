@@ -112,6 +112,12 @@ private const val HOP_FLIGHT_MS = 530
  */
 private const val PET_MARGIN = 0.12f
 
+/**
+ * Во сколько раз окно на кухне больше, чем в зале. Подоконник стоит, где был, а карниз
+ * (0.031 холста) поднимается к потолку: выше ×1.15 он уходит под строку состояния.
+ */
+private const val KITCHEN_WINDOW_SCALE = 1.15f
+
 /** Сколько комната дышит: пена колышется в этих пределах от своего размера. */
 private const val FOAM_SWELL = 0.02f
 private const val FOAM_PERIOD_MS = 3400
@@ -579,7 +585,20 @@ private fun RoomCanvas(
         ) {
             Box(modifier = Modifier.fillMaxSize().roomLight(lighting)) {
                 WallSwap(walls, canvasW, canvasH)
-                if (room.hasWindow) WindowSwap(windows, canvasW, canvasH, flyer)
+                if (room.hasWindow) {
+                    // На кухне питомец крупнее и сидит выше, окно за ним почти пропадало
+                    // под головой и кнопками. Растёт от подоконника вверх: вниз окно
+                    // ложилось почти на пол, и комната выглядела ниже.
+                    val grow = if (room == RoomSpot.KITCHEN) KITCHEN_WINDOW_SCALE else 1f
+                    Box(
+                        Modifier.fillMaxSize().graphicsLayer {
+                            val frame = windows.now.frame.rect
+                            transformOrigin = TransformOrigin(frame.left + frame.width / 2f, frame.bottom)
+                            scaleX = grow
+                            scaleY = grow
+                        },
+                    ) { WindowSwap(windows, canvasW, canvasH, flyer) }
+                }
                 if (room.hasLamp) LampSwap(lamps, canvasW, canvasH)
             }
             // Искры и вспышки — поверх света: свет ночной и приглушил бы их.

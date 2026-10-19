@@ -174,7 +174,10 @@ class UiQualityTest {
         val wants = previews(Category.WANTS, ItemKind.CONSUMABLE)
         val toys = previews(Category.WANTS, ItemKind.TOY)
         for (item in listOf(needs.first(), wants.first(), toys.first())) {
-            val state = ShopUiState.Ready(50, true, needs, wants, toys, item.item.id, 30, 15, null, null)
+            val shelves = ShopShelf.entries.map { shelf ->
+                ShelfRow(shelf, (needs + wants + toys).filter { shelf.holds(it.item) })
+            }
+            val state = ShopUiState.Ready(50, true, shelves, item.item.id, 30, 15, null, null)
             show("shop-${item.item.kind}-${item.item.category}") { ShopContent(state, {}, {}, {}, {}, {}, {}) }
             compose.onNodeWithText(if (item.item.kind == ItemKind.CONSUMABLE) "Купить и использовать" else "Купить").assertIsDisplayed()
             shot()

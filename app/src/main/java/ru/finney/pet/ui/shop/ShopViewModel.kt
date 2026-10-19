@@ -22,12 +22,44 @@ import ru.finney.pet.domain.game.Session
 import ru.finney.pet.domain.model.Category
 import ru.finney.pet.domain.model.GameContent
 import ru.finney.pet.domain.model.GameState
+import ru.finney.pet.domain.model.Goal
 import ru.finney.pet.domain.model.ItemKind
 import ru.finney.pet.domain.model.PeriodPhase
 import ru.finney.pet.domain.model.SavedGame
 import ru.finney.pet.domain.model.ShopItem
 import ru.finney.pet.ui.components.ActionFeedback
 import ru.finney.pet.ui.components.changesBetween
+
+/**
+ * Раздел магазина. Делится по тому, что ребёнок узнаёт в вещи, — еда, мыло, вкусности,
+ * игрушки, — а «нужное / хочется» остаётся полосой и значком внутри раздела.
+ */
+enum class ShopShelf(val title: String) {
+    FOOD("Еда"),
+    CLEAN("Чистота"),
+    TREATS("Радости"),
+    TOYS("Игрушки"),
+    ;
+
+    fun holds(item: ShopItem): Boolean = when (this) {
+        FOOD -> item.category == Category.NEEDS && item.effect.hygiene <= 0 && item.uses == null
+        CLEAN -> item.category == Category.NEEDS && (item.effect.hygiene > 0 || item.uses != null)
+        TREATS -> item.category == Category.WANTS && item.kind != ItemKind.TOY
+        TOYS -> item.kind == ItemKind.TOY
+    }
+}
+
+/** Раздел целиком: что можно купить сейчас. Закрытое — одним тизером на весь магазин. */
+data class ShelfRow(
+    val shelf: ShopShelf,
+    val previews: List<PurchasePreview>,
+)
+
+/**
+ * Цель, на которую копят сейчас, — одной плиткой со ссылкой в копилку. Сами награды
+ * целей в магазине не продаются и не показываются: на них только копят (20.10, решение команды).
+ */
+data class SavingTile(val goal: Goal, val saved: Int)
 
 sealed interface ShopUiState {
     data object Loading : ShopUiState
@@ -36,20 +68,27 @@ sealed interface ShopUiState {
         val balance: Int,
         /** Покупки открываются после подтверждения плана периода. */
         val canBuy: Boolean,
-        val needs: List<PurchasePreview>,
-        val wants: List<PurchasePreview>,
-        /** Игрушки — тоже «хочется», но покупаются один раз и остаются в зале. */
-        val toys: List<PurchasePreview>,
+        val shelves: List<ShelfRow>,
         val selectedId: String?,
         /** Сколько по плану осталось на нужное и на желаемое. null — плана ещё нет. */
         val needsLeft: Int?,
         val wantsLeft: Int?,
         val rejection: Rejection?,
         val feedback: ActionFeedback?,
+        /** Ближайшее закрытое — один тизер, гора замков в начале игры только пугает. */
         val upcoming: ShopItem? = null,
         /** Нужное, которое выйдет за план, и сколько для него взять из радостей (Game.wantsToNeeds). */
         val fromWants: Map<String, Int> = emptyMap(),
-    ) : ShopUiState
+        /** null — цель не выбрана. */
+        val saving: SavingTile? = null,
+    ) : ShopUiState {
+        // Прежний срез «нужное / хочется / игрушки» — из тех же разделов, ничего не пересчитывая.
+        val needs: List<PurchasePreview> get() = previewsOf(ShopShelf.FOOD, ShopShelf.CLEAN)
+        val wants: List<PurchasePreview> get() = previewsOf(ShopShelf.TREATS)
+        val toys: List<PurchasePreview> get() = previewsOf(ShopShelf.TOYS)
+
+        private fun previewsOf(vararg kinds: ShopShelf) = shelves.filter { it.shelf in kinds }.flatMap { it.previews }
+    }
 }
 
 /** Выбор на экране: что отмечено, чем закончилась последняя попытка. */
@@ -127,15 +166,18 @@ class ShopViewModel(
     private fun toUiState(saved: SavedGame, selection: ShopSelection): ShopUiState.Ready {
         val state = saved.state
         val report = game.planReport(state)
-        fun previews(fits: (ShopItem) -> Boolean) = content.forSale
-            .filter { fits(it) && it.isOnSale(state) && game.isUnlocked(state, it) }
-            .mapNotNull { game.previewPurchase(state, it.id) }
+        val shelves = ShopShelf.entries.map { shelf ->
+            ShelfRow(
+                shelf = shelf,
+                previews = content.forSale
+                    .filter { shelf.holds(it) && it.isOnSale(state) && game.isUnlocked(state, it) }
+                    .mapNotNull { game.previewPurchase(state, it.id) },
+            )
+        }
         return ShopUiState.Ready(
             balance = state.balance,
             canBuy = state.currentPeriod.phase == PeriodPhase.ACTIVE,
-            needs = previews { it.category == Category.NEEDS },
-            wants = previews { it.category == Category.WANTS && it.kind != ItemKind.TOY },
-            toys = previews { it.kind == ItemKind.TOY },
+            shelves = shelves,
             selectedId = selection.selectedId,
             needsLeft = report?.let { (it.plan.needs - it.facts.needs).coerceAtLeast(0) },
             wantsLeft = report?.let { (it.plan.wants - it.facts.wants).coerceAtLeast(0) },
@@ -144,6 +186,7 @@ class ShopViewModel(
             feedback = selection.feedback,
             upcoming = content.forSale.filter { it.isOnSale(state) && !game.isUnlocked(state, it) }
                 .minByOrNull { it.unlockLevel },
+            saving = state.activeGoalId?.let(content::goal)?.let { SavingTile(it, state.goalSaved(it.id)) },
         )
     }
 

@@ -40,6 +40,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -345,13 +346,16 @@ private fun GoalList(state: GoalsUiState.Ready, onSelect: (String) -> Unit) {
  */
 @Composable
 private fun GoalCard(row: GoalRow, onSelect: () -> Unit) {
+    // Цель следующего уровня — бледная, с замком и уровнем: видно, что будет дальше, но не выбрать.
+    val soon = row.stage == GoalStage.SOON
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .alpha(if (soon) 0.55f else 1f)
             .clip(RoundedCornerShape(20.dp))
             .background(if (row.isActive) FinneyYellow else FinneySand)
             .border(if (row.isActive) 3.dp else 2.dp, FinneyInk, RoundedCornerShape(20.dp))
-            .clickable(enabled = !row.isCompleted, onClick = onSelect)
+            .clickable(enabled = !row.isCompleted && !soon, onClick = onSelect)
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -363,7 +367,8 @@ private fun GoalCard(row: GoalRow, onSelect: () -> Unit) {
             Column(
                 Modifier.weight(1f).semantics(mergeDescendants = true) {
                     stateDescription = when {
-                        row.isCompleted -> "уже твоя"
+                        soon -> "откроется на уровне ${row.goal.unlockLevel}"
+                        row.isCompleted -> "уже есть"
                         row.isActive -> "копим сюда, ${row.saved} из ${row.goal.price}"
                         else -> "${row.saved} из ${row.goal.price}"
                     }
@@ -386,10 +391,18 @@ private fun GoalCard(row: GoalRow, onSelect: () -> Unit) {
                                 contentAlignment = Alignment.Center,
                             ) { Text("✓", style = MaterialTheme.typography.titleMedium, color = FinneyInk) }
                             row.isActive -> FinneyIcon(FinneyIcons.Piggy, size = 32.dp)
+                            soon -> FinneyIcon(FinneyIcons.Lock, size = 28.dp)
                         }
                     }
                 }
-                if (!row.isCompleted) SavedBar(saved = row.saved, price = row.goal.price)
+                when {
+                    soon -> Text(
+                        "Откроется на ${row.goal.unlockLevel} уровне",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = FinneyInk,
+                    )
+                    !row.isCompleted -> SavedBar(saved = row.saved, price = row.goal.price)
+                }
             }
         }
     }

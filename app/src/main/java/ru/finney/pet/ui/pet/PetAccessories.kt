@@ -33,6 +33,13 @@ fun accessoryArt(itemId: String): AccessoryArt? = when (itemId) {
     "glasses_black" -> AccessoryArt(R.drawable.acc_glasses_black, brim = 0.46f, onEyes = true)
     "glasses_star" -> AccessoryArt(R.drawable.acc_glasses_star, brim = 0.44f, onEyes = true, widthScale = 1.10f)
     "glasses_pineapple" -> AccessoryArt(R.drawable.acc_glasses_pineapple, brim = 0.68f, onEyes = true, widthScale = 1.12f)
+    // 19.10: поля — самая широкая строка минус 0.03, как у первых трёх шляп; у 3D-очков —
+    // середина стёкол под тонкой перекладиной, у маски — середина линзы.
+    "hat_top" -> AccessoryArt(R.drawable.acc_hat_top, brim = 0.73f)
+    "hat_flowers" -> AccessoryArt(R.drawable.acc_hat_flowers, brim = 0.63f)
+    "hat_sun" -> AccessoryArt(R.drawable.acc_hat_sun, brim = 0.43f)
+    "glasses_3d" -> AccessoryArt(R.drawable.acc_glasses_3d, brim = 0.55f, onEyes = true)
+    "goggles_ski" -> AccessoryArt(R.drawable.acc_goggles_ski, brim = 0.50f, onEyes = true, widthScale = 1.05f)
     else -> null
 }
 
