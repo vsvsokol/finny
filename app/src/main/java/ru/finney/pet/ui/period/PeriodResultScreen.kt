@@ -253,6 +253,10 @@ internal fun PeriodResultContent(state: PeriodResultUiState.Ready, onBack: () ->
                     )
                 }
             }
+            // Сколько отложено — числом: по банкам одной заливкой ребёнок его не читает.
+            if (state.facts.savings > 0) {
+                MoneyLine("Отложено в копилку", "+${state.facts.savings}")
+            }
             if (state.facts.unplannedIncome > 0) {
                 MoneyLine("Пришло сверх плана", "+${state.facts.unplannedIncome}")
             }

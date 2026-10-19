@@ -18,6 +18,7 @@ import ru.finney.pet.domain.model.Plan
 import ru.finney.pet.domain.model.GameContent
 import ru.finney.pet.domain.model.ItemArt
 import ru.finney.pet.domain.model.SavedGame
+import ru.finney.pet.ui.progress.unlockLines
 import ru.finney.pet.ui.tasks.games.taskIcon
 
 sealed interface PeriodResultUiState {
@@ -111,7 +112,8 @@ class PeriodResultViewModel(
             level = after,
             leveledUp = after > before,
             growth = periodGrowth(content, before, after, period.number, state.isDemo,
-                isLatest = state.currentPeriod.number == period.number + 1),
+                isLatest = state.currentPeriod.number == period.number + 1)
+                ?.let { it.copy(changes = it.changes + unlockedNow(before, after, state.isDemo)) },
             balance = state.balance,
             levelGame = levelTask?.title,
             levelGameIcon = levelTask?.let(::taskIcon),
@@ -125,6 +127,17 @@ class PeriodResultViewModel(
                 state.currentPeriod.phase == ru.finney.pet.domain.model.PeriodPhase.PLANNING,
         )
     }
+
+    /**
+     * Вещи, цели и звание, открытые этим переходом. Игры уже посчитал [periodGrowth] — с учётом
+     * периода, которого [Game.unlocksBetween] не знает. В демо вещи и цели открыты с начала.
+     */
+    private fun unlockedNow(before: Int, after: Int, isDemo: Boolean): List<String> =
+        game.unlocksBetween(before, after).flatMap { unlocks ->
+            val shown = unlocks.copy(games = emptyList(), harderGames = emptyList())
+            unlockLines(if (isDemo) shown.copy(items = emptyList(), goals = emptyList()) else shown, future = false, isDemo = isDemo)
+                .map { "$it." }
+        }
 
     companion object {
         fun factory(periodNumber: Int) = viewModelFactory {
