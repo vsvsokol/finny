@@ -409,19 +409,37 @@ class Game(
     fun use(state: GameState, itemId: String): GameResult {
         val item = content.item(itemId) ?: return reject(Rejection.UnknownItem(itemId))
         if (item.kind != ItemKind.CONSUMABLE) return reject(Rejection.NotPlayable(itemId))
-        // У мыла и пасты свой запас по разам — его тратит [wash], а не полка.
+        // Мыло, щётку и пасту берут мытьём ([wash]): там шаги ванны и пара щётка — паста.
         if (item.uses != null) return reject(Rejection.NotPlayable(itemId))
         if (state.sleepingSince != null && item.feedsOrWashes) return reject(Rejection.Asleep)
-        if (state.onShelf(itemId) <= 0) return reject(Rejection.NotOwned(itemId))
-        val use = ItemUse(periodNumber = state.currentPeriod.number, itemId = itemId, createdAt = clock())
-        return ok(state.copy(pet = PetRules.apply(state.pet, item.effect), uses = state.uses + use))
+        if (stock(state, itemId) <= 0) return reject(Rejection.NotOwned(itemId))
+        return ok(state.copy(pet = PetRules.apply(state.pet, item.effect), uses = state.uses + takeOne(state, itemId)))
     }
 
-    /** Что лежит на полке, в порядке магазина. Пустых мест нет. */
+    /**
+     * Что лежит на полке, в порядке магазина: еда — штуками, мыло, щётка, паста — сколько раз
+     * ещё хватит. Пустых мест нет.
+     */
     fun shelf(state: GameState): List<ShelfItem> =
         content.shop
-            .filter { it.kind == ItemKind.CONSUMABLE && it.uses == null }
-            .mapNotNull { item -> state.onShelf(item.id).takeIf { it > 0 }?.let { ShelfItem(item, it) } }
+            .filter { it.kind == ItemKind.CONSUMABLE }
+            .mapNotNull { item -> stock(state, item.id).takeIf { it > 0 }?.let { ShelfItem(item, it) } }
+
+    /**
+     * Сколько раз ещё можно взять расходник [itemId]: куплено × [ShopItem.uses] (у еды — по одному)
+     * минус взятое ([GameState.uses]). Один учёт на кухню и ванну; считается из фактов, как баланс,
+     * отдельно запас нигде не хранится. Не расходник — 0.
+     */
+    fun stock(state: GameState, itemId: String): Int {
+        val item = content.item(itemId)?.takeIf { it.kind == ItemKind.CONSUMABLE } ?: return 0
+        val portions = item.uses ?: 1
+        val bought = state.ledger.count { it.type == EntryType.PURCHASE && it.itemId == itemId }
+        val taken = state.uses.filter { it.itemId == itemId }.sumOf { it.portions ?: portions }
+        return maxOf(0, bought * portions - taken)
+    }
+
+    private fun takeOne(state: GameState, itemId: String) =
+        ItemUse(periodNumber = state.currentPeriod.number, itemId = itemId, createdAt = clock())
 
     // ---------- Ванна ----------
 
@@ -430,17 +448,6 @@ class Game(
 
     /** Полотенце, щётка, паста: у каждого свой шаг мытья и своя прибавка. */
     val bathExtras: List<ShopItem> get() = content.shop.filter { it.uses != null && it.bathExtra }
-
-    /**
-     * Сколько раз ещё хватит предмета [itemId] с полочки: куплено × [ShopItem.uses] минус мытья им.
-     * Считается по журналу, как баланс, — отдельно запас нигде не хранится.
-     */
-    fun stock(state: GameState, itemId: String): Int {
-        val uses = content.item(itemId)?.uses ?: return 0
-        val bought = state.ledger.count { it.type == EntryType.PURCHASE && it.itemId == itemId }
-        val spent = state.ledger.count { it.type == EntryType.WASH && it.itemId == itemId }
-        return maxOf(0, bought * uses - spent)
-    }
 
     /** Есть ли на полочке хоть какое-то мыло. */
     fun hasSoap(state: GameState): Boolean = soaps.any { stock(state, it.id) > 0 }
@@ -462,18 +469,17 @@ class Game(
         if (state.pet.hygiene >= cleanFrom) return reject(Rejection.AlreadyClean)
         if (itemId == null) {
             if (state.pet.hygiene >= bath.waterUpTo) return reject(Rejection.NeedsSoap)
+            // Вода ничего не тратит — и записывать нечего.
             val water = minOf(bath.water, bath.waterUpTo - state.pet.hygiene)
-            val entry = entry(state, EntryType.WASH, balanceDelta = 0)
-            return ok(state.copy(pet = PetRules.apply(state.pet, StatEffect(hygiene = water)), ledger = state.ledger + entry))
+            return ok(state.copy(pet = PetRules.apply(state.pet, StatEffect(hygiene = water))))
         }
         val item = content.item(itemId) ?: return reject(Rejection.UnknownItem(itemId))
         if (item !in soaps && item !in bathExtras) return reject(Rejection.NotWashable(itemId))
         val pair = item.pairWith?.let { content.item(it) ?: return reject(Rejection.UnknownItem(it)) }
         val used = listOfNotNull(item, pair)
         used.firstOrNull { stock(state, it.id) <= 0 }?.let { return reject(Rejection.NoStock(it.id)) }
-        val entries = used.map { entry(state, EntryType.WASH, balanceDelta = 0).copy(itemId = it.id) }
         val hygiene = used.sumOf { it.effect.hygiene }
-        return ok(state.copy(pet = PetRules.apply(state.pet, StatEffect(hygiene = hygiene)), ledger = state.ledger + entries))
+        return ok(state.copy(pet = PetRules.apply(state.pet, StatEffect(hygiene = hygiene)), uses = state.uses + used.map { takeOne(state, it.id) }))
     }
 
     // ---------- Сон ----------

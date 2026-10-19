@@ -31,8 +31,8 @@ class ShelfTest {
 
         assertEquals(shelved.pet.satiety + 20, s.pet.satiety)
         assertEquals(shelved.balance, s.balance)
-        assertEquals(1, s.onShelf("apple"))
-        assertEquals(0, game.use(s, "apple").state().onShelf("apple"))
+        assertEquals(1, game.stock(s, "apple"))
+        assertEquals(0, game.stock(game.use(s, "apple").state(), "apple"))
     }
 
     @Test

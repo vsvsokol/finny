@@ -22,6 +22,7 @@ import ru.finney.pet.domain.game.GameStore
 import ru.finney.pet.domain.game.ProfileResult
 import ru.finney.pet.domain.game.TaskResult
 import ru.finney.pet.domain.model.BodyColor
+import ru.finney.pet.domain.model.EntryType
 import ru.finney.pet.domain.model.EyesVariant
 import ru.finney.pet.domain.model.GameState
 import ru.finney.pet.domain.model.PetAppearance
@@ -145,14 +146,17 @@ class RoomGameStorageTest {
         store.ok(id) { buyToShelf(it, "food_apple") }
         store.ok(id) { use(it, "food_apple") }
         store.ok(id) { buy(it, "care_soap") }
+        store.ok(id) { wash(it, "care_soap") }
 
         db.close()
         db = open()
         val state = RoomGameStorage(db.gameDao()).load(id)!!.state
 
-        assertEquals(1, state.onShelf("food_apple"))
-        assertEquals(0, state.onShelf("care_soap"))
-        assertEquals(listOf("food_apple", "care_soap"), state.uses.map { it.itemId })
+        // Один учёт: яблоко и мыло — на одной полке, мытьё в журнал денег не пишется.
+        assertEquals(1, game.stock(state, "food_apple"))
+        assertEquals(1, game.stock(state, "care_soap"))
+        assertEquals(listOf("food_apple" to 1, "care_soap" to 1), state.uses.map { it.itemId to it.portions })
+        assertTrue(state.ledger.none { it.type == EntryType.WASH })
     }
 
     @Test

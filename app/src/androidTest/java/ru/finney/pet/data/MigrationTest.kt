@@ -10,7 +10,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import ru.finney.pet.data.db.FinneyDatabase
 
-/** Обновление приложения не стирает прогресс: база версии 3 переносится в 4 … 12 с данными. */
+/** Обновление приложения не стирает прогресс: база версии 3 переносится в 4 … 13 с данными. */
 @RunWith(AndroidJUnit4::class)
 class MigrationTest {
 
@@ -238,6 +238,41 @@ class MigrationTest {
                 assertEquals(1, c.getInt(0))
                 assertEquals("food_apple", c.getString(1))
                 assertEquals(20L, c.getLong(2))
+            }
+        }
+    }
+
+    @Test
+    fun migrate12To13MovesWashesFromLedgerToItemUses() {
+        helper.createDatabase(dbName, 12).use { db ->
+            db.execSQL(
+                "INSERT INTO profiles (id, petName, petCharacter, bodyColor, eyes, activeGoalId, isDemo, createdAt) " +
+                    "VALUES (1, 'Финни', 'PUSHISTIK', 'A', 'ROUND', NULL, 0, 1)",
+            )
+            db.execSQL(
+                "INSERT INTO ledger (id, profileId, periodNumber, type, balanceDelta, savingsDelta, category, itemId, goalId, taskId, unplanned, createdAt) VALUES " +
+                    "(1, 1, 1, 'INCOME', 50, 0, NULL, NULL, NULL, NULL, 0, 10), " +
+                    "(2, 1, 1, 'PURCHASE', -10, 0, 'NEEDS', 'care_soap', NULL, NULL, 0, 20), " +
+                    "(3, 1, 1, 'WASH', 0, 0, NULL, 'care_soap', NULL, NULL, 0, 30), " +
+                    "(4, 1, 1, 'WASH', 0, 0, NULL, NULL, NULL, NULL, 0, 40)",
+            )
+            db.execSQL("INSERT INTO item_uses (id, profileId, periodNumber, itemId, createdAt) VALUES (1, 1, 1, 'food_apple', 15)")
+        }
+
+        helper.runMigrationsAndValidate(dbName, 13, true, FinneyDatabase.MIGRATION_12_13).use { db ->
+            db.query("SELECT type FROM ledger ORDER BY id").use { c ->
+                val types = List(c.count) { c.moveToPosition(it); c.getString(0) }
+                assertEquals("мытьё ушло из журнала денег", listOf("INCOME", "PURCHASE"), types)
+            }
+            db.query("SELECT itemId, createdAt, portions FROM item_uses ORDER BY id").use { c ->
+                assertEquals(2, c.count)
+                assertTrue(c.moveToFirst())
+                assertEquals("food_apple", c.getString(0))
+                assertTrue("старая строка — вся покупка", c.isNull(2))
+                assertTrue(c.moveToNext())
+                assertEquals("care_soap", c.getString(0))
+                assertEquals(30L, c.getLong(1))
+                assertEquals("мытьё — один раз", 1, c.getInt(2))
             }
         }
     }

@@ -123,7 +123,10 @@ data class TaskAttemptEntity(
     val bonus: Boolean = false,
 )
 
-/** Расходник взят с полки. С версии 12, см. [FinneyDatabase.MIGRATION_11_12]. */
+/**
+ * Расходник взят с полки — еда и ванна. С версии 12, см. [FinneyDatabase.MIGRATION_11_12];
+ * [portions] — с версии 13, [FinneyDatabase.MIGRATION_12_13]: null — вся покупка целиком.
+ */
 @Entity(
     tableName = "item_uses",
     foreignKeys = [ForeignKey(ProfileEntity::class, ["id"], ["profileId"], onDelete = ForeignKey.CASCADE)],
@@ -135,6 +138,7 @@ data class ItemUseEntity(
     val periodNumber: Int,
     val itemId: String,
     val createdAt: Long,
+    val portions: Int? = 1,
 )
 
 /** Профиль со всем состоянием одним запросом. Порядок в списках Room не гарантирует — сортирует маппер. */

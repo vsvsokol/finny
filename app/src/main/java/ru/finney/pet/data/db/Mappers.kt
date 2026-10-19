@@ -42,7 +42,7 @@ fun GameState.toRows(profileId: Long) = GameRows(
     periods = periods.map { it.toEntity(profileId) },
     ledger = ledger.map { it.toEntity(profileId) },
     attempts = attempts.map { TaskAttemptEntity(0, profileId, it.periodNumber, it.taskId, it.outcome, it.reward, it.createdAt, it.seed, it.bonus) },
-    uses = uses.map { ItemUseEntity(0, profileId, it.periodNumber, it.itemId, it.createdAt) },
+    uses = uses.map { ItemUseEntity(0, profileId, it.periodNumber, it.itemId, it.createdAt, it.portions) },
 )
 
 fun ProfileWithGame.toDomain(): SavedGame {
@@ -63,7 +63,7 @@ fun ProfileWithGame.toDomain(): SavedGame {
             sleepingSince = pet.sleepingSince,
             playMood = pet.playMood,
             playSince = pet.playSince,
-            uses = uses.sortedBy { it.id }.map { ItemUse(it.periodNumber, it.itemId, it.createdAt) },
+            uses = uses.sortedBy { it.id }.map { ItemUse(it.periodNumber, it.itemId, it.createdAt, it.portions) },
         ),
     )
 }
