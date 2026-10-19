@@ -24,6 +24,14 @@ object PeriodRules {
         )
     }
 
+    /**
+     * Деньги на уровень — первая запись дохода периода: её пишет открытие периода раньше
+     * всех других. Берём из ленты, а не из `incomeByStage`: число совпадёт с историей,
+     * даже если цены в контенте потом поменяются. Отладочное пополнение сюда не входит.
+     */
+    fun levelIncome(ledger: List<LedgerEntry>, periodNumber: Int): Int =
+        ledger.firstOrNull { it.periodNumber == periodNumber && it.type == EntryType.INCOME }?.balanceDelta ?: 0
+
     fun overspend(plan: Plan, facts: PeriodFacts): Int =
         maxOf(0, facts.needs - plan.needs) + maxOf(0, facts.wants - plan.wants)
 

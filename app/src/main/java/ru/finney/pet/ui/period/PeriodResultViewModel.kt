@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.stateIn
 import ru.finney.pet.appContainer
 import ru.finney.pet.domain.game.Game
 import ru.finney.pet.domain.game.Session
-import ru.finney.pet.domain.model.EntryType
 import ru.finney.pet.domain.model.PeriodFacts
 import ru.finney.pet.domain.model.Plan
 import ru.finney.pet.domain.model.GameContent
@@ -123,10 +122,7 @@ class PeriodResultViewModel(
             levelGameIcon = levelTask?.let(::taskIcon),
             gamePassed = result.gamePassed,
             gameRequired = game.levelCheck(state).gameRequired,
-            // Доход нового уровня — запись ленты, а не пересчёт: число совпадёт с историей.
-            income = state.ledger
-                .filter { it.periodNumber == period.number + 1 && it.type == EntryType.INCOME }
-                .sumOf { it.balanceDelta },
+            income = game.levelIncome(state, period.number + 1),
             canPlanNext = state.currentPeriod.number == period.number + 1 &&
                 state.currentPeriod.phase == ru.finney.pet.domain.model.PeriodPhase.PLANNING,
         )

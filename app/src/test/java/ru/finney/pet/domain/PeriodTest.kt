@@ -5,6 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import ru.finney.pet.domain.game.Rejection
+import ru.finney.pet.domain.model.EntryType
 import ru.finney.pet.domain.model.PeriodFacts
 import ru.finney.pet.domain.model.PeriodPhase
 import ru.finney.pet.domain.model.PeriodResult
@@ -33,6 +34,28 @@ class PeriodTest {
         assertTrue("копилка в пределах допуска", matched(facts(savings = 5)))
         assertFalse("копилка меньше плана", matched(facts(savings = 4)))
         assertTrue("копилка больше плана", matched(facts(savings = 50)))
+    }
+
+    @Test
+    fun `доход уровня — только деньги на уровень, без наград и пополнений`() {
+        val game = Fixtures.game()
+        var s = game.newGame()
+        assertEquals(50, game.levelIncome(s, 1))
+
+        s = game.playPerfectPeriod(s)
+        assertEquals(2, s.currentPeriod.number)
+        val income = Fixtures.economy.income(s.currentPeriod.stage)
+        assertEquals(income, game.levelIncome(s, 2))
+        assertEquals("уровня ещё нет", 0, game.levelIncome(s, 3))
+
+        s = game.confirmPlan(s, 0, 0, 0).state()
+        s = game.submitTask(s, s.currentPeriod.levelTaskId!!, Fixtures.success).submitted().state
+        s = game.addParentBonus(s, 10).state()
+        // Отладочное пополнение — тоже INCOME, но позже дохода уровня.
+        val extra = s.ledger.last { it.periodNumber == 2 }.copy(type = EntryType.INCOME, balanceDelta = 100, unplanned = true)
+        s = s.copy(ledger = s.ledger + extra)
+        assertEquals("награды и пополнения не в счёт", income, game.levelIncome(s, 2))
+        assertEquals("прошлый уровень не меняется", 50, game.levelIncome(s, 1))
     }
 
     @Test

@@ -176,6 +176,12 @@ class Game(
         )
     }
 
+    /**
+     * Сколько монет пришло в начале уровня [periodNumber] — без наград за игры и бонусов
+     * взрослого. Итог уровня N показывает доход уровня N + 1. Нет такого уровня — 0.
+     */
+    fun levelIncome(state: GameState, periodNumber: Int): Int = PeriodRules.levelIncome(state.ledger, periodNumber)
+
     /** Сколько из трёх условий нужно для уровня: в демо-режиме меньше, см. [EconomyConfig.demoConditionsToPass]. */
     fun conditionsToPass(state: GameState): Int =
         if (state.isDemo) economy.demoConditionsToPass else economy.conditionsToPass
