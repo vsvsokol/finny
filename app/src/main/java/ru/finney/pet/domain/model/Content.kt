@@ -35,6 +35,22 @@ enum class AccessorySlot {
     @SerialName("eyes") EYES,
 }
 
+/**
+ * Что ребёнок получает за достигнутую цель. Копить можно не только на вещь, но и на тему
+ * комнаты и на облик питомца: схема одна — открылось → копим → накопили → забрал.
+ */
+@Serializable
+enum class RewardKind {
+    /** Аксессуар из shop.json. */
+    @SerialName("item") ITEM,
+
+    /** Тема комнаты из [RoomThemes]. */
+    @SerialName("room") ROOM,
+
+    /** Облик — раскраска персонажа из [PetLooks]. */
+    @SerialName("look") LOOK,
+}
+
 /** Изменение шкал питомца. В снижении за период значения положительные и вычитаются. */
 @Serializable
 data class StatEffect(
@@ -78,11 +94,16 @@ data class Goal(
     val price: Int,
     val moodBonus: Int = 0,
     /**
-     * Вещь из shop.json, которую ребёнок получает, когда цель достигнута. Копят не на
-     * абстрактную «цель», а на то, что потом видно на питомце. В магазине такая вещь
-     * не продаётся: её можно только накопить.
+     * Что ребёнок получает, когда цель достигнута: вещь из shop.json, тема комнаты или облик —
+     * см. [rewardKind]. Копят не на абстрактную «цель», а на то, что потом видно на питомце
+     * и в комнате. В магазине такая вещь не продаётся: её можно только накопить.
      */
     val reward: String? = null,
+    /**
+     * Что такое [reward]: вещь, тема комнаты или облик. Старые записи без поля — вещи,
+     * поэтому `"reward": "hat_cowboy"` читается как раньше.
+     */
+    val rewardKind: RewardKind = RewardKind.ITEM,
     /** С какого уровня цель можно выбрать. Выбранная раньше остаётся. docs/economy.md, раздел 8. */
     val unlockLevel: Int = 1,
 )
@@ -116,7 +137,7 @@ data class GameContent(
     fun goal(id: String): Goal? = goals.firstOrNull { it.id == id }
 
     /** Цель, наградой за которую служит вещь [itemId]; null — вещь продаётся в магазине. */
-    fun goalFor(itemId: String): Goal? = goals.firstOrNull { it.reward == itemId }
+    fun goalFor(itemId: String): Goal? = goals.firstOrNull { it.rewardKind == RewardKind.ITEM && it.reward == itemId }
 
     /** То, что продаётся в магазине: всё, кроме наград за цели. */
     val forSale: List<ShopItem> get() = shop.filter { goalFor(it.id) == null }

@@ -26,6 +26,9 @@ import ru.finney.pet.domain.model.EyesVariant
 import ru.finney.pet.domain.model.GameState
 import ru.finney.pet.domain.model.PetAppearance
 import ru.finney.pet.domain.model.PetCharacter
+import ru.finney.pet.domain.model.RoomChoice
+import ru.finney.pet.domain.model.RoomPart
+import ru.finney.pet.domain.model.RoomThemes
 import ru.finney.pet.domain.tasks.TaskInput
 import kotlin.random.Random
 
@@ -108,6 +111,29 @@ class RoomGameStorageTest {
         assertEquals(20, after.state.goalSaved("goal_crown"))
         assertEquals("Финни", after.profile.petName)
         assertEquals(look, after.profile.appearance)
+    }
+
+    @Test
+    fun roomRewardSurvivesReopen() = runBlocking {
+        val store = store(db)
+        val look = PetAppearance(PetCharacter.ROGATIK, BodyColor.A, EyesVariant.ROUND)
+        // Демо: цель-тема 2-го уровня открыта сразу. Копим 100 за два уровня и забираем.
+        val id = (store.createProfile("Финни", look, isDemo = true) as ProfileResult.Saved).profileId
+        store.ok(id) { selectGoal(it, "goal_room_honey") }
+        store.ok(id) { addParentBonus(it, 20) }
+        store.ok(id) { confirmPlan(it, needs = 5, wants = 5, savings = 60) }
+        store.ok(id) { deposit(it, 60) }
+        store.ok(id) { closePeriod(it) }
+        store.ok(id) { confirmPlan(it, needs = 5, wants = 5, savings = 40) }
+        store.ok(id) { deposit(it, 40) }
+        store.ok(id) { completeGoal(it) }
+        store.ok(id) { setRoom(it, RoomThemes.BASE, RoomPart.LAMP) }
+
+        db.close()
+        db = open()
+        val state = RoomGameStorage(db.gameDao()).load(id)!!.state
+        assertEquals(RoomChoice(wall = "honey", window = "honey", lamp = RoomThemes.BASE), state.room)
+        assertNull(state.wornLook)
     }
 
     @Test

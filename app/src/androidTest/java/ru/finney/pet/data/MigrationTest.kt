@@ -276,4 +276,24 @@ class MigrationTest {
             }
         }
     }
+
+    @Test
+    fun migrate13To14KeepsProfileWithBaseRoomAndProfileColor() {
+        helper.createDatabase(dbName, 13).use { db ->
+            db.execSQL(
+                "INSERT INTO profiles (id, petName, petCharacter, bodyColor, eyes, activeGoalId, isDemo, createdAt, wornItemId) " +
+                    "VALUES (1, 'Финни', 'PUSHISTIK', 'B', 'ROUND', NULL, 0, 1, 'hat_cowboy')",
+            )
+        }
+
+        helper.runMigrationsAndValidate(dbName, 14, true, FinneyDatabase.MIGRATION_13_14).use { db ->
+            db.query("SELECT bodyColor, wornItemId, roomWall, roomWindow, roomLamp, wornLook FROM profiles WHERE id = 1").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("цвет профиля на месте", "B", c.getString(0))
+                assertEquals("шляпа на месте", "hat_cowboy", c.getString(1))
+                assertTrue("комната — базовая", (2..4).all { c.isNull(it) })
+                assertTrue("платного облика нет", c.isNull(5))
+            }
+        }
+    }
 }

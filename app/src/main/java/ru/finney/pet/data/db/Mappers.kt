@@ -10,6 +10,8 @@ import ru.finney.pet.domain.model.PeriodFacts
 import ru.finney.pet.domain.model.PeriodResult
 import ru.finney.pet.domain.model.Plan
 import ru.finney.pet.domain.model.Profile
+import ru.finney.pet.domain.model.RoomChoice
+import ru.finney.pet.domain.model.RoomThemes
 import ru.finney.pet.domain.model.SavedGame
 import ru.finney.pet.domain.model.TaskAttempt
 
@@ -38,6 +40,11 @@ fun GameState.toRows(profileId: Long) = GameRows(
     activeGoalId = activeGoalId,
     wornItemId = wornItemId,
     wornEyesId = wornEyesId,
+    // Базовая тема пишется как NULL: так же выглядят профили, созданные до версии 14.
+    roomWall = room.wall.takeUnless { it == RoomThemes.BASE },
+    roomWindow = room.window.takeUnless { it == RoomThemes.BASE },
+    roomLamp = room.lamp.takeUnless { it == RoomThemes.BASE },
+    wornLook = wornLook,
     pet = PetStateEntity(profileId, pet.satiety, pet.hygiene, pet.mood, pet.energy, sleepingSince, playMood, playSince),
     periods = periods.map { it.toEntity(profileId) },
     ledger = ledger.map { it.toEntity(profileId) },
@@ -64,6 +71,12 @@ fun ProfileWithGame.toDomain(): SavedGame {
             playMood = pet.playMood,
             playSince = pet.playSince,
             uses = uses.sortedBy { it.id }.map { ItemUse(it.periodNumber, it.itemId, it.createdAt, it.portions) },
+            room = RoomChoice(
+                wall = profile.roomWall ?: RoomThemes.BASE,
+                window = profile.roomWindow ?: RoomThemes.BASE,
+                lamp = profile.roomLamp ?: RoomThemes.BASE,
+            ),
+            wornLook = profile.wornLook,
         ),
     )
 }

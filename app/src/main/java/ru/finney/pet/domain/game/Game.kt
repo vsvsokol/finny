@@ -15,8 +15,14 @@ import ru.finney.pet.domain.model.Period
 import ru.finney.pet.domain.model.PeriodFacts
 import ru.finney.pet.domain.model.PeriodPhase
 import ru.finney.pet.domain.model.PeriodResult
+import ru.finney.pet.domain.model.PetCharacter
+import ru.finney.pet.domain.model.PetLooks
 import ru.finney.pet.domain.model.PetStats
 import ru.finney.pet.domain.model.Plan
+import ru.finney.pet.domain.model.RewardKind
+import ru.finney.pet.domain.model.RoomChoice
+import ru.finney.pet.domain.model.RoomPart
+import ru.finney.pet.domain.model.RoomThemes
 import ru.finney.pet.domain.model.ShopItem
 import ru.finney.pet.domain.model.StatEffect
 import ru.finney.pet.domain.model.TaskAttempt
@@ -602,6 +608,49 @@ class Game(
     fun wardrobe(state: GameState): List<ShopItem> =
         content.shop.filter { it.kind == ItemKind.ACCESSORY && state.owns(it.id) }
 
+    // ---------- Комната и облик ----------
+
+    /**
+     * Тема комнаты открыта: базовая — всегда, остальные — получены за цель. В демо все темы
+     * и облики сразу, копить не надо: эксперт за несколько минут должен увидеть всё. Темы были
+     * бесплатными до версии 14, но выбор не сохранялся: после обновления у всех базовая, отбирать нечего.
+     */
+    fun ownsRoom(state: GameState, themeId: String): Boolean =
+        themeId == RoomThemes.BASE || (themeId in RoomThemes.ALL && (state.isDemo || state.earned(themeId)))
+
+    /**
+     * Платный облик получен за цель; в демо — все сразу, как темы комнаты. Девять сочетаний
+     * цвета и глаз из профиля открыты всегда.
+     */
+    fun ownsLook(state: GameState, lookId: String): Boolean =
+        lookId in PetLooks.ALL && (state.isDemo || state.earned(lookId))
+
+    /** Открытые темы в порядке [RoomThemes.ALL] — то, из чего собирают комнату. */
+    fun rooms(state: GameState): List<String> = RoomThemes.ALL.filter { ownsRoom(state, it) }
+
+    /** Полученные облики персонажа [character]. */
+    fun looks(state: GameState, character: PetCharacter): List<String> =
+        PetLooks.of(character).filter { ownsLook(state, it) }
+
+    /** Облик, который сейчас на питомце [character]; null — цвет из профиля. */
+    fun lookFor(state: GameState, character: PetCharacter): String? =
+        state.wornLook?.takeIf { PetLooks.character(it) == character }
+
+    /** Поставить тему [themeId] целиком или только часть [part]. Бесплатно и в любой фазе периода. */
+    fun setRoom(state: GameState, themeId: String, part: RoomPart? = null): GameResult {
+        if (themeId !in RoomThemes.ALL) return reject(Rejection.UnknownItem(themeId))
+        if (!ownsRoom(state, themeId)) return reject(Rejection.NotOwned(themeId))
+        return ok(state.copy(room = part?.let { state.room.with(it, themeId) } ?: RoomChoice.whole(themeId)))
+    }
+
+    /** Надеть облик [lookId]; null — вернуться к цвету из профиля. */
+    fun setLook(state: GameState, lookId: String?): GameResult {
+        if (lookId == null) return ok(state.copy(wornLook = null))
+        if (lookId !in PetLooks.ALL) return reject(Rejection.UnknownItem(lookId))
+        if (!ownsLook(state, lookId)) return reject(Rejection.NotOwned(lookId))
+        return ok(state.copy(wornLook = lookId))
+    }
+
     // ---------- Игрушки ----------
 
     /** Купленные игрушки в порядке магазина — то, что лежит в зале. */
@@ -693,14 +742,22 @@ class Game(
         if (saved < goal.price) return reject(Rejection.GoalNotReached(goal.price, saved))
         val entry = entry(state, EntryType.GOAL_COMPLETE, balanceDelta = 0, savingsDelta = -goal.price)
             .copy(goalId = goal.id, itemId = goal.reward)
-        // Награда сразу на питомце, как купленная шляпа: ребёнок видит, на что копил.
-        val reward = goal.reward?.let(content::item)?.takeIf { it.kind == ItemKind.ACCESSORY }
         val completed = state.copy(
             pet = PetRules.apply(state.pet, StatEffect(mood = goal.moodBonus)),
             activeGoalId = null,
             ledger = state.ledger + entry,
         )
-        return ok(reward?.let { completed.wearing(it) } ?: completed)
+        // Награда сразу включается — шляпа на питомце, комната в новой теме, новый облик:
+        // ребёнок видит, на что копил.
+        val reward = goal.reward ?: return ok(completed)
+        return ok(
+            when (goal.rewardKind) {
+                RewardKind.ITEM -> content.item(reward)?.takeIf { it.kind == ItemKind.ACCESSORY }
+                    ?.let { completed.wearing(it) } ?: completed
+                RewardKind.ROOM -> completed.copy(room = RoomChoice.whole(reward))
+                RewardKind.LOOK -> completed.copy(wornLook = reward)
+            },
+        )
     }
 
     // ---------- Доход ----------

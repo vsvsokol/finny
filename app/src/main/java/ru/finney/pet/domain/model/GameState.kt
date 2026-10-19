@@ -151,6 +151,14 @@ data class GameState(
     val playSince: Long? = null,
     /** Что взято с полки — еда и ванна, по порядку. Только дописывается, как [ledger]. */
     val uses: List<ItemUse> = emptyList(),
+    /** Выбранная комната по частям. База версии 14; до неё выбор не сохранялся — у всех базовая. */
+    val room: RoomChoice = RoomChoice(),
+    /**
+     * Платный облик из [PetLooks] поверх цвета профиля; null — цвет из профиля. Облик чужого
+     * персонажа (питомца сменили в профиле) не показывается, см. [ru.finney.pet.domain.game.Game.lookFor].
+     * База версии 14.
+     */
+    val wornLook: String? = null,
 ) {
     val currentPeriod: Period get() = periods.last()
 
@@ -167,6 +175,10 @@ data class GameState(
 
     fun isGoalCompleted(goalId: String): Boolean =
         ledger.any { it.type == EntryType.GOAL_COMPLETE && it.goalId == goalId }
+
+    /** Получено за достигнутую цель: вещь, тема комнаты или облик — по id награды. */
+    fun earned(rewardId: String): Boolean =
+        ledger.any { it.type == EntryType.GOAL_COMPLETE && it.itemId == rewardId }
 
     /** Вещь куплена или получена за достигнутую цель. */
     fun owns(itemId: String): Boolean = ledger.any {

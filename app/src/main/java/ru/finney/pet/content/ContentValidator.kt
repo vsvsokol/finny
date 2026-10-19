@@ -4,7 +4,10 @@ import ru.finney.pet.domain.model.Category
 import ru.finney.pet.domain.model.GameContent
 import ru.finney.pet.domain.model.GoalRaceTask
 import ru.finney.pet.domain.model.ItemKind
+import ru.finney.pet.domain.model.PetLooks
 import ru.finney.pet.domain.model.ReserveTask
+import ru.finney.pet.domain.model.RewardKind
+import ru.finney.pet.domain.model.RoomThemes
 import ru.finney.pet.domain.tasks.TaskChecks
 
 /**
@@ -44,10 +47,20 @@ object ContentValidator {
         }
         content.goals.forEach { goal ->
             val reward = goal.reward ?: return@forEach
-            val item = content.item(reward)
-            if (item == null) add("goals.json: ${goal.id} — награда $reward не найдена в shop.json")
-            else if (item.kind != ItemKind.ACCESSORY) add("goals.json: ${goal.id} — награда $reward должна быть аксессуаром")
+            when (goal.rewardKind) {
+                RewardKind.ITEM -> {
+                    val item = content.item(reward)
+                    if (item == null) add("goals.json: ${goal.id} — награда $reward не найдена в shop.json")
+                    else if (item.kind != ItemKind.ACCESSORY) add("goals.json: ${goal.id} — награда $reward должна быть аксессуаром")
+                }
+                RewardKind.ROOM -> when {
+                    reward !in RoomThemes.ALL -> add("goals.json: ${goal.id} — нет темы комнаты $reward")
+                    reward == RoomThemes.BASE -> add("goals.json: ${goal.id} — базовая тема открыта всегда, копить на неё нельзя")
+                }
+                RewardKind.LOOK -> if (reward !in PetLooks.ALL) add("goals.json: ${goal.id} — нет облика $reward")
+            }
         }
+        duplicates(content.goals.mapNotNull { it.reward }).forEach { add("goals.json: награда $it — у двух целей") }
         content.shop.filter { it.price <= 0 }.forEach { add("shop.json: ${it.id} — цена должна быть > 0") }
         val needs = content.shop.filter { it.category == Category.NEEDS }
         if (needs.none { it.effect.satiety > 0 && it.unlockLevel == 1 }) add("shop.json: нет обязательного товара, поднимающего сытость")

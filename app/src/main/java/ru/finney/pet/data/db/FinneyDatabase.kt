@@ -10,7 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 /**
  * Схема каждой версии экспортируется в app/schemas и коммитится.
  *
- * С версии 3 изменения переносятся миграциями — [MIGRATION_3_4] … [MIGRATION_12_13]. Базы версий 1–2
+ * С версии 3 изменения переносятся миграциями — [MIGRATION_3_4] … [MIGRATION_13_14]. Базы версий 1–2
  * пересоздаются с нуля: версия 3 переименовала питомцев, а перенести старые значения было бы
  * возможно только храня прежние имена прямо в коде.
  */
@@ -23,7 +23,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TaskAttemptEntity::class,
         ItemUseEntity::class,
     ],
-    version = 13,
+    version = 14,
     exportSchema = true,
 )
 abstract class FinneyDatabase : RoomDatabase() {
@@ -35,7 +35,7 @@ abstract class FinneyDatabase : RoomDatabase() {
 
         fun create(context: Context): FinneyDatabase =
             Room.databaseBuilder(context.applicationContext, FinneyDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
 
@@ -159,6 +159,19 @@ abstract class FinneyDatabase : RoomDatabase() {
                         "WHERE type = 'WASH' AND itemId IS NOT NULL ORDER BY id",
                 )
                 db.execSQL("DELETE FROM ledger WHERE type = 'WASH'")
+            }
+        }
+
+        /**
+         * 13 → 14: выбранная комната по частям и платный облик. До версии 14 комната
+         * не сохранялась, поэтому у старых профилей NULL — базовая тема и цвет профиля.
+         */
+        val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE profiles ADD COLUMN roomWall TEXT")
+                db.execSQL("ALTER TABLE profiles ADD COLUMN roomWindow TEXT")
+                db.execSQL("ALTER TABLE profiles ADD COLUMN roomLamp TEXT")
+                db.execSQL("ALTER TABLE profiles ADD COLUMN wornLook TEXT")
             }
         }
     }

@@ -32,6 +32,12 @@ data class ProfileEntity(
     val wornItemId: String? = null,
     /** Надетые очки — второй слот. Колонка добавлена в версии 11, см. [FinneyDatabase.MIGRATION_10_11]. */
     val wornEyesId: String? = null,
+    /** Комната по частям — id темы; NULL — базовая. Колонки с версии 14, см. [FinneyDatabase.MIGRATION_13_14]. */
+    val roomWall: String? = null,
+    val roomWindow: String? = null,
+    val roomLamp: String? = null,
+    /** Платный облик поверх цвета профиля; NULL — цвет профиля. С версии 14. */
+    val wornLook: String? = null,
 )
 
 @Entity(
