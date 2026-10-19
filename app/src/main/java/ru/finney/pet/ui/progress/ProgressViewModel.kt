@@ -4,10 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import ru.finney.pet.appContainer
 import ru.finney.pet.domain.game.Game
@@ -66,6 +69,11 @@ sealed interface ProgressUiState {
         val reserveMode: Boolean = false,
         val reserveSaved: Int = 0,
         val nextProgress: NextProgress? = null,
+        val isDemo: Boolean = false,
+        /** Все уровни пути, с первого по [maxLevel]. */
+        val nodes: List<LevelNode> = emptyList(),
+        /** Что осталось до следующего уровня — для панели под картой. */
+        val current: CurrentLevel? = null,
     ) : ProgressUiState
 }
 
@@ -79,9 +87,21 @@ class ProgressViewModel(
     private val content: GameContent,
 ) : ViewModel() {
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     val uiState: StateFlow<ProgressUiState> = session.activeGame
         .filterNotNull()
-        .map(::toUiState)
+        .flatMapLatest { saved ->
+            flow {
+                emit(toUiState(saved))
+                // Спящий досыпает сам, без команд: сон и «уход» в панели пересчитываем,
+                // пока экран открыт. Число повторов конечно — до конца сна и не дальше.
+                val left = game.sleepEndsAt(saved.state)?.minus(System.currentTimeMillis()) ?: return@flow
+                repeat((left / SleepTickMillis + 1).toInt().coerceAtLeast(0)) {
+                    delay(SleepTickMillis)
+                    emit(toUiState(saved))
+                }
+            }
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProgressUiState.Loading)
 
     private fun toUiState(saved: SavedGame): ProgressUiState.Ready {
@@ -92,6 +112,9 @@ class ProgressViewModel(
             maxLevel = content.economy.maxLevel,
             stage = game.stage(state),
             nextProgress = nextProgress(content, game.level(state), state.currentPeriod.number, state.isDemo),
+            isDemo = state.isDemo,
+            nodes = levelNodes(game, content, state),
+            current = currentLevel(game, content, state, saved.profile.petName),
             goal = game.goalProgress(state),
             reserveMode = game.isReserveMode(state),
             reserveSaved = if (game.isReserveMode(state)) game.savingsBalance(state) else 0,
@@ -135,6 +158,8 @@ class ProgressViewModel(
     }
 
     companion object {
+        private const val SleepTickMillis = 15_000L
+
         val Factory = viewModelFactory {
             initializer { appContainer().let { ProgressViewModel(it.session, it.game, it.content) } }
         }
