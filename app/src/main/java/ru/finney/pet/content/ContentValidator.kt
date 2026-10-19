@@ -70,6 +70,10 @@ object ContentValidator {
         content.glossary.filter { it.term.isBlank() || it.text.isBlank() }.forEach {
             add("glossary.json: ${it.id} — пустой термин или объяснение")
         }
+        val series = content.tasks.map { it.seriesId }.toSet()
+        content.glossary.forEach { term ->
+            term.games.filter { it !in series }.forEach { add("glossary.json: ${term.id} — нет игры $it") }
+        }
 
         duplicates(content.tasks.map { it.id }).forEach { add("tasks.json: повторяется id $it") }
         for (task in content.tasks) {
