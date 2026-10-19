@@ -52,6 +52,7 @@ import ru.finney.pet.ui.sound.LocalSounds
 import ru.finney.pet.ui.sound.Sfx
 import ru.finney.pet.ui.theme.FinneyBlue
 import ru.finney.pet.ui.theme.FinneyCream
+import ru.finney.pet.ui.theme.FinneyGreen
 import ru.finney.pet.ui.theme.FinneyInk
 import ru.finney.pet.ui.theme.FinneyYellow
 
@@ -230,7 +231,9 @@ private fun slotsHeight(hours: Int) = SlotHeight * hours + SlotGap * (hours - 1)
 /**
  * День: номер и столбик часиков. Дело занимает столько клеток, сколько часиков,
  * нажатие на него убирает. Свободные часики — пустые клетки. Пустой день — лампа
- * и «отдых» во весь столбик. Выбранный день — жёлтый и с толстой рамкой.
+ * и «без монет» во весь столбик. Выбранный день — жёлтый и с толстой рамкой, рабочий —
+ * зелёный: плейтест 02.10, по неделе не было видно, где работа, а где отдых и почему он
+ * ничего не приносит. Цвет не один — в рабочем дне ещё и картинки дел (ТЗ п. 3.6).
  * Дело, которое было и [yesterday], — голубое и с меткой «−[tiredCut]»: устал.
  */
 @Composable
@@ -251,12 +254,18 @@ private fun DayCard(
         verticalArrangement = Arrangement.spacedBy(SlotGap),
         modifier = modifier
             .clip(shape)
-            .background(if (selected) FinneyYellow else FinneyCream)
+            .background(
+                when {
+                    selected -> FinneyYellow
+                    chores.isNotEmpty() -> FinneyGreen.copy(alpha = 0.45f)
+                    else -> FinneyCream
+                },
+            )
             .border(if (selected) 3.dp else 2.dp, FinneyInk, shape)
             .clickable(role = Role.Tab, onClickLabel = "Выбрать день $number", onClick = onSelect)
             .semantics {
                 this.selected = selected
-                contentDescription = if (chores.isEmpty()) "День $number, отдых" else "День $number: " + chores.joinToString { it.label }
+                contentDescription = if (chores.isEmpty()) "День $number, отдых, без монет" else "День $number: " + chores.joinToString { it.label }
             }
             .padding(horizontal = 2.dp, vertical = 3.dp),
     ) {
@@ -268,7 +277,7 @@ private fun DayCard(
                 modifier = Modifier.fillMaxWidth().height(slotsHeight(hours)),
             ) {
                 FinneyIcon(FinneyIcons.Lamp, size = 36.dp)
-                Text(if (selected) "выбери дело" else "пусто", style = MaterialTheme.typography.bodyMedium,
+                Text(if (selected) "выбери дело" else "без монет", style = MaterialTheme.typography.bodyMedium,
                     color = FinneyInk, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             }
         } else {
