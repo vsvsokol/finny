@@ -29,7 +29,8 @@ object PeriodRules {
 
     /**
      * Недотрата не ошибка; заработанное после плана можно тратить; остаток плана
-     * права на перерасход не даёт.
+     * права на перерасход не даёт сам по себе — переложить остаток «хочется» в нужное
+     * ребёнок может только кнопкой, [ru.finney.pet.domain.game.Game.moveWantsToNeeds].
      */
     fun planMatched(plan: Plan, facts: PeriodFacts, tolerance: Int): Boolean =
         overspend(plan, facts) <= facts.unplannedIncome + tolerance &&

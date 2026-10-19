@@ -2,6 +2,7 @@ package ru.finney.pet.domain.game
 
 import ru.finney.pet.domain.economy.SavingsRules
 import ru.finney.pet.domain.model.AccessorySlot
+import ru.finney.pet.domain.model.Category
 import ru.finney.pet.domain.model.EconomyConfig
 import ru.finney.pet.domain.model.EntryType
 import ru.finney.pet.domain.model.GameContent
@@ -313,6 +314,47 @@ class Game(
         if (plan.remainder < 0) return reject(Rejection.PlanExceedsBudget(plan.budget, plan.planned))
         if (savings > 0 && state.activeGoalId == null) return reject(Rejection.NoActiveGoal)
         return ok(state.withCurrentPeriod(period.copy(phase = PeriodPhase.ACTIVE, plan = plan)))
+    }
+
+    /**
+     * Сколько плана «хочется» ещё не потрачено — его можно переложить в нужное ([moveWantsToNeeds]).
+     * null — плана нет или уровень не идёт.
+     */
+    fun wantsLeft(state: GameState): Int? {
+        val report = planReport(state) ?: return null
+        if (state.currentPeriod.phase != PeriodPhase.ACTIVE) return null
+        return maxOf(0, report.plan.wants - report.facts.wants)
+    }
+
+    /**
+     * «Возьми из радостей»: сколько плана переложить из «хочется» в нужное, чтобы покупка
+     * нужного [itemId] не вышла за план. null — кнопки нет: товар не нужное, за план и так
+     * не выходит, денег на покупку нет (из плана монет не взять — кошелёк один) или
+     * нетронутого «хочется» на всю разницу не хватает.
+     */
+    fun wantsToNeeds(state: GameState, itemId: String): Int? {
+        val item = content.item(itemId)?.takeIf { it.category == Category.NEEDS } ?: return null
+        val report = planReport(state) ?: return null
+        val left = wantsLeft(state) ?: return null
+        if (item.price > state.balance) return null
+        val over = report.facts.needs + item.price - report.plan.needs
+        return over.takeIf { it in 1..left }
+    }
+
+    /**
+     * Переложить [amount] плана из «хочется» в нужное посреди уровня — решение ребёнка
+     * «радость подождёт, сначала нужное». Только из нетронутого остатка «хочется»: что уже
+     * потрачено на радости, назад не вернуть. Копилка и бюджет не меняются. После переноса
+     * план — обычный план: «план выполнен» считается по нему. Деньги не двигаются.
+     */
+    fun moveWantsToNeeds(state: GameState, amount: Int): GameResult {
+        val period = state.currentPeriod
+        val plan = period.plan
+        if (period.phase != PeriodPhase.ACTIVE || plan == null) return reject(Rejection.PlanNotConfirmed)
+        val left = wantsLeft(state) ?: return reject(Rejection.PlanNotConfirmed)
+        if (amount <= 0 || amount > left) return reject(Rejection.InvalidAmount)
+        val moved = plan.copy(needs = plan.needs + amount, wants = plan.wants - amount)
+        return ok(state.withCurrentPeriod(period.copy(plan = moved)))
     }
 
     // ---------- Покупки ----------
