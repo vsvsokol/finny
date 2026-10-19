@@ -83,6 +83,12 @@ enum class EntryType {
     SAVINGS_DEPOSIT,
     SAVINGS_WITHDRAW,
     GOAL_COMPLETE,
+
+    /**
+     * Мытьё: денег не трогает, тратит один раз мыла с полочки ([LedgerEntry.itemId]; null — водой).
+     * Запас мыла не хранится, а считается по журналу, как баланс: см. [ru.finney.pet.domain.game.Game.stock].
+     */
+    WASH,
 }
 
 /**

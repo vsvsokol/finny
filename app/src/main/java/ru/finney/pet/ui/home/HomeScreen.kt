@@ -143,6 +143,8 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import kotlin.random.Random
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.spring
@@ -160,9 +162,11 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import ru.finney.pet.ui.pet.skin
 import ru.finney.pet.ui.pet.accessoryArt
 import ru.finney.pet.ui.room.FeedingGame
-import ru.finney.pet.ui.room.WashingGame
 import ru.finney.pet.ui.room.CareBlock
 import ru.finney.pet.ui.room.CareOption
+import ru.finney.pet.ui.room.BathRoom
+import ru.finney.pet.ui.room.BathShop
+import ru.finney.pet.ui.room.BathStep
 import ru.finney.pet.ui.room.CarePanel
 import ru.finney.pet.ui.room.DOOR_MS
 import ru.finney.pet.ui.room.WALK_MS
@@ -255,6 +259,7 @@ fun HomeScreen(
             onOpenGlossary = onOpenGlossary,
             onClosePeriod = viewModel::closePeriod,
             onBuy = viewModel::buy,
+            onWash = viewModel::wash,
             onSleep = viewModel::sleep,
             onWake = viewModel::wake,
             onPlay = viewModel::play,
@@ -334,6 +339,7 @@ internal fun HomeContent(
     onOpenHelp: () -> Unit,
     onClosePeriod: () -> Unit,
     onBuy: (itemId: String) -> Unit,
+    onWash: (itemId: String?) -> Unit = {},
     onSleep: () -> Unit = {},
     onWake: () -> Unit = {},
     onPlay: (toyId: String, shakes: Int) -> Unit = { _, _ -> },
@@ -483,6 +489,8 @@ internal fun HomeContent(
     var pendingShakes by remember { mutableIntStateOf(0) }
     var heldToy by remember { mutableStateOf<String?>(null) }
     var lastHappySound by remember { mutableLongStateOf(0L) }
+    // Когда игрушка последний раз не прибавила радости: над питомцем — «уже наигрался».
+    var playedOutAt by remember { mutableLongStateOf(0L) }
     val currentState by rememberUpdatedState(state)
 
     // Место PetView — с поправкой на стадию роста: облик меньше рамки и стоит у её низа.
@@ -531,6 +539,7 @@ internal fun HomeContent(
                 pet.center.x + (Random.nextFloat() - 0.5f) * pet.width * 0.45f,
                 pet.top + pet.height * (0.12f + Random.nextFloat() * 0.18f),
             ), filled = joyful)
+            if (!joyful) playedOutAt = System.currentTimeMillis()
             if (joyful) {
                 if (animations) animation.playGiggle()
                 val now = System.currentTimeMillis()
@@ -599,7 +608,23 @@ internal fun HomeContent(
     // как монеты уходят, когда еда попала в рот.
     val hudAlpha by animateFloatAsState(if (playing == null) 1f else 0f, label = "hud")
 
+    // В ванной боковые кнопки (копилка, игры) гаснут: на их месте подсказка, что делать с
+    // полочкой. Деньги сверху и кольцо чистоты на кнопке ванны остаются — свои не заводим.
+    val inBath = spot == RoomSpot.BATH && !sleeping
+    val sideAlpha by animateFloatAsState(if (playing == null && !inBath) 1f else 0f, label = "side")
+
+    // Сколько раз нажали на ванну внизу, уже стоя в ванной: мыть начинают с панели шагов,
+    // и нажатие только зовёт к ней (BathRoom).
+    var bathNudge by remember { mutableIntStateOf(0) }
+    // Магазин шага ванны: открыт с плитки «Купить» — мыло или щётка с пастой.
+    var bathShop by rememberSaveable { mutableStateOf<BathStep?>(null) }
+
     fun openCare(target: CareTarget) {
+        // У ванны окна нет: шаги — на панели в самой ванной (BathRoom).
+        if (target == CareTarget.BATH) {
+            bathNudge++
+            return
+        }
         care = target
         picked = null
     }
@@ -686,7 +711,9 @@ internal fun HomeContent(
     // а под интерфейсом должна быть видна комната. Свой корень — ровно поэтому,
     // сам FinneyScreen не трогаем, на нём держатся пять других экранов.
     val guideStep = if (sleep != null) NextStep.WAKE.takeIf { now >= sleep.enoughAt } else state.nextStep
-    val guideBusy = playing != null || care != null || levelOpen || debugOpen || rejectShown ||
+    // В ванной ведёт своя панель шагов (BathRoom): пузырь «я испачкался» звал бы на кнопку
+    // ванны внизу и закрывал плитки.
+    val guideBusy = playing != null || care != null || bathShop != null || inBath || levelOpen || debugOpen || rejectShown ||
         menuOpen || moodHint || dreamCard != null || gamesOpen || editing
     // Интерфейс главной расступается, пока выбирают интерьер, — комната целиком
     // принадлежит выбору. Читается на отрисовке.
@@ -833,9 +860,17 @@ internal fun HomeContent(
                 )
                 // Тестовый профиль видно сразу: эксперт знает, почему все игры открыты.
                 // Метка лежит на нижнем краю значка, а не под ним — ряд не вырастает.
-                if (state.isDemo) {
+                // «!» — как у остальных кнопок: значит, план ещё не составлен.
+                if (state.nextStep == NextStep.PLAN) Image(
+                    painterResource(R.drawable.home_warning_icon), null,
+                    Modifier.align(Alignment.BottomEnd).offset(x = 4.dp, y = (-4).dp)
+                        .size(width = 16.dp, height = 35.dp),
+                )
+                // Подпись — потому что без неё кружок с цифрой не читался как кнопка.
+                run {
                     Text(
-                        text = "демо",
+                        text = if (state.isDemo) "Уровень · демо" else "Уровень",
+                        maxLines = 1, softWrap = false,
                         style = MaterialTheme.typography.labelMedium,
                         color = FinneyInk,
                         modifier = Modifier
@@ -886,8 +921,8 @@ internal fun HomeContent(
             modifier = Modifier.fillMaxWidth().weight(1f),
         ) {
             HomeSideActions(
-                state = state, layout = actionLayout, enabled = !sleeping && playing == null,
-                alpha = hudAlpha, hintTargets = hintTargets, onOpenGoals = onOpenGoals,
+                state = state, layout = actionLayout, enabled = !sleeping && playing == null && !inBath,
+                alpha = sideAlpha, hintTargets = hintTargets, onOpenGoals = onOpenGoals,
                 onOpenGames = { gamesOpen = true },
                 // Обустраивают зал днём: во сне свет выключен, а на кухне и в ванной нет торшера.
                 onOpenRoom = if (spot == RoomSpot.LIVING && !sleeping) ({ roomEdit = EditTab.WALL }) else null,
@@ -972,7 +1007,7 @@ internal fun HomeContent(
             )
             HomeCareAction(
                 icon = R.drawable.home_wash_icon,
-                label = "Мытьё",
+                label = "Ванна",
                 description = "Помыть",
                 onClick = { goTo(RoomSpot.BATH, CareTarget.BATH) },
                 value = state.stats.hygiene,
@@ -1088,7 +1123,7 @@ internal fun HomeContent(
         val step = if (sleep != null) NextStep.WAKE.takeIf { now >= sleep.enoughAt } else state.nextStep
         // Подсказка говорит одна: всё, что уже открыто поверх комнаты или ещё объясняет
         // своё (окно отказа, меню, подсказка настроения, сон-загадка), её глушит.
-        val busy = playing != null || care != null || levelOpen || debugOpen || rejectShown ||
+        val busy = playing != null || care != null || bathShop != null || levelOpen || debugOpen || rejectShown ||
             menuOpen || moodHint || dreamCard != null || gamesOpen || editing
         val tutorial = state.level == 1 && guided
         // Итог покупки на обучении — не отдельной карточкой, а в пузыре подсказки,
@@ -1135,6 +1170,7 @@ internal fun HomeContent(
         ToyShowcaseLayer(showcase, toyBounds, caption = "Возьми игрушку и потряси — ${state.petName} обрадуется")
 
         HeartBurstLayer(hearts)
+        PlayedOutNote(state.petName, playedOutAt, petTop = { petBounds().top })
 
         // Панель ухода поверх всего: пока выбирают, комната остаётся видна,
         // и понятно, к чему относится выбор.
@@ -1143,11 +1179,76 @@ internal fun HomeContent(
         // чтобы заголовок панели не наезжал на плашки, и ловит нажатия: без неё
         // сквозь панель нажимались кнопки комнат, а нажатие мимо панели ничего
         // не делало. Теперь мимо — это «закрыть».
+        // Ванна — прямо в комнате, без окна: нажал на ванну — мытьё по шагам (BathRoom).
+        if (inBath && playing == null) {
+            val pet = petBounds()
+            val mouth = state.appearance.character.skin.mouthCenter
+            BathRoom(
+                petName = state.petName,
+                shelf = state.bath,
+                nudge = bathNudge,
+                pet = pet,
+                mouth = Offset(pet.left + pet.width * mouth.pivotFractionX, pet.top + pet.height * mouth.pivotFractionY),
+                onUse = onWash,
+                onOpenShop = { bathShop = it },
+                onTickle = { if (animations) animation.playGiggle() },
+                onDone = { if (animations) animation.playJoy() },
+            )
+        }
+
+        // Магазин шага ванны — с плитки «Купить»: то же окно поверх комнаты, что на кухне,
+        // но только с тем, что нужно для этого шага.
+        bathShop?.takeIf { inBath }?.let { step ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(FinneyInk.copy(alpha = 0.45f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClickLabel = "Закрыть",
+                        onClick = { bathShop = null },
+                    )
+                    .systemBarsPadding()
+                    .padding(16.dp),
+                contentAlignment = Alignment.BottomCenter,
+            ) {
+                BathShop(
+                    step = step,
+                    shelf = state.bath,
+                    onBuy = onBuy,
+                    onDismiss = { bathShop = null },
+                    modifier = Modifier.pointerInput(Unit) { detectTapGestures { } },
+                    block = if (state.phase == PeriodPhase.ACTIVE) {
+                        null
+                    } else {
+                        CareBlock(
+                            reason = "Сначала составь план — потом покупки",
+                            actionLabel = "К плану расходов",
+                            onAction = onOpenBudget,
+                        )
+                    },
+                    coins = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.clearAndSetSemantics { contentDescription = "У тебя ${state.balance} финок" },
+                        ) {
+                            Text("У тебя", style = MaterialTheme.typography.titleMedium, color = FinneyInk)
+                            CoinAmount(amount = state.balance)
+                        }
+                    },
+                )
+            }
+        }
+
+        // Магазин ванны открывается из самой ванны («Купить» на ленте шагов) — то же окно, что на кухне.
         care?.let { target ->
             val previews = when (target) {
                 CareTarget.FOOD -> state.food
-                CareTarget.BATH -> state.care
+                CareTarget.BATH -> state.bath.items.map { it.preview }
             }
+            val stock = state.bath.items.associate { it.item.id to it.left }
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1166,6 +1267,16 @@ internal fun HomeContent(
                 // кого кормят.
                 contentAlignment = Alignment.BottomCenter,
             ) {
+                val coins: @Composable () -> Unit = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.clearAndSetSemantics { contentDescription = "У тебя ${state.balance} финок" },
+                    ) {
+                        Text("У тебя", style = MaterialTheme.typography.titleMedium, color = FinneyInk)
+                        CoinAmount(amount = state.balance)
+                    }
+                }
                 CarePanel(
                     // Нажатия по самой панели гасятся здесь: иначе попадание
                     // между карточками уходило бы на подложку и закрывало панель.
@@ -1186,17 +1297,24 @@ internal fun HomeContent(
                         )
                     },
                     options = previews.map {
-                        CareOption(it.item, it, isSelected = it.item.id == picked)
+                        CareOption(it.item, it, isSelected = it.item.id == picked, left = stock[it.item.id])
                     },
                     onPick = { picked = it },
                     guide = state.level == 1,
                     confirmLabel = when (target) {
                         CareTarget.FOOD -> "Купить и покормить"
-                        CareTarget.BATH -> "Купить и помыть"
+                        CareTarget.BATH -> "Купить"
                     },
                     onConfirm = { itemId ->
-                        playing = itemId
-                        care = null
+                        // Еду сразу едят (игра кормления), мыло и пасту — кладут на полочку: окно остаётся,
+                        // видно, что запас вырос, и можно докупить ещё.
+                        when (target) {
+                            CareTarget.FOOD -> {
+                                playing = itemId
+                                care = null
+                            }
+                            CareTarget.BATH -> onBuy(itemId)
+                        }
                         picked = null
                     },
                     onDismiss = { care = null; picked = null },
@@ -1208,16 +1326,7 @@ internal fun HomeContent(
                     // Картинки мельче, чем в магазине: окно висит поверх комнаты, и еда с конфетой
                     // и кнопкой должны влезть в экран целиком.
                     tilePicture = 64.dp,
-                    header = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.clearAndSetSemantics { contentDescription = "У тебя ${state.balance} финок" },
-                        ) {
-                            Text("У тебя", style = MaterialTheme.typography.titleMedium, color = FinneyInk)
-                            CoinAmount(amount = state.balance)
-                        }
-                    },
+                    header = coins,
                     // Полосы — как в магазине. Конфета сытная, но она «хочется»: своя полоса.
                     // Подпись — названием части и одним словом, в строку: прежняя «Без этого Финни
                     // плохо» шла в две строки и звала питомца «Финни», даже если его зовут иначе.
@@ -1296,19 +1405,9 @@ internal fun HomeContent(
                     },
                     onCancel = { playing = null },
                 )
-                RoomSpot.BATH -> WashingGame(
-                    itemId = itemId,
-                    pet = pet,
-                    onScrub = { if (animations) animation.playGiggle() },
-                    onClean = {
-                        onBuy(itemId)
-                        if (animations) animation.playJoy()
-                        playing = null
-                    },
-                    onCancel = { playing = null },
-                )
-                // Игры идут поверх кнопок комнат, из кухни или ванной не уйти.
-                RoomSpot.LIVING -> Unit
+                // В ванной игры поверх нет: моют прямо с полочки (BathRoom).
+                // Игры идут поверх кнопок комнат, из кухни не уйти.
+                RoomSpot.BATH, RoomSpot.LIVING -> Unit
             }
         }
 
@@ -2312,3 +2411,40 @@ private fun HomePreviewContent(step: NextStep?) {
         )
     }
 }
+
+/**
+ * «Финни уже наигрался» над питомцем — пока игрушка не прибавляет радости (плейтест:
+ * пустые сердечки без слов не объясняли, почему трясти дальше бесполезно; ТЗ п. 2.5.10, 2.5.12).
+ * Держится пару секунд после последнего пустого сердечка. [playedOutAt] 0 — ещё не было.
+ */
+@Composable
+private fun PlayedOutNote(petName: String, playedOutAt: Long, petTop: () -> Float) {
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(playedOutAt) {
+        if (playedOutAt == 0L) return@LaunchedEffect
+        visible = true
+        delay(PlayedOutNoteMillis)
+        visible = false
+    }
+    if (!visible) return
+    val lift = with(LocalDensity.current) { 56.dp.toPx() }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .offset { IntOffset(0, (petTop() - lift).coerceAtLeast(0f).roundToInt()) },
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        Text(
+            text = "$petName уже наигрался",
+            style = MaterialTheme.typography.bodyLarge,
+            color = FinneyInk,
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background(FinneyCream)
+                .border(StrokeThin, FinneyInk, RoundedCornerShape(50))
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+        )
+    }
+}
+
+private const val PlayedOutNoteMillis = 2_000L

@@ -25,6 +25,7 @@ data class EconomyConfig(
     val pet: PetRule,
     val play: PlayRule = PlayRule(),
     val sleepCards: SleepCardRule = SleepCardRule(),
+    val bath: BathRule = BathRule(),
     val reminders: ReminderRule = ReminderRule(),
 ) {
     fun income(stage: Int): Int = incomeByStage[stage - 1]
@@ -82,6 +83,18 @@ data class PlayRule(
     val sessionMoodCap: Int = 20,
     val sessionMinutes: Int = 60,
     val demoSessionSeconds: Int = 30,
+)
+
+/**
+ * Ванна (docs/bath-plan.md). С мылом чистота растёт на его `effect.hygiene`, без мыла водой —
+ * на [water], но не выше [waterUpTo]: сполоснуться можно всегда, а отмыться — только с мылом,
+ * иначе мыло никто бы не покупал. С [cleanFrom] питомец и так чистый — мыло не тратится зря.
+ */
+@Serializable
+data class BathRule(
+    val water: Int = 15,
+    val waterUpTo: Int = 40,
+    val cleanFrom: Int = 90,
 )
 
 /**

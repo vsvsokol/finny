@@ -205,7 +205,7 @@ private fun DecisionsPage() {
     // и зелёная карточка «Нужное» читалась как оценка, а не как название.
     // Полосы через одну — белая и прозрачная: три пункта видно тремя и без рамок.
     Column(Modifier.fillMaxWidth()) {
-        Decision(categoryIcon(Category.NEEDS), "Нужное", "Еда и мытьё — это сначала", striped = true)
+        Decision(categoryIcon(Category.NEEDS), "Нужное", "Еда и ванна — это сначала", striped = true)
         Decision(categoryIcon(Category.WANTS), "Хочется", "Игрушки и сладости — могут подождать", striped = false)
         Decision(SavingsIcon, "Отложить", "В копилку — на большую цель", striped = true)
     }

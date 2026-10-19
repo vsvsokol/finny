@@ -32,7 +32,7 @@ class ShopViewModelTest : ViewModelTest() {
 
         val state = viewModel.ready()
         assertFalse(state.canBuy)
-        assertEquals(listOf("apple", "bowl", "soap", "towel"), state.needs.map { it.item.id })
+        assertEquals(listOf("apple", "bowl", "soap", "towel", "soap_pack"), state.needs.map { it.item.id })
         assertTrue(state.wants.map { it.item.id }.containsAll(listOf("candy", "ball", "lamp")))
 
         viewModel.buy("candy")

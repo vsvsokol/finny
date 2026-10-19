@@ -118,7 +118,20 @@ fun rejectionMessage(rejection: Rejection): RejectionMessage = when (rejection) 
         "Это задание ещё закрыто.",
         "Откроется на следующих уровнях.",
     )
+    is Rejection.NoStock -> RejectionMessage(
+        "Мыло кончилось.",
+        "Пополни полочку в ванной — мыло нужное, его можно вписать в план.",
+    )
+    Rejection.AlreadyClean -> RejectionMessage(
+        "Питомец и так чистый.",
+        "Помоешь потом, когда испачкается, — мыло сбережёшь.",
+    )
+    Rejection.NeedsSoap -> RejectionMessage(
+        "Водой чище уже не станет.",
+        "Нужно мыло — пополни полочку в ванной.",
+    )
     Rejection.InvalidAmount,
+    is Rejection.NotWashable,
     is Rejection.UnknownGoal,
     is Rejection.UnknownItem,
     is Rejection.NotWearable,
@@ -217,7 +230,7 @@ fun ActionFeedbackCard(feedback: ActionFeedback, modifier: Modifier = Modifier, 
         ActionFeedbackSummary(feedback)
         if (!compact) {
             Text(feedback.why, style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
-            Text(feedback.next, style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
+            if (feedback.next.isNotEmpty()) Text(feedback.next, style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
         }
     }
 }

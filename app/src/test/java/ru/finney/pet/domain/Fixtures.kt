@@ -63,6 +63,9 @@ object Fixtures {
         ShopItem("bowl", "Миска", 20, Category.NEEDS, effect = StatEffect(satiety = 45)),
         ShopItem("soap", "Мыло", 10, Category.NEEDS, effect = StatEffect(hygiene = 35)),
         ShopItem("towel", "Полотенце", 15, Category.NEEDS, effect = StatEffect(hygiene = 50)),
+        // Мыло на полочку — без него контент не проходит валидатор. Нарочно дорогое: подсказка
+        // плана выбирает самое дешёвое, и числа в тестах правил от него не меняются. Ванну проверяет BathTest.
+        ShopItem("soap_pack", "Мыло на полочку", 40, Category.NEEDS, effect = StatEffect(hygiene = 50), uses = 2),
         ShopItem("candy", "Конфета", 5, Category.WANTS, effect = StatEffect(mood = 10)),
         ShopItem("ball", "Мячик", 15, Category.WANTS, effect = StatEffect(mood = 30)),
         ShopItem("lamp", "Лампа", 25, Category.WANTS, effect = StatEffect(mood = 50)),

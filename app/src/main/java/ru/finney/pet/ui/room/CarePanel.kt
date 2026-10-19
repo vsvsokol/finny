@@ -65,6 +65,8 @@ data class CareOption(
     val item: ShopItem,
     val preview: PurchasePreview,
     val isSelected: Boolean,
+    /** Сколько раз ещё хватит того, что уже есть (мыло, паста); null — товар без запаса. */
+    val left: Int? = null,
 )
 
 /**
@@ -288,6 +290,7 @@ private fun CareRow(option: CareOption, onPick: () -> Unit, modifier: Modifier =
             }
             CoinAmount(amount = option.item.price)
         }
+        option.item.uses?.let { UsesNote(it, option.left) }
 
         if (notEnough) {
             Text(
@@ -338,6 +341,7 @@ private fun CareTile(option: CareOption, picture: Dp, onPick: () -> Unit, modifi
             EffectChip(null, "радость", option.item.effect.mood, preview.statsBefore.mood, preview.statsAfter.mood)
             CoinAmount(amount = option.item.price)
         }
+        option.item.uses?.let { UsesNote(it, option.left) }
         if (notEnough) {
             // В узкой плитке — коротко; что делать, сказано в отказе при попытке купить.
             Text(
@@ -349,6 +353,25 @@ private fun CareTile(option: CareOption, picture: Dp, onPick: () -> Unit, modifi
             )
         }
     }
+}
+
+/**
+ * Мыло не моет сразу, а встаёт на полочку в ванной: «+50» у него — за каждый раз.
+ * Без этой строки покупка выглядела бы обманом — шкала после неё не двигается.
+ */
+@Composable
+private fun UsesNote(uses: Int, left: Int?) {
+    Text(
+        text = when (left) {
+            null -> "На полочку в ванной: хватит на ${times(uses)}"
+            0 -> "Кончилось. Покупка — на ${times(uses)}"
+            else -> "Есть на ${times(left)}. Покупка — ещё на ${times(uses)}"
+        },
+        style = MaterialTheme.typography.bodyMedium,
+        color = FinneyInk,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 /** Картинка товара в плитке: на 360 dp плитка ~135 dp, картинка занимает её почти целиком. */
