@@ -193,9 +193,16 @@ class Game(
     /** Эмоция по шкалам сейчас: у спящего сон растёт, см. [energyAt]. */
     fun emotion(state: GameState): Emotion = PetRules.emotion(state.pet.copy(energy = energyAt(state)), economy.pet)
 
-    /** Сколько минимально стоит закрыть нужное при текущих шкалах. */
-    fun needsHint(state: GameState): Int? =
-        PetRules.needsCost(state.pet, content.shop, economy.pet.needsThreshold)
+    /**
+     * Сколько минимально стоит закрыть нужное при текущих шкалах. Мыло на полочке уже
+     * куплено: пока оно есть, чистота в подсказке ничего не стоит.
+     */
+    fun needsHint(state: GameState): Int? {
+        val threshold = economy.pet.needsThreshold
+        val pet = if (hasSoap(state)) state.pet.copy(hygiene = maxOf(state.pet.hygiene, threshold)) else state.pet
+        // Полотенцем и пастой без мыла не помоешься — в подсказке их нет.
+        return PetRules.needsCost(pet, content.shop.filterNot { it.bathExtra }, threshold)
+    }
 
     /** Зерно новой попытки мини-игры: по нему [task] выбирает числа, см. [TaskGenerator]. */
     fun newTaskSeed(): Long = random.nextLong()
@@ -369,7 +376,8 @@ class Game(
         // из магазина покупать можно: магазин во сне открыт.
         if (state.sleepingSince != null && item.feedsOrWashes) return reject(Rejection.Asleep)
         val bought = buyToShelf(state, itemId)
-        if (bought !is GameResult.Ok || item.kind != ItemKind.CONSUMABLE) return bought
+        // Мыло, щётка, паста — запас полочки ванной: их тратят по разу при мытье ([wash]), не сразу.
+        if (bought !is GameResult.Ok || item.kind != ItemKind.CONSUMABLE || item.uses != null) return bought
         return use(bought.state, itemId)
     }
 
@@ -401,6 +409,8 @@ class Game(
     fun use(state: GameState, itemId: String): GameResult {
         val item = content.item(itemId) ?: return reject(Rejection.UnknownItem(itemId))
         if (item.kind != ItemKind.CONSUMABLE) return reject(Rejection.NotPlayable(itemId))
+        // У мыла и пасты свой запас по разам — его тратит [wash], а не полка.
+        if (item.uses != null) return reject(Rejection.NotPlayable(itemId))
         if (state.sleepingSince != null && item.feedsOrWashes) return reject(Rejection.Asleep)
         if (state.onShelf(itemId) <= 0) return reject(Rejection.NotOwned(itemId))
         val use = ItemUse(periodNumber = state.currentPeriod.number, itemId = itemId, createdAt = clock())
@@ -410,8 +420,61 @@ class Game(
     /** Что лежит на полке, в порядке магазина. Пустых мест нет. */
     fun shelf(state: GameState): List<ShelfItem> =
         content.shop
-            .filter { it.kind == ItemKind.CONSUMABLE }
+            .filter { it.kind == ItemKind.CONSUMABLE && it.uses == null }
             .mapNotNull { item -> state.onShelf(item.id).takeIf { it > 0 }?.let { ShelfItem(item, it) } }
+
+    // ---------- Ванна ----------
+
+    /** Мыло для полочки ванной: им намыливают, у него есть запас на несколько раз. */
+    val soaps: List<ShopItem> get() = content.shop.filter { it.uses != null && !it.bathExtra && it.effect.hygiene > 0 }
+
+    /** Полотенце, щётка, паста: у каждого свой шаг мытья и своя прибавка. */
+    val bathExtras: List<ShopItem> get() = content.shop.filter { it.uses != null && it.bathExtra }
+
+    /**
+     * Сколько раз ещё хватит предмета [itemId] с полочки: куплено × [ShopItem.uses] минус мытья им.
+     * Считается по журналу, как баланс, — отдельно запас нигде не хранится.
+     */
+    fun stock(state: GameState, itemId: String): Int {
+        val uses = content.item(itemId)?.uses ?: return 0
+        val bought = state.ledger.count { it.type == EntryType.PURCHASE && it.itemId == itemId }
+        val spent = state.ledger.count { it.type == EntryType.WASH && it.itemId == itemId }
+        return maxOf(0, bought * uses - spent)
+    }
+
+    /** Есть ли на полочке хоть какое-то мыло. */
+    fun hasSoap(state: GameState): Boolean = soaps.any { stock(state, it.id) > 0 }
+
+    /**
+     * Шаг мытья предметом [itemId] с полочки или, если null, просто водой. Ничего не покупает:
+     * тратит один раз предмета — и его пары ([ShopItem.pairWith]: щётка без пасты зубы не чистит) —
+     * и прибавляет их чистоту. Шаги независимы: зубы можно почистить и без мыла. Денег не трогает,
+     * поэтому план не нужен. Вода прибавляет мало и только до [ru.finney.pet.domain.model.BathRule.waterUpTo]:
+     * отмыться можно только с мылом.
+     */
+    fun wash(state: GameState, itemId: String?): GameResult {
+        if (state.sleepingSince != null) return reject(Rejection.Asleep)
+        val bath = economy.bath
+        // Зубы чистят и у чистого питомца — после мыла он как раз чистый, а шаг зубов идёт
+        // следом. Не дают только при полной шкале: прибавлять некуда.
+        val extra = itemId?.let(content::item)?.takeIf { it.bathExtra } != null
+        val cleanFrom = if (extra) PetRules.STAT_MAX else bath.cleanFrom
+        if (state.pet.hygiene >= cleanFrom) return reject(Rejection.AlreadyClean)
+        if (itemId == null) {
+            if (state.pet.hygiene >= bath.waterUpTo) return reject(Rejection.NeedsSoap)
+            val water = minOf(bath.water, bath.waterUpTo - state.pet.hygiene)
+            val entry = entry(state, EntryType.WASH, balanceDelta = 0)
+            return ok(state.copy(pet = PetRules.apply(state.pet, StatEffect(hygiene = water)), ledger = state.ledger + entry))
+        }
+        val item = content.item(itemId) ?: return reject(Rejection.UnknownItem(itemId))
+        if (item !in soaps && item !in bathExtras) return reject(Rejection.NotWashable(itemId))
+        val pair = item.pairWith?.let { content.item(it) ?: return reject(Rejection.UnknownItem(it)) }
+        val used = listOfNotNull(item, pair)
+        used.firstOrNull { stock(state, it.id) <= 0 }?.let { return reject(Rejection.NoStock(it.id)) }
+        val entries = used.map { entry(state, EntryType.WASH, balanceDelta = 0).copy(itemId = it.id) }
+        val hygiene = used.sumOf { it.effect.hygiene }
+        return ok(state.copy(pet = PetRules.apply(state.pet, StatEffect(hygiene = hygiene)), ledger = state.ledger + entries))
+    }
 
     // ---------- Сон ----------
 
@@ -768,8 +831,8 @@ class Game(
 
     private fun ok(state: GameState) = GameResult.Ok(state)
 
-    /** Еда и мытьё: то, что делают на кухне и в ванной. */
-    private val ShopItem.feedsOrWashes: Boolean get() = effect.satiety > 0 || effect.hygiene > 0
+    /** Еда: то, что сразу съедают на кухне. Мыло на полочку купить можно и во сне — мыть им будут потом. */
+    private val ShopItem.feedsOrWashes: Boolean get() = uses == null && (effect.satiety > 0 || effect.hygiene > 0)
 
     private fun reject(reason: Rejection) = GameResult.Rejected(reason)
 }

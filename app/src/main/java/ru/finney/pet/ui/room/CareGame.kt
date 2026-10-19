@@ -71,8 +71,18 @@ internal val ItemSize = 96.dp
 internal fun itemArt(itemId: String): Int? = when (itemId) {
     "food_apple" -> R.drawable.item_food_apple
     "food_bowl" -> R.drawable.item_food_bowl
+    "food_bread" -> R.drawable.item_food_bread
+    "food_egg" -> R.drawable.item_food_egg
+    "food_milk" -> R.drawable.item_food_milk
+    "food_water" -> R.drawable.item_food_water
+    "food_lemon" -> R.drawable.item_food_lemon
+    "food_watermelon" -> R.drawable.item_food_watermelon
+    "food_juice" -> R.drawable.item_food_juice
     "care_soap" -> R.drawable.item_care_soap
+    "care_soap_liquid" -> R.drawable.item_care_soap_liquid
     "care_towel" -> R.drawable.item_care_towel
+    "care_toothbrush" -> R.drawable.item_care_toothbrush
+    "care_toothpaste" -> R.drawable.item_care_toothpaste
     "treat_candy" -> R.drawable.item_treat_candy
     "fun_cartoon" -> R.drawable.item_fun_tv
     "toy_ball" -> R.drawable.item_toy_ball

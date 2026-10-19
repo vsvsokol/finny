@@ -145,7 +145,12 @@ internal fun DesignerHomeButton(
             }
             Image(painterResource(icon), null,
                 Modifier.size(diameter * (iconSize.first / 155f), diameter * (iconSize.second / 155f)))
-            if (warning || ready) Image(
+            // Готовность «забрать» важнее предупреждения: место под значок одно, как в макете.
+            if (ready) Image(
+                painterResource(R.drawable.home_ready_icon), null,
+                Modifier.align(Alignment.BottomEnd).offset(x = 8.dp, y = 1.dp)
+                    .size(width = 26.dp, height = 22.dp),
+            ) else if (warning) Image(
                 painterResource(R.drawable.home_warning_icon), null,
                 Modifier.align(Alignment.BottomEnd).offset(x = 3.dp, y = 1.dp)
                     .size(width = 14.dp, height = 31.dp),

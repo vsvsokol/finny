@@ -219,6 +219,7 @@ private fun EntryIcon(row: HistoryRow) {
         EntryType.PURCHASE -> row.itemId?.let { RoomItemPicture(it, itemFallback(it), size) } ?: FinneyIcon(FinneyIcons.Cart, size = size)
         EntryType.SAVINGS_DEPOSIT, EntryType.SAVINGS_WITHDRAW -> FinneyIcon(FinneyIcons.Piggy, size = size)
         EntryType.GOAL_COMPLETE -> FinneyIcon(FinneyIcons.Trophy, size = size)
+        EntryType.WASH -> FinneyIcon(FinneyIcons.Bath, size = size)
         EntryType.INCOME, EntryType.PARENT_BONUS -> Coin(size = size)
     }
 }

@@ -651,7 +651,7 @@ private fun RoomCanvas(
                     Pet(ground, canvasW, canvasH, lighting, footing = null, visibility, pet)
                     LitLayer(Room.Bath, canvasW, canvasH, lighting, Solids.Bath, visibility)
                     Foam(Room.BathFoamFront, canvasW, canvasH, lighting, phase = 0.5f)
-                    TapZone(Room.Bath.rect, canvasW, canvasH, "Помыть", onTapItem)
+                    TapZone(Room.Bath.rect, canvasW, canvasH, "Ванна", onTapItem)
                 }
             }
         }

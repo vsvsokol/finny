@@ -15,11 +15,16 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import ru.finney.pet.appContainer
+import ru.finney.pet.domain.pet.PetRules
 import ru.finney.pet.domain.game.Game
 import ru.finney.pet.domain.game.GameResult
 import ru.finney.pet.domain.game.GoalProgress
 import ru.finney.pet.domain.game.LevelCheck
 import ru.finney.pet.domain.game.PurchasePreview
+import ru.finney.pet.ui.room.BathShelf
+import ru.finney.pet.ui.room.BathStep
+import ru.finney.pet.ui.room.ShelfItem
+import ru.finney.pet.ui.room.times
 import ru.finney.pet.domain.game.Rejection
 import ru.finney.pet.domain.game.Session
 import ru.finney.pet.domain.model.BodyColor
@@ -129,6 +134,8 @@ sealed interface HomeUiState {
         val food: List<PurchasePreview>,
         /** Чем помыть: всё, что поднимает чистоту. */
         val care: List<PurchasePreview>,
+        /** Полочка ванной: мыло с запасом, можно ли сполоснуться водой (docs/bath-plan.md). */
+        val bath: BathShelf = BathShelf(),
         /**
          * Сколько на нужное осталось по плану — как в полосе магазина: окно покупки на кухне
          * и в ванной — тот же магазин. null — плана ещё нет.
@@ -229,7 +236,7 @@ private const val EXTRA_LEVEL_GAMES = 2
 /** Какая панель ухода открыта поверх комнаты. */
 enum class CareTarget(val title: String) {
     FOOD("Покормить"),
-    BATH("Помыть"),
+    BATH("Для ванны"),
 }
 
 sealed interface HomeEvent {
@@ -285,13 +292,20 @@ class HomeViewModel(
                 is GameResult.Ok -> {
                     val item = content.item(itemId)
                     if (before != null && item != null) {
+                        // Мыло не моет сразу, а встаёт на полочку: шкалы не сдвинулись, и отклик говорит,
+                        // на сколько его хватит, а не «что изменилось».
+                        val uses = item.uses
                         _events.send(
                             HomeEvent.Purchased(
                                 ActionFeedback(
-                                    title = "Купили: ${item.label}",
+                                    title = if (uses != null) "На полочку: ${item.label}" else "Купили: ${item.label}",
                                     lines = changesBetween(before, result.state),
-                                    why = "Еда и мытьё — это нужное.",
-                                    next = "Кольца у кнопок покажут, что ещё нужно.",
+                                    why = if (uses != null) {
+                                        "Мыло — нужное. Теперь на полочке хватит на ${times(game.stock(result.state, item.id))}."
+                                    } else {
+                                        "Еда и ванна — это нужное."
+                                    },
+                                    next = if (uses != null) "Нажми «Мыть» в ванной." else "Кольца у кнопок покажут, что ещё нужно.",
                                     itemId = item.id,
                                     warning = overPlanWarning(result.state, item.category),
                                 ),
@@ -321,6 +335,19 @@ class HomeViewModel(
             val profile = session.activeGame.first()?.profile ?: return@launch
             if (profile.appearance.bodyColor == color) return@launch
             session.updateProfile(profile.petName, profile.appearance.copy(bodyColor = color))
+        }
+    }
+
+    /**
+     * Шаг мытья в ванной: предметом [itemId] с полочки или водой (null). Денег не тратит —
+     * тратит раз предмета. Окна-отклика нет: прибавка всплывает над питомцем, а кольцо на
+     * кнопке ванны растёт (BathRoom). Отказ — словами, как везде.
+     */
+    fun wash(itemId: String?) {
+        viewModelScope.launch {
+            (session.execute { wash(it, itemId) } as? GameResult.Rejected)?.let {
+                _events.send(HomeEvent.Rejected(it.reason))
+            }
         }
     }
 
@@ -402,6 +429,7 @@ class HomeViewModel(
             // предмета: добавят в контент новую еду — она появится на столе сама.
             food = previews(state) { it.effect.satiety > 0 },
             care = previews(state) { it.effect.hygiene > 0 },
+            bath = bathShelf(state),
             glossary = content.glossary,
             sleepCardsPerSleep = content.economy.sleepCards.maxPerSleep,
             needsLeft = game.planReport(state)?.let { (it.plan.needs - it.facts.needs).coerceAtLeast(0) },
@@ -505,6 +533,23 @@ class HomeViewModel(
         )
     }
 
+    /** Что стоит на полочке ванной и что можно сделать без мыла. */
+    private fun bathShelf(state: GameState): BathShelf {
+        val rule = content.economy.bath
+        val hygiene = state.pet.hygiene
+        return BathShelf(
+            items = (game.soaps + game.bathExtras).mapNotNull { item ->
+                game.previewPurchase(state, item.id)?.let {
+                    ShelfItem(it, left = game.stock(state, item.id), uses = item.uses ?: 1, step = item.bathStep())
+                }
+            },
+            hygiene = hygiene,
+            clean = hygiene >= rule.cleanFrom,
+            canRinse = hygiene < rule.waterUpTo,
+            full = hygiene >= PetRules.STAT_MAX,
+        )
+    }
+
     private fun previews(state: GameState, fits: (ShopItem) -> Boolean): List<PurchasePreview> =
         content.shop.filter(fits).mapNotNull { game.previewPurchase(state, it.id) }
 
@@ -513,4 +558,11 @@ class HomeViewModel(
             initializer { appContainer().let { HomeViewModel(it.session, it.game, it.content) } }
         }
     }
+}
+
+/** Какой шаг мытья делает предмет полочки: мыло — намылить, пара (щётка с пастой) — зубы, остальное — вытереть. */
+private fun ShopItem.bathStep(): BathStep = when {
+    !bathExtra -> BathStep.SOAP
+    pairWith != null -> BathStep.TEETH
+    else -> BathStep.DRY
 }

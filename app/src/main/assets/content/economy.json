@@ -42,6 +42,11 @@
     "skipIfOpenedHours": 6,
     "demoSkipIfOpenedMinutes": 1
   },
+  "bath": {
+    "water": 15,
+    "waterUpTo": 40,
+    "cleanFrom": 90
+  },
   "sleepCards": {
     "energyPerCorrect": 15,
     "maxPerSleep": 5

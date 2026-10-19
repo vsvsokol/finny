@@ -108,6 +108,21 @@ class DebugViewModel(private val session: Session) : ViewModel() {
      */
     fun finishSleep() = patch { state -> if (state.sleepingSince == null) state else state.copy(sleepingSince = 0L) }
 
+    /**
+     * Всё с полочки ванны кончилось — проверить «Купить» на плитках и магазин ванны,
+     * не намывая питомца по десять раз. Запас — покупки минус мытьё, поэтому дописываются
+     * записи мытья, как будто всё истратили; деньги не трогаются.
+     */
+    fun emptyBath() = command { state ->
+        val now = System.currentTimeMillis()
+        val used = (soaps + bathExtras).flatMap { item ->
+            List(stock(state, item.id)) {
+                LedgerEntry(state.currentPeriod.number, EntryType.WASH, balanceDelta = 0, itemId = item.id, createdAt = now)
+            }
+        }
+        GameResult.Ok(state.copy(ledger = state.ledger + used))
+    }
+
     /** Пустой план — чтобы сразу можно было покупать, не заходя в экран плана. */
     fun skipPlan() = command { confirmPlan(it, needs = 0, wants = 0, savings = 0) }
 

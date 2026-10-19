@@ -69,6 +69,7 @@ fun DebugPanel(
             onSkipPlan = viewModel::skipPlan,
             onClosePeriod = viewModel::closePeriod,
             onFinishSleep = viewModel::finishSleep,
+            onEmptyBath = viewModel::emptyBath,
             onWipe = viewModel::wipeAll,
             onOpenTasks = onOpenTasks,
             previewStage = previewStage,
@@ -90,6 +91,7 @@ private fun DebugContent(
     onClosePeriod: () -> Unit,
     onWipe: () -> Unit,
     onFinishSleep: () -> Unit = {},
+    onEmptyBath: () -> Unit = {},
     onOpenTasks: () -> Unit = {},
     previewStage: Int? = null,
     onPreviewStage: (Int?) -> Unit = {},
@@ -134,6 +136,9 @@ private fun DebugContent(
             }
 
             if (state.sleeping) Buttons("Досыпать сейчас" to onFinishSleep)
+
+            Line("Ванна: мыло, щётка, паста")
+            Buttons("Всё кончилось" to onEmptyBath)
 
             Line("Период ${state.periodNumber}: ${state.phase.label}")
             Buttons(

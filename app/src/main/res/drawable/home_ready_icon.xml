@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Знак готовности «забрать / получить» от дизайнеров: design/exports/ui/check_icon.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="100dp"
+    android:viewportWidth="120"
+    android:viewportHeight="100">
+    <path
+        android:pathData="M22,55L45,78L98,22"
+        android:strokeColor="#382C92"
+        android:strokeWidth="37"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M22,55L45,78L98,22"
+        android:strokeColor="#86CC8E"
+        android:strokeWidth="17"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>
