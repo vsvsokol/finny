@@ -110,8 +110,9 @@ internal fun unlockLines(unlocks: LevelUnlocks, future: Boolean, isDemo: Boolean
 
 /** Те же открытия, что в [unlockLines], но фишками для окна уровня на карте. */
 internal fun unlockChips(unlocks: LevelUnlocks): List<UnlockChip> = buildList {
-    unlocks.games.forEach { add(UnlockChip("«${it.title}»", icon = FinneyIcons.Star)) }
-    unlocks.harderGames.forEach { add(UnlockChip("«${it.title}» сложнее", icon = FinneyIcons.Star)) }
+    // У игр без значка: звезда в игре уже значит «Желаемое», а своего значка игр в ките нет.
+    unlocks.games.forEach { add(UnlockChip("Игра «${it.title}»")) }
+    unlocks.harderGames.forEach { add(UnlockChip("«${it.title}» сложнее")) }
     unlocks.items.forEach { add(UnlockChip(it.label, art = itemArt(it.id), icon = FinneyIcons.Cart)) }
     unlocks.goals.forEach { add(UnlockChip("Цель: ${it.label}", art = it.rewardArt, icon = FinneyIcons.Piggy)) }
     unlocks.title?.let { add(UnlockChip("Звание: $it")) }

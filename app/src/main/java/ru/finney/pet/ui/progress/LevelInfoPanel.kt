@@ -2,7 +2,6 @@ package ru.finney.pet.ui.progress
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -20,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -28,9 +28,7 @@ import ru.finney.pet.ui.components.FinneyButton
 import ru.finney.pet.ui.components.FinneyIcon
 import ru.finney.pet.ui.components.FinneyPanel
 import ru.finney.pet.ui.components.fadingScroll
-import ru.finney.pet.ui.theme.FinneyCream
 import ru.finney.pet.ui.theme.FinneyInk
-import ru.finney.pet.ui.theme.StrokeRegular
 
 /**
  * Окно уровня, выбранного на карте. Про будущий уровень — только открытия: какая игра
@@ -82,7 +80,10 @@ internal fun LevelInfoPanel(
     }
 }
 
-/** Открытия уровня фишками: рисунок и пара слов. Столбец фраз на плейтесте не читали. */
+/**
+ * Открытия уровня фишками: рисунок и пара слов. Столбец фраз на плейтесте не читали.
+ * Фишка плоская, без обводки: это отметка, а не кнопка (чек-лист 20.10).
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Unlocks(title: String, chips: List<UnlockChip>) {
@@ -103,10 +104,9 @@ private fun Chip(chip: UnlockChip) {
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         modifier = Modifier
             .heightIn(min = 40.dp)
-            .clip(RoundedCornerShape(50))
-            .background(FinneyCream)
-            .border(StrokeRegular, FinneyInk, RoundedCornerShape(50))
-            .padding(start = 6.dp, end = 12.dp, top = 2.dp, bottom = 2.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.White)
+            .padding(horizontal = 10.dp, vertical = 2.dp)
             .semantics(mergeDescendants = true) {},
     ) {
         when {
