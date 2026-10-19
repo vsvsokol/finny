@@ -117,8 +117,8 @@ fun LevelBadge(
             modifier = Modifier
                 .size(size)
                 .clip(CircleShape)
-                .background(FinneyYellow)
-                .border(size * FinneyStrokeRatio, FinneyInk, CircleShape)
+                // Блик и полоса — как у круглых кнопок: на плоский кружок дети не нажимали.
+                .buttonFill(pressed = false, round = true)
                 .clearAndSetSemantics { contentDescription = "Уровень $level" },
             contentAlignment = Alignment.Center,
         ) {
