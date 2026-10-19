@@ -510,8 +510,12 @@
     "title": "Подработка",
     "series": "chores",
     "unlockLevel": 6,
-    "intro": "Финни копит на мяч. Выбери день и нажми дела — они встанут в часики дня. Одно дело два дня подряд — Финни устаёт, и платят меньше. Один день оставь на отдых.",
-    "goal": { "label": "Мяч", "price": { "min": 60, "max": 70, "step": 10 }, "art": "item_toy_ball" },
+    "intro": "Финни копит на «{goal.label}». Выбери день и нажми дела — они встанут в часики дня. Одно дело два дня подряд — Финни устаёт, и платят меньше. Один день оставь на отдых.",
+    "goal": { "oneOf": [
+      { "label": "Мяч", "price": { "min": 60, "max": 70, "step": 10 }, "art": "item_toy_ball" },
+      { "label": "Наклейки", "price": { "min": 60, "max": 70, "step": 10 }, "art": "item_toy_stickers" },
+      { "label": "Кубик", "price": { "min": 60, "max": 70, "step": 10 }, "art": "item_toy_dice" }
+    ] },
     "days": 5,
     "hoursPerDay": 2,
     "minRestDays": 1,
@@ -521,7 +525,7 @@
       { "id": "dishes", "label": "Помыть посуду", "hours": 1, "reward": 10, "art": "item_chore_dishes", "emoji": "🍽️" },
       { "id": "dog", "label": "Выгулять собаку", "hours": 2, "reward": 20, "art": "item_chore_dog", "emoji": "🐕" }
     ],
-    "explainOk": "Мяч заработан, и день отдыха есть! Чередовать дела выгоднее, чем делать одно.",
+    "explainOk": "На «{goal.label}» заработано, и день отдыха есть! Чередовать дела выгоднее, чем делать одно.",
     "explainFail": "Не хватило монет или дня отдыха. Одно дело два дня подряд — платят на {tiredCut} меньше."
   },
   {
@@ -531,8 +535,12 @@
     "title": "Подработка",
     "series": "chores",
     "unlockLevel": 14,
-    "intro": "Соседке помогают только во второй и четвёртый день, а в последние два дня собака платит больше. Три разных дела за неделю — бонус {varietyBonus}. Набери на конструктор и отдохни два дня.",
-    "goal": { "label": "Конструктор", "price": { "min": 90, "max": 100, "step": 10 }, "art": "item_toy_blocks" },
+    "intro": "Соседке помогают только во второй и четвёртый день, а в последние два дня собака платит больше. Три разных дела за неделю — бонус {varietyBonus}. Набери на «{goal.label}» и отдохни два дня.",
+    "goal": { "oneOf": [
+      { "label": "Конструктор", "price": { "min": 90, "max": 100, "step": 10 }, "art": "item_toy_blocks" },
+      { "label": "Джойстик", "price": { "min": 90, "max": 100, "step": 10 }, "art": "item_toy_gamepad" },
+      { "label": "Ролики", "price": { "min": 90, "max": 100, "step": 10 }, "art": "item_toy_rollers" }
+    ] },
     "days": 6,
     "hoursPerDay": 2,
     "minRestDays": 2,
@@ -554,8 +562,12 @@
     "title": "Подработка",
     "series": "chores",
     "unlockLevel": 25,
-    "intro": "Большая уборка занимает весь день, зато в конце недели за неё платят больше. Четыре разных дела за неделю — бонус {varietyBonus}. Набери на самокат и отдохни два дня.",
-    "goal": { "label": "Самокат", "price": { "min": 100, "max": 110, "step": 10 }, "art": "item_toy_scooter" },
+    "intro": "Большая уборка занимает весь день, зато в конце недели за неё платят больше. Четыре разных дела за неделю — бонус {varietyBonus}. Набери на «{goal.label}» и отдохни два дня.",
+    "goal": { "oneOf": [
+      { "label": "Самокат", "price": { "min": 100, "max": 110, "step": 10 }, "art": "item_toy_scooter" },
+      { "label": "Ролики", "price": { "min": 100, "max": 110, "step": 10 }, "art": "item_toy_rollers" },
+      { "label": "Джойстик", "price": { "min": 100, "max": 110, "step": 10 }, "art": "item_toy_gamepad" }
+    ] },
     "days": 5,
     "hoursPerDay": 3,
     "minRestDays": 2,
