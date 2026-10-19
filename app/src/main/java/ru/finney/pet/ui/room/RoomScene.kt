@@ -221,6 +221,7 @@ private val UfoPauseMs = 20_000L..45_000L
  *   с анимацией: стену прокатывает валик, окно схлопывается и раскрывается, торшер
  *   падает сверху и мигает, включаясь.
  * @param focus что показать крупно, пока выбирают интерьер ([focusOf]); null — обычный вид.
+ * @param focusPet показать крупно питомца в зале, там, куда он отошёл. Важнее [focus].
  * @param focusBottom сколько снизу закрыто панелью выбора: часть [focus] встаёт
  *   посередине того, что над ней осталось.
  */
@@ -242,6 +243,7 @@ fun RoomScene(
     onToyPlaced: (toyId: String, bounds: Rect) -> Unit = { _, _ -> },
     interior: RoomInterior = InteriorPreview.current,
     focus: RelRect? = null,
+    focusPet: Boolean = false,
     focusBottom: Dp = 0.dp,
     pet: @Composable BoxScope.() -> Unit = {},
 ) {
@@ -403,7 +405,7 @@ fun RoomScene(
         // Масштаб не меньше «холст во всю ширину» и сдвиг зажат, как у камеры сна:
         // за краем холста пусто, и показывать это нельзя.
         val edit = with(density) {
-            val target = focus?.let { rect ->
+            val target = (if (focusPet) home.shiftedX(stroll.value) else focus)?.let { rect ->
                 val w = maxWidth.toPx()
                 val h = (maxHeight - focusBottom).toPx().coerceAtLeast(1f)
                 val left = shiftX.toPx()
@@ -496,6 +498,21 @@ fun RoomScene(
         Box(
             modifier = Modifier.fillMaxSize().drawBehind {
                 if (shade.value > 0f) drawRect(SkyColor, alpha = shade.value)
+            },
+        )
+
+        // Валик смены стены — поверх всего, и питомца тоже, и во всю ширину экрана.
+        // Высота идёт за стеной через обе камеры, толщина — от холста.
+        Box(
+            modifier = Modifier.fillMaxSize().drawBehind {
+                val t = walls.progress.value
+                if (t >= 1f) return@drawBehind
+                val z = zoom.value
+                val sleep = 1f + (SLEEP_ZOOM - 1f) * z
+                val scale = edit.first.value * sleep
+                val atCanvas = shiftY.toPx() + canvasH.toPx() * rollerAt(t)
+                val y = edit.third.value + edit.first.value * (camera.y * z + sleep * atCanvas)
+                roller(y, h = canvasW.toPx() * 0.045f * scale, t = t)
             },
         )
     }

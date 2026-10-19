@@ -22,7 +22,9 @@ import ru.finney.pet.domain.game.LevelCheck
 import ru.finney.pet.domain.game.PurchasePreview
 import ru.finney.pet.domain.game.Rejection
 import ru.finney.pet.domain.game.Session
+import ru.finney.pet.domain.model.BodyColor
 import ru.finney.pet.domain.model.Category
+import ru.finney.pet.domain.model.ItemKind
 import ru.finney.pet.domain.model.GlossaryTerm
 import ru.finney.pet.domain.model.GameContent
 import ru.finney.pet.domain.model.GameState
@@ -35,6 +37,7 @@ import ru.finney.pet.domain.model.ItemArt
 import ru.finney.pet.domain.model.TaskDefinition
 import ru.finney.pet.domain.model.TaskOutcome
 import ru.finney.pet.ui.isReserveMode
+import ru.finney.pet.ui.room.Outfit
 import ru.finney.pet.ui.tasks.games.taskIcon
 import kotlin.random.Random
 import ru.finney.pet.domain.pet.Emotion
@@ -139,6 +142,8 @@ sealed interface HomeUiState {
         val sleepCardsPerSleep: Int = 5,
         /** Что надето сейчас — id аксессуара из магазина. */
         val worn: List<String> = emptyList(),
+        /** Все шляпы и очки из магазина — и свои, и те, что ещё не получены. */
+        val outfit: List<Outfit> = emptyList(),
         /** Питомец спит; null — не спит. */
         val sleep: SleepInfo? = null,
         /** Купленные игрушки — id из магазина. Лежат на полу в зале. */
@@ -299,6 +304,26 @@ class HomeViewModel(
         }
     }
 
+    /** Надеть вещь из панели «Финни»: шляпа и очки носятся вместе. */
+    fun wear(itemId: String) {
+        viewModelScope.launch {
+            (session.execute { wear(it, itemId) } as? GameResult.Rejected)?.let { _events.send(HomeEvent.Rejected(it.reason)) }
+        }
+    }
+
+    fun takeOff(itemId: String) {
+        viewModelScope.launch { session.execute { takeOff(it, itemId) } }
+    }
+
+    /** Перекрасить питомца: окрас — часть профиля, как на экране знакомства. */
+    fun setBodyColor(color: BodyColor) {
+        viewModelScope.launch {
+            val profile = session.activeGame.first()?.profile ?: return@launch
+            if (profile.appearance.bodyColor == color) return@launch
+            session.updateProfile(profile.petName, profile.appearance.copy(bodyColor = color))
+        }
+    }
+
     /** Уложить спать в капсулу. Бесплатно: сон не покупают. */
     fun sleep() {
         viewModelScope.launch {
@@ -382,7 +407,10 @@ class HomeViewModel(
             needsLeft = game.planReport(state)?.let { (it.plan.needs - it.facts.needs).coerceAtLeast(0) },
             wantsLeft = game.planReport(state)?.let { (it.plan.wants - it.facts.wants).coerceAtLeast(0) },
             worn = state.worn,
-            sleep = state.sleepingSince?.let { since ->
+            outfit = game.wardrobe(state).map { it.id }.toSet().let { owned ->
+                content.shop.filter { it.kind == ItemKind.ACCESSORY }.map { Outfit(it.id, it.label, it.id in owned) }
+            },
+            sleep =state.sleepingSince?.let { since ->
                 val endsAt = game.sleepEndsAt(state)!!
                 val threshold = content.economy.pet.needsThreshold
                 val energy = state.pet.energy

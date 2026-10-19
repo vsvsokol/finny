@@ -48,7 +48,7 @@ import kotlin.math.sin
 
 // Смена частей интерьера в комнате. Часть не подменяется кадром: ребёнок должен
 // увидеть, что именно поменялось, и порадоваться этому. У каждой части свой ход:
-// стену прокатывает валик, окно схлопывается и раскрывается, торшер падает сверху
+// стену прокатывает валик (он поверх всей комнаты, см. RoomScene), окно схлопывается и раскрывается, торшер падает сверху
 // и мигает, включаясь. Всё читается на отрисовке и не пересобирает комнату.
 
 /** Сколько идёт смена: стена — проход валика, окно — схлопнулось и раскрылось, торшер — до конца мигания. */
@@ -228,7 +228,6 @@ internal fun SwapEffects(walls: PartSwap<WallSkin>, windows: PartSwap<WindowSkin
     Box(
         Modifier.fillMaxSize().drawBehind {
             walls.progress.value.takeIf { it < 1f }?.let { t ->
-                roller(RollerEasing.transform(t), fade = phase(t, 0.85f, 1f))
                 sparks(Offset(0.5f, walls.now.floorTop * 0.45f), phase(t, 0.55f, 1f))
             }
             windows?.progress?.value?.takeIf { it < 1f }?.let { t ->
@@ -282,17 +281,21 @@ private fun RelRect.base() = TransformOrigin(left + width / 2f, bottom)
 
 private fun RelRect.centre(size: Size) = Offset(size.width * (left + width / 2f), size.height * (top + height / 2f))
 
+/** Где валик на доле смены [t]: доля высоты холста от потолка. */
+internal fun rollerAt(t: Float): Float = RollerEasing.transform(t)
+
 /**
- * Валик на всю ширину стены: жёлтый «стадион» с персиковой полосой снизу и обводкой,
- * как кнопки интерфейса, — его ведут к низу стены, к шву с полом.
+ * Валик во всю ширину экрана: жёлтый «стадион» с персиковой полосой снизу и обводкой,
+ * как кнопки интерфейса, — его ведут к низу стены, к шву с полом. Рисуется поверх
+ * всей комнаты (RoomScene), а не на холсте: холст шире экрана, и на холсте концы
+ * валика срезало краем, а питомец и капсула его заслоняли. [y] — середина валика
+ * на экране, [h] — толщина, [t] — доля смены: у пола валик тает.
  */
-private fun DrawScope.roller(at: Float, fade: Float) {
-    val h = size.width * 0.045f
-    val y = size.height * at
-    val margin = size.width * 0.04f
+internal fun DrawScope.roller(y: Float, h: Float, t: Float) {
+    val alpha = 1f - phase(t, 0.85f, 1f)
+    val margin = 4.dp.toPx()
     val shape = RoundRect(margin, y - h / 2f, size.width - margin, y + h / 2f, CornerRadius(h / 2f))
     val path = Path().apply { addRoundRect(shape) }
-    val alpha = 1f - fade
     drawPath(path, FinneyPeach, alpha = alpha)
     drawPath(
         Path().apply {
