@@ -123,6 +123,20 @@ data class TaskAttemptEntity(
     val bonus: Boolean = false,
 )
 
+/** Расходник взят с полки. С версии 12, см. [FinneyDatabase.MIGRATION_11_12]. */
+@Entity(
+    tableName = "item_uses",
+    foreignKeys = [ForeignKey(ProfileEntity::class, ["id"], ["profileId"], onDelete = ForeignKey.CASCADE)],
+    indices = [Index("profileId")],
+)
+data class ItemUseEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val profileId: Long,
+    val periodNumber: Int,
+    val itemId: String,
+    val createdAt: Long,
+)
+
 /** Профиль со всем состоянием одним запросом. Порядок в списках Room не гарантирует — сортирует маппер. */
 data class ProfileWithGame(
     @Embedded val profile: ProfileEntity,
@@ -130,4 +144,5 @@ data class ProfileWithGame(
     @Relation(parentColumn = "id", entityColumn = "profileId") val periods: List<PeriodEntity>,
     @Relation(parentColumn = "id", entityColumn = "profileId") val ledger: List<LedgerEntryEntity>,
     @Relation(parentColumn = "id", entityColumn = "profileId") val attempts: List<TaskAttemptEntity>,
+    @Relation(parentColumn = "id", entityColumn = "profileId") val uses: List<ItemUseEntity> = emptyList(),
 )

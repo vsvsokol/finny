@@ -1,6 +1,7 @@
 package ru.finney.pet.data.db
 
 import ru.finney.pet.domain.model.GameState
+import ru.finney.pet.domain.model.ItemUse
 import ru.finney.pet.domain.model.LedgerEntry
 import ru.finney.pet.domain.model.PetAppearance
 import ru.finney.pet.domain.model.PetStats
@@ -41,6 +42,7 @@ fun GameState.toRows(profileId: Long) = GameRows(
     periods = periods.map { it.toEntity(profileId) },
     ledger = ledger.map { it.toEntity(profileId) },
     attempts = attempts.map { TaskAttemptEntity(0, profileId, it.periodNumber, it.taskId, it.outcome, it.reward, it.createdAt, it.seed, it.bonus) },
+    uses = uses.map { ItemUseEntity(0, profileId, it.periodNumber, it.itemId, it.createdAt) },
 )
 
 fun ProfileWithGame.toDomain(): SavedGame {
@@ -61,6 +63,7 @@ fun ProfileWithGame.toDomain(): SavedGame {
             sleepingSince = pet.sleepingSince,
             playMood = pet.playMood,
             playSince = pet.playSince,
+            uses = uses.sortedBy { it.id }.map { ItemUse(it.periodNumber, it.itemId, it.createdAt) },
         ),
     )
 }

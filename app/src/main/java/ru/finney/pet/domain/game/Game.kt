@@ -8,6 +8,7 @@ import ru.finney.pet.domain.model.GameContent
 import ru.finney.pet.domain.model.GameState
 import ru.finney.pet.domain.model.Goal
 import ru.finney.pet.domain.model.ItemKind
+import ru.finney.pet.domain.model.ItemUse
 import ru.finney.pet.domain.model.LedgerEntry
 import ru.finney.pet.domain.model.Period
 import ru.finney.pet.domain.model.PeriodFacts
@@ -49,6 +50,9 @@ data class PurchasePreview(
     /** 0 — денег хватает. */
     val shortage: Int,
 )
+
+/** Расходник на полке: что и сколько штук. */
+data class ShelfItem(val item: ShopItem, val count: Int)
 
 data class WithdrawPreview(
     val savedBefore: Int,
@@ -313,11 +317,27 @@ class Game(
 
     // ---------- Покупки ----------
 
+    /**
+     * Купить и сразу применить: расходник съеден или использован в момент покупки — так
+     * кормят на кухне и моют в ванной. Для остального то же, что [buyToShelf].
+     */
     fun buy(state: GameState, itemId: String): GameResult {
         val item = content.item(itemId) ?: return reject(Rejection.UnknownItem(itemId))
         // Спящего не кормят и не моют — это кухня и ванная. «Хочется» и шляпы
         // из магазина покупать можно: магазин во сне открыт.
         if (state.sleepingSince != null && item.feedsOrWashes) return reject(Rejection.Asleep)
+        val bought = buyToShelf(state, itemId)
+        if (bought !is GameResult.Ok || item.kind != ItemKind.CONSUMABLE) return bought
+        return use(bought.state, itemId)
+    }
+
+    /**
+     * Купить в магазине. Расходник ложится на полку ([shelf]) и на питомца пока не действует:
+     * съесть — отдельно, [use]. Поэтому спит питомец или нет, не важно. Аксессуар и игрушка
+     * действуют сразу, как и раньше: они остаются у питомца.
+     */
+    fun buyToShelf(state: GameState, itemId: String): GameResult {
+        val item = content.item(itemId) ?: return reject(Rejection.UnknownItem(itemId))
         if (state.currentPeriod.phase != PeriodPhase.ACTIVE) return reject(Rejection.PlanNotConfirmed)
         content.goalFor(item.id)?.let { return reject(Rejection.NotForSale(item.id, it.label)) }
         if (!isUnlocked(state, item)) return reject(Rejection.Locked(item.unlockLevel))
@@ -326,10 +346,30 @@ class Game(
         if (item.price > state.balance) return reject(Rejection.InsufficientFunds(item.price, state.balance))
         val entry = entry(state, EntryType.PURCHASE, balanceDelta = -item.price)
             .copy(category = item.category, itemId = item.id)
+        if (item.kind == ItemKind.CONSUMABLE) return ok(state.copy(ledger = state.ledger + entry))
         val bought = state.copy(pet = PetRules.apply(state.pet, item.effect), ledger = state.ledger + entry)
         // Купленный аксессуар сразу надевается: ребёнок видит покупку на питомце.
         return ok(if (item.kind == ItemKind.ACCESSORY) bought.wearing(item) else bought)
     }
+
+    /**
+     * Взять расходник с полки: съесть, помыться, посмотреть мультик. Бесплатно — он уже
+     * куплен, поэтому и до плана можно. Во сне не едят и не моются, как и при [buy].
+     */
+    fun use(state: GameState, itemId: String): GameResult {
+        val item = content.item(itemId) ?: return reject(Rejection.UnknownItem(itemId))
+        if (item.kind != ItemKind.CONSUMABLE) return reject(Rejection.NotPlayable(itemId))
+        if (state.sleepingSince != null && item.feedsOrWashes) return reject(Rejection.Asleep)
+        if (state.onShelf(itemId) <= 0) return reject(Rejection.NotOwned(itemId))
+        val use = ItemUse(periodNumber = state.currentPeriod.number, itemId = itemId, createdAt = clock())
+        return ok(state.copy(pet = PetRules.apply(state.pet, item.effect), uses = state.uses + use))
+    }
+
+    /** Что лежит на полке, в порядке магазина. Пустых мест нет. */
+    fun shelf(state: GameState): List<ShelfItem> =
+        content.shop
+            .filter { it.kind == ItemKind.CONSUMABLE }
+            .mapNotNull { item -> state.onShelf(item.id).takeIf { it > 0 }?.let { ShelfItem(item, it) } }
 
     // ---------- Сон ----------
 
