@@ -258,7 +258,8 @@ fun HomeScreen(
             onOpenHelp = onOpenHelp,
             onOpenGlossary = onOpenGlossary,
             onClosePeriod = viewModel::closePeriod,
-            onBuy = viewModel::buy,
+            onBuy = { viewModel.buy(it) },
+            onBuyFromWants = { viewModel.buy(it, fromWants = true) },
             onWash = viewModel::wash,
             onSleep = viewModel::sleep,
             onWake = viewModel::wake,
@@ -339,6 +340,7 @@ internal fun HomeContent(
     onOpenHelp: () -> Unit,
     onClosePeriod: () -> Unit,
     onBuy: (itemId: String) -> Unit,
+    onBuyFromWants: (itemId: String) -> Unit = {},
     onWash: (itemId: String?) -> Unit = {},
     onSleep: () -> Unit = {},
     onWake: () -> Unit = {},
@@ -468,6 +470,8 @@ internal fun HomeContent(
     // Игра ухода: что выбрали в панели и теперь бросают в рот или трут о питомца.
     // Покупка — в конце игры, см. ui/room/CareGame.kt.
     var playing by rememberSaveable { mutableStateOf<String?>(null) }
+    // Еду выбрали с «Взять и покормить»: в конце игры покупка — с переносом из радостей.
+    var playingFromWants by rememberSaveable { mutableStateOf(false) }
 
     // Выключены — питомец не прыгает и не хихикает: цепочка шагов при нулевой
     // скорости мелькает по кадру на шаг, это хуже, чем стоять спокойно.
@@ -1217,6 +1221,8 @@ internal fun HomeContent(
                     step = step,
                     shelf = state.bath,
                     onBuy = onBuy,
+                    fromWants = state.fromWants,
+                    onBuyFromWants = onBuyFromWants,
                     onDismiss = { bathShop = null },
                     modifier = Modifier.pointerInput(Unit) { detectTapGestures { } },
                     block = if (state.phase == PeriodPhase.ACTIVE) {
@@ -1297,7 +1303,7 @@ internal fun HomeContent(
                         )
                     },
                     options = previews.map {
-                        CareOption(it.item, it, isSelected = it.item.id == picked, left = stock[it.item.id])
+                        CareOption(it.item, it, isSelected = it.item.id == picked, left = stock[it.item.id], fromWants = state.fromWants[it.item.id])
                     },
                     onPick = { picked = it },
                     guide = state.level == 1,
@@ -1315,7 +1321,27 @@ internal fun HomeContent(
                             }
                             CareTarget.BATH -> onBuy(itemId)
                         }
+                        playingFromWants = false
                         picked = null
+                    },
+                    onConfirmFromWants = { itemId ->
+                        when (target) {
+                            CareTarget.FOOD -> {
+                                playing = itemId
+                                playingFromWants = true
+                                care = null
+                            }
+                            CareTarget.BATH -> onBuyFromWants(itemId)
+                        }
+                        picked = null
+                    },
+                    fromWantsLabel = when (target) {
+                        CareTarget.FOOD -> "Взять и покормить"
+                        CareTarget.BATH -> "Взять и купить"
+                    },
+                    overPlanLabel = when (target) {
+                        CareTarget.FOOD -> "Покормить сверх плана"
+                        CareTarget.BATH -> "Купить сверх плана"
                     },
                     onDismiss = { care = null; picked = null },
                     // Окно покупки — тот же магазин в миниатюре (плейтест 28.09: еду покупали
@@ -1399,7 +1425,8 @@ internal fun HomeContent(
                     ),
                     onMouthOpen = animation::openMouth,
                     onEaten = {
-                        onBuy(itemId)
+                        if (playingFromWants) onBuyFromWants(itemId) else onBuy(itemId)
+                        playingFromWants = false
                         if (animations) animation.playEat()
                         playing = null
                     },

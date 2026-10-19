@@ -35,6 +35,7 @@ import ru.finney.pet.ui.components.OutlinedText
 import ru.finney.pet.ui.components.FeedbackDialog
 import ru.finney.pet.ui.room.CareOption
 import ru.finney.pet.ui.room.CarePanel
+import ru.finney.pet.ui.room.FromWantsOffer
 import ru.finney.pet.ui.room.ItemPicture
 import ru.finney.pet.ui.room.PickHint
 import ru.finney.pet.ui.room.itemFallback
@@ -64,7 +65,8 @@ fun ShopScreen(
         is ShopUiState.Ready -> ShopContent(
             state = s,
             onSelect = viewModel::select,
-            onBuy = viewModel::buy,
+            onBuy = { viewModel.buy(it) },
+            onBuyFromWants = { viewModel.buy(it, fromWants = true) },
             onDismiss = viewModel::dismissFeedback,
             onBack = onBack,
             onOpenBudget = onOpenBudget,
@@ -82,6 +84,7 @@ internal fun ShopContent(
     onBack: () -> Unit,
     onOpenBudget: () -> Unit,
     onOpenHistory: () -> Unit,
+    onBuyFromWants: (String) -> Unit = {},
 ) {
     val selected = (state.needs + state.wants + state.toys).firstOrNull { it.item.id == state.selectedId }
     FeedbackSound(state.feedback, null)
@@ -102,7 +105,7 @@ internal fun ShopContent(
                 ActionFeedbackSummary(it)
                 Text(it.why, style = MaterialTheme.typography.bodyMedium, color = FinneyInk)
             }
-            BuyBar(state, selected, onBuy, onOpenBudget)
+            BuyBar(state, selected, onBuy, onBuyFromWants, onOpenBudget)
         },
     ) {
         FeedbackDialog(
@@ -201,13 +204,27 @@ private fun SectionBanner(kind: SectionKind, planLeft: Int?) = when (kind) {
  * со стрелкой к товарам. Без плана — почему нельзя и путь к плану.
  */
 @Composable
-private fun BuyBar(state: ShopUiState.Ready, selected: PurchasePreview?, onBuy: (String) -> Unit, onOpenBudget: () -> Unit) {
+private fun BuyBar(
+    state: ShopUiState.Ready,
+    selected: PurchasePreview?,
+    onBuy: (String) -> Unit,
+    onBuyFromWants: (String) -> Unit,
+    onOpenBudget: () -> Unit,
+) {
+    val fromWants = selected?.let { state.fromWants[it.item.id] }
     when {
         !state.canBuy -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Сначала составь план — потом покупки", style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
             FinneyButton(text = "К плану расходов", onClick = onOpenBudget)
         }
         selected == null -> PickHint()
+        fromWants != null -> FromWantsOffer(
+            amount = fromWants,
+            takeLabel = "Взять и купить",
+            overPlanLabel = "Купить сверх плана",
+            onTake = { onBuyFromWants(selected.item.id) },
+            onOverPlan = { onBuy(selected.item.id) },
+        )
         else -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 when (selected.item.kind) {

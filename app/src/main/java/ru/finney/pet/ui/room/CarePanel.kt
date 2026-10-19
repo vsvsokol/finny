@@ -44,6 +44,8 @@ import ru.finney.pet.ui.components.FinneyCard
 import ru.finney.pet.ui.components.FinneyIcon
 import ru.finney.pet.ui.components.FinneyIcons
 import ru.finney.pet.ui.components.FinneyPanel
+import ru.finney.pet.ui.components.FinneyQuietButton
+import ru.finney.pet.ui.components.WarningBadge
 import ru.finney.pet.ui.components.MoodFace
 import ru.finney.pet.ui.components.OutlinedText
 import ru.finney.pet.ui.components.fadingScroll
@@ -67,6 +69,8 @@ data class CareOption(
     val isSelected: Boolean,
     /** Сколько раз ещё хватит того, что уже есть (мыло, паста); null — товар без запаса. */
     val left: Int? = null,
+    /** Сколько взять из радостей, чтобы покупка не вышла за план (Game.wantsToNeeds); null — не нужно. */
+    val fromWants: Int? = null,
 )
 
 /**
@@ -116,6 +120,9 @@ data class CareBlock(
  *
  * [tilePicture] — размер картинки в плитке: в окне поверх комнаты плитки ниже, чтобы
  * кухня целиком и кнопка помещались на экран 360 × 740 dp без прокрутки.
+ *
+ * [onConfirmFromWants] — у выбранного нужное выходит за план ([CareOption.fromWants]):
+ * вместо одной кнопки — [FromWantsOffer]. null — предложения нет.
  */
 @Composable
 fun CarePanel(
@@ -135,6 +142,9 @@ fun CarePanel(
     groupBanner: (@Composable (Category) -> Unit)? = null,
     tilePicture: Dp = TilePicture,
     guide: Boolean = false,
+    onConfirmFromWants: ((itemId: String) -> Unit)? = null,
+    fromWantsLabel: String = "Взять и купить",
+    overPlanLabel: String = "Купить сверх плана",
 ) {
     val selected = options.firstOrNull { it.isSelected }
     // Обучение: рука показывает сначала товар, потом «Купить». Плейтест 29.09 — не
@@ -217,12 +227,54 @@ fun CarePanel(
         // с нехваткой уже написано, сколько не достаёт и что делать, — кнопка
         // молча неактивной не остаётся.
         val canBuy = selected != null && (allowShortage || selected.preview.shortage == 0)
+        val fromWants = selected?.fromWants?.takeIf { canBuy && onConfirmFromWants != null }
+        if (selected != null && fromWants != null) {
+            FromWantsOffer(
+                amount = fromWants,
+                takeLabel = fromWantsLabel,
+                overPlanLabel = overPlanLabel,
+                onTake = { onConfirmFromWants?.invoke(selected.item.id) },
+                onOverPlan = { onConfirm(selected.item.id) },
+                guide = guide,
+            )
+            return@FinneyPanel
+        }
         FinneyButton(
             text = confirmLabel,
             onClick = { selected?.let { onConfirm(it.item.id) } },
             enabled = canBuy,
             modifier = Modifier.pointHere(guide && canBuy),
         )
+    }
+}
+
+/**
+ * «Возьми из радостей» (Game.wantsToNeeds): нужное выйдет за план, а «хочется» ещё не
+ * потрачено. Предупреждение, а не ошибка — голубое «!» и словами (ТЗ п. 3.6). Главная
+ * кнопка перекладывает [amount] из радостей и покупает, тихая — покупает сверх плана.
+ */
+@Composable
+fun FromWantsOffer(
+    amount: Int,
+    takeLabel: String,
+    overPlanLabel: String,
+    onTake: () -> Unit,
+    onOverPlan: () -> Unit,
+    modifier: Modifier = Modifier,
+    guide: Boolean = false,
+) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            WarningBadge(size = 24.dp)
+            Text(
+                text = "Нужное выйдет за план на $amount. Возьми $amount из радостей — радость подождёт.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = FinneyInk,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        FinneyButton(text = takeLabel, onClick = onTake, modifier = Modifier.pointHere(guide))
+        FinneyQuietButton(text = overPlanLabel, onClick = onOverPlan)
     }
 }
 

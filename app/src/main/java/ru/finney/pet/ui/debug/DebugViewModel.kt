@@ -19,6 +19,7 @@ import ru.finney.pet.domain.game.GameResult
 import ru.finney.pet.domain.game.Session
 import ru.finney.pet.domain.model.EntryType
 import ru.finney.pet.domain.model.GameState
+import ru.finney.pet.domain.model.ItemUse
 import ru.finney.pet.domain.model.LedgerEntry
 import ru.finney.pet.domain.model.PeriodPhase
 import ru.finney.pet.domain.model.PetStats
@@ -110,17 +111,15 @@ class DebugViewModel(private val session: Session) : ViewModel() {
 
     /**
      * Всё с полочки ванны кончилось — проверить «Купить» на плитках и магазин ванны,
-     * не намывая питомца по десять раз. Запас — покупки минус мытьё, поэтому дописываются
-     * записи мытья, как будто всё истратили; деньги не трогаются.
+     * не намывая питомца по десять раз. Запас — покупки минус взятое (`uses`), поэтому
+     * остаток каждого предмета дописывается взятым разом; деньги не трогаются.
      */
     fun emptyBath() = command { state ->
         val now = System.currentTimeMillis()
-        val used = (soaps + bathExtras).flatMap { item ->
-            List(stock(state, item.id)) {
-                LedgerEntry(state.currentPeriod.number, EntryType.WASH, balanceDelta = 0, itemId = item.id, createdAt = now)
-            }
+        val used = (soaps + bathExtras).mapNotNull { item ->
+            stock(state, item.id).takeIf { it > 0 }?.let { ItemUse(state.currentPeriod.number, item.id, now, portions = it) }
         }
-        GameResult.Ok(state.copy(ledger = state.ledger + used))
+        GameResult.Ok(state.copy(uses = state.uses + used))
     }
 
     /** Пустой план — чтобы сразу можно было покупать, не заходя в экран плана. */

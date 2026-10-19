@@ -364,6 +364,21 @@ class Game(
         return ok(state.withCurrentPeriod(period.copy(plan = moved)))
     }
 
+    /**
+     * «Возьми из радостей» и покупка одной командой: перенос ровно на [wantsToNeeds], затем
+     * [purchase] (на кухне и в магазине — [buy], на полку — [buyToShelf]). Покупка отказала —
+     * отказ целиком, план не сдвинулся. Переносить нечего — обычная покупка.
+     */
+    fun buyFromWants(
+        state: GameState,
+        itemId: String,
+        purchase: Game.(GameState) -> GameResult = { buy(it, itemId) },
+    ): GameResult {
+        val amount = wantsToNeeds(state, itemId) ?: return purchase(state)
+        val moved = moveWantsToNeeds(state, amount)
+        return if (moved is GameResult.Ok) purchase(moved.state) else moved
+    }
+
     // ---------- Покупки ----------
 
     /**

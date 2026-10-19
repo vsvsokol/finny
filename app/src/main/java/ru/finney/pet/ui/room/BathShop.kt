@@ -22,6 +22,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -55,6 +56,7 @@ import ru.finney.pet.ui.theme.StrokeThin
  * Магазин шага [step]: мыло или щётка с пастой. Покупка — выбором и отдельной кнопкой,
  * как везде (ТЗ п. 2.5.6). [block] — купить сейчас нельзя (нет плана) и куда идти.
  * Когда для шага всё есть, окно закрывается само — ребёнок снова в ванной, рука на плитке.
+ * [fromWants] — нужное, которое выйдет за план: вместо «Купить» — [FromWantsOffer].
  */
 @Composable
 fun BathShop(
@@ -65,6 +67,8 @@ fun BathShop(
     modifier: Modifier = Modifier,
     block: CareBlock? = null,
     coins: (@Composable () -> Unit)? = null,
+    fromWants: Map<String, Int> = emptyMap(),
+    onBuyFromWants: ((itemId: String) -> Unit)? = null,
 ) {
     val offers = shelf.items.filter { it.step == step }.sortedBy { it.item.price }
     var picked by rememberSaveable { mutableStateOf<String?>(null) }
@@ -81,10 +85,11 @@ fun BathShop(
 
     // Цена одного раза — по ней сравнивают мыло. Выгоднее — где раз дешевле, если мыла больше одного.
     fun perUse(o: ShelfItem) = o.item.price.toFloat() / o.uses
-    val best = offers.takeIf { it.size > 1 }?.minByOrNull(::perUse)
+    // Закрытое по уровню не сравниваем: купить его всё равно нельзя.
+    val best = offers.filter { it.lockedUntil == null }.takeIf { it.size > 1 }?.minByOrNull(::perUse)
     // Щётка без пасты не чистит: рука — на то, чего нет.
     val pointAt = if (selected == null && block == null) {
-        offers.firstOrNull { it.left == 0 && it.preview.shortage == 0 } ?: best?.takeIf { it.preview.shortage == 0 }
+        offers.firstOrNull { it.left == 0 && it.preview.shortage == 0 && it.lockedUntil == null } ?: best?.takeIf { it.preview.shortage == 0 }
     } else null
 
     FinneyPanel(
@@ -110,7 +115,7 @@ fun BathShop(
                     best = offer == best,
                     perUse = perUse(offer),
                     pair = step == BathStep.TEETH,
-                    onPick = { picked = offer.item.id },
+                    onPick = { if (offer.lockedUntil == null) picked = offer.item.id },
                     modifier = Modifier.pointHere(offer == pointAt, corner = RadiusCard),
                 )
             }
@@ -121,6 +126,23 @@ fun BathShop(
             return@FinneyPanel
         }
         if (selected == null) PickHint()
+        val take = selected?.takeIf { it.preview.shortage == 0 && onBuyFromWants != null }?.let { fromWants[it.item.id] }
+        if (selected != null && take != null) {
+            FromWantsOffer(
+                amount = take,
+                takeLabel = "Взять и купить",
+                overPlanLabel = "Купить сверх плана",
+                onTake = {
+                    onBuyFromWants?.invoke(selected.item.id)
+                    picked = null
+                },
+                onOverPlan = {
+                    onBuy(selected.item.id)
+                    picked = null
+                },
+            )
+            return@FinneyPanel
+        }
         FinneyButton(
             text = "Купить",
             onClick = {
@@ -137,7 +159,8 @@ fun BathShop(
 /**
  * Строка товара: картинка, «хватит на N раз» крупно, «+40 за раз», цена и цена одного раза.
  * Сколько уже есть — «есть ×N» или «нет». Выбранное — жёлтое с «✓», нехватка — голубое
- * с «!» и словами (ТЗ п. 3.6), как в окне кухни.
+ * с «!» и словами (ТЗ п. 3.6), как в окне кухни. Закрытое по уровню — бледное, с замком
+ * и «откроется на уровне N», выбрать нельзя.
  */
 @Composable
 private fun BathOffer(
@@ -151,7 +174,9 @@ private fun BathOffer(
 ) {
     val shortage = offer.preview.shortage
     val each = if (perUse % 1f == 0f) perUse.toInt().toString() else "%.1f".format(perUse).replace('.', ',')
+    val locked = offer.lockedUntil
     val accent = when {
+        locked != null -> null
         shortage > 0 -> FinneyBlue
         selected -> FinneyYellow
         else -> null
@@ -160,15 +185,15 @@ private fun BathOffer(
         modifier = modifier
             .semantics(mergeDescendants = true) {
                 contentDescription = "${offer.item.label}: хватит на ${times(offer.uses)}, ${offer.item.price} финок, " +
-                    "раз — $each" + if (best) ", выгоднее" else ""
+                    "раз — $each" + (if (best) ", выгоднее" else "") + (locked?.let { ", откроется на уровне $it" } ?: "")
                 this.selected = selected
             }
-            .clickable(onClickLabel = "Выбрать: ${offer.item.label}", onClick = onPick),
+            .clickable(enabled = locked == null, onClickLabel = "Выбрать: ${offer.item.label}", onClick = onPick),
         accent = accent,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Box(contentAlignment = Alignment.TopEnd) {
-                ItemPicture(offer.item.id, itemFallback(offer.item.id), size = 64.dp)
+                ItemPicture(offer.item.id, itemFallback(offer.item.id), size = 64.dp, modifier = Modifier.alpha(if (locked != null) 0.35f else 1f))
                 if (selected) CheckBadge(size = 24.dp)
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -183,9 +208,16 @@ private fun BathOffer(
                     color = FinneyInk,
                 )
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (offer.left == 0) WarningBadge(size = 20.dp)
+                    when {
+                        locked != null -> FinneyIcon(FinneyIcons.Lock, size = 20.dp)
+                        offer.left == 0 -> WarningBadge(size = 20.dp)
+                    }
                     Text(
-                        text = if (offer.left == 0) "нет на полочке" else "есть ×${offer.left}",
+                        text = when {
+                            locked != null -> "с уровня $locked"
+                            offer.left == 0 -> "нет на полочке"
+                            else -> "есть ×${offer.left}"
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = FinneyInk,
                     )
@@ -197,7 +229,7 @@ private fun BathOffer(
                 if (best) BestLabel()
             }
         }
-        if (shortage > 0) {
+        if (shortage > 0 && locked == null) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 WarningBadge(size = 20.dp)
                 Text("Не хватает $shortage", style = MaterialTheme.typography.bodyMedium, color = FinneyInk)
