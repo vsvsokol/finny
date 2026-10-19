@@ -115,6 +115,16 @@ data class TaskAttempt(
     val bonus: Boolean = false,
 )
 
+/**
+ * Расходник взят с полки — съеден или использован. Покупка и использование — разные факты:
+ * купленное может лежать на полке ([GameState.onShelf]). База версии 12.
+ */
+data class ItemUse(
+    val periodNumber: Int,
+    val itemId: String,
+    val createdAt: Long,
+)
+
 /** Полное состояние одного профиля. Меняется только через [ru.finney.pet.domain.game.Game]. */
 data class GameState(
     val isDemo: Boolean,
@@ -133,6 +143,8 @@ data class GameState(
     val playMood: Int = 0,
     /** Когда началась текущая сессия игры, мс; null — сессии нет. */
     val playSince: Long? = null,
+    /** Что взято с полки, по порядку. Только дописывается, как [ledger]. */
+    val uses: List<ItemUse> = emptyList(),
 ) {
     val currentPeriod: Period get() = periods.last()
 
@@ -149,6 +161,13 @@ data class GameState(
 
     fun isGoalCompleted(goalId: String): Boolean =
         ledger.any { it.type == EntryType.GOAL_COMPLETE && it.goalId == goalId }
+
+    /**
+     * Сколько штук расходника лежит на полке: куплено минус взято. Для вещей, которые
+     * не расходуются, число не имеет смысла — их наличие проверяет [owns].
+     */
+    fun onShelf(itemId: String): Int =
+        ledger.count { it.type == EntryType.PURCHASE && it.itemId == itemId } - uses.count { it.itemId == itemId }
 
     /** Вещь куплена или получена за достигнутую цель. */
     fun owns(itemId: String): Boolean = ledger.any {

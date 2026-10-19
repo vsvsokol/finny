@@ -10,7 +10,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import ru.finney.pet.data.db.FinneyDatabase
 
-/** Обновление приложения не стирает прогресс: база версии 3 переносится в 4 … 10 с данными. */
+/** Обновление приложения не стирает прогресс: база версии 3 переносится в 4 … 12 с данными. */
 @RunWith(AndroidJUnit4::class)
 class MigrationTest {
 
@@ -208,6 +208,36 @@ class MigrationTest {
                 assertTrue(c.moveToFirst())
                 assertEquals("шляпа на месте", "hat_cowboy", c.getString(0))
                 assertTrue("очков у старого профиля нет", c.isNull(1))
+            }
+        }
+    }
+
+    @Test
+    fun migrate11To12KeepsPurchasesAndLeavesShelfEmpty() {
+        helper.createDatabase(dbName, 11).use { db ->
+            db.execSQL(
+                "INSERT INTO profiles (id, petName, petCharacter, bodyColor, eyes, activeGoalId, isDemo, createdAt) " +
+                    "VALUES (1, 'Финни', 'PUSHISTIK', 'A', 'ROUND', NULL, 0, 1)",
+            )
+            db.execSQL(
+                "INSERT INTO ledger (id, profileId, periodNumber, type, balanceDelta, savingsDelta, category, itemId, goalId, taskId, unplanned, createdAt) VALUES " +
+                    "(1, 1, 1, 'INCOME', 50, 0, NULL, NULL, NULL, NULL, 0, 10), " +
+                    "(2, 1, 1, 'PURCHASE', -10, 0, 'NEEDS', 'food_apple', NULL, NULL, 0, 20), " +
+                    "(3, 1, 2, 'PURCHASE', -10, 0, 'NEEDS', 'food_apple', NULL, NULL, 0, 30)",
+            )
+        }
+
+        helper.runMigrationsAndValidate(dbName, 12, true, FinneyDatabase.MIGRATION_11_12).use { db ->
+            db.query("SELECT COUNT(*) FROM ledger").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("операции на месте", 3, c.getInt(0))
+            }
+            db.query("SELECT periodNumber, itemId, createdAt FROM item_uses ORDER BY id").use { c ->
+                assertEquals("каждая старая покупка уже применена", 2, c.count)
+                assertTrue(c.moveToFirst())
+                assertEquals(1, c.getInt(0))
+                assertEquals("food_apple", c.getString(1))
+                assertEquals(20L, c.getLong(2))
             }
         }
     }

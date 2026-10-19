@@ -10,7 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 /**
  * Схема каждой версии экспортируется в app/schemas и коммитится.
  *
- * С версии 3 изменения переносятся миграциями — [MIGRATION_3_4] … [MIGRATION_10_11]. Базы версий 1–2
+ * С версии 3 изменения переносятся миграциями — [MIGRATION_3_4] … [MIGRATION_11_12]. Базы версий 1–2
  * пересоздаются с нуля: версия 3 переименовала питомцев, а перенести старые значения было бы
  * возможно только храня прежние имена прямо в коде.
  */
@@ -21,8 +21,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PeriodEntity::class,
         LedgerEntryEntity::class,
         TaskAttemptEntity::class,
+        ItemUseEntity::class,
     ],
-    version = 11,
+    version = 12,
     exportSchema = true,
 )
 abstract class FinneyDatabase : RoomDatabase() {
@@ -34,7 +35,7 @@ abstract class FinneyDatabase : RoomDatabase() {
 
         fun create(context: Context): FinneyDatabase =
             Room.databaseBuilder(context.applicationContext, FinneyDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
 
@@ -116,6 +117,29 @@ abstract class FinneyDatabase : RoomDatabase() {
         val MIGRATION_10_11 = object : Migration(10, 11) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE profiles ADD COLUMN wornEyesId TEXT")
+            }
+        }
+
+        /**
+         * 11 → 12: полка расходников — что взято с неё, отдельно от покупки. До версии 12 всё
+         * купленное применялось сразу, поэтому каждой старой покупке пишется её использование
+         * в тот же момент: полка у старых профилей пустая. Для шляп и игрушек такая запись
+         * ничего не значит — полку считают только по расходникам.
+         */
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `item_uses` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`profileId` INTEGER NOT NULL, `periodNumber` INTEGER NOT NULL, `itemId` TEXT NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL, FOREIGN KEY(`profileId`) REFERENCES `profiles`(`id`) " +
+                        "ON UPDATE NO ACTION ON DELETE CASCADE )",
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_item_uses_profileId` ON `item_uses` (`profileId`)")
+                db.execSQL(
+                    "INSERT INTO item_uses (profileId, periodNumber, itemId, createdAt) " +
+                        "SELECT profileId, periodNumber, itemId, createdAt FROM ledger " +
+                        "WHERE type = 'PURCHASE' AND itemId IS NOT NULL ORDER BY id",
+                )
             }
         }
     }
