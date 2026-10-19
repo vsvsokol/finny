@@ -64,6 +64,7 @@ sealed interface TaskUiState {
         val attempt: Int,
         val result: TaskOutcomeUi?,
         val inputError: TaskInputError?,
+        val isLevelGame: Boolean = false,
     ) : TaskUiState
 }
 
@@ -140,6 +141,7 @@ class TaskViewModel(
             attempt = local.attempt,
             result = local.result,
             inputError = local.inputError,
+            isLevelGame = state.currentPeriod.levelTaskId == taskId,
         )
     }
 

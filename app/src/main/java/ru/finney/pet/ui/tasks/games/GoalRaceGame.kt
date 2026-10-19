@@ -92,8 +92,8 @@ import ru.finney.pet.ui.theme.StrokeThin
 // купить или нет, ребёнок выбирает кнопкой.
 //
 // Рядом с копилкой — сердечки Финни. Отказался от соблазна дня — одно гаснет,
-// позволил себе — загорается. Погасли все — Финни грустит до финиша, и цель не
-// засчитана: копить учимся понемногу, а не «никогда ничего».
+// позволил себе — загорается. Погасли все — Финни грустит до финиша: цель засчитана,
+// но без бонуса — копить учимся понемногу, а не «никогда ничего».
 //
 // Плейтест: без вступления ребёнок видел «осталось 45», полоску и «−5 / +5»,
 // не понимал, что это, и жал «Готово» наугад; наклейки на втором ходу ставили
@@ -179,7 +179,7 @@ internal fun GoalRaceGame(
                 if (mood == 0) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         AlertBadge(size = 28.dp)
-                        Text("Финни загрустил: без радостей цель не засчитается.", style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
+                        Text("Финни загрустил. Порадуй его — без радостей бонуса не будет.", style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
                     }
                 } else {
                     GoalLeft(task, savedAfterToday = saved + if (decided) today else 0)

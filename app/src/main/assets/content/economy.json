@@ -16,6 +16,7 @@
   "demoLevelGameRequired": false,
   "maxLevel": 30,
   "stageStartLevels": [1, 2, 4, 6, 12, 20],
+  "stageTitles": ["Новичок", "Планировщик", "Копилкин", "Запасливый", "Добытчик", "Мастер бюджета"],
   "pet": {
     "start": { "satiety": 70, "hygiene": 70, "mood": 70, "energy": 90 },
     "decayByStage": [

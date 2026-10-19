@@ -34,6 +34,7 @@ import ru.finney.pet.domain.model.ShopItem
 import ru.finney.pet.domain.model.ItemArt
 import ru.finney.pet.domain.model.TaskDefinition
 import ru.finney.pet.domain.model.TaskOutcome
+import ru.finney.pet.ui.isReserveMode
 import ru.finney.pet.ui.tasks.games.taskIcon
 import kotlin.random.Random
 import ru.finney.pet.domain.pet.Emotion
@@ -46,7 +47,7 @@ const val LEVEL_CONDITIONS = 3
 /**
  * Одно действие, которое главный экран подсвечивает прямо сейчас (плейтест 28.09:
  * «ничего не понятно, что делать»). Порядок — как проходится уровень: план, еда и мытьё,
- * игра уровня, сон, завершение. Выбирает [nextStepFor].
+ * игра уровня, сон, обещанный взнос, завершение. Выбирает [nextStepFor].
  */
 enum class NextStep {
     /** Плана нет — значок уровня, внутри «Составить план». */
@@ -73,7 +74,14 @@ enum class NextStep {
  * Сон — последним перед завершением: пока питомец спит, остальное закрыто, и уложи
  * его первым — ребёнок сидел бы перед капсулой, не сделав ничего другого (плейтест).
  */
-internal fun nextStepFor(check: LevelCheck, stats: PetStats, needsThreshold: Int, asleep: Boolean): NextStep? {
+internal fun nextStepFor(
+    check: LevelCheck,
+    stats: PetStats,
+    needsThreshold: Int,
+    asleep: Boolean,
+    savingsPlanLeft: Int,
+    availableBalance: Int,
+): NextStep? {
     if (asleep) return null
     if (!check.planConfirmed) return NextStep.PLAN
     listOf(NextStep.FEED to stats.satiety, NextStep.WASH to stats.hygiene)
@@ -82,8 +90,11 @@ internal fun nextStepFor(check: LevelCheck, stats: PetStats, needsThreshold: Int
         ?.let { return it.first }
     if (check.levelTaskId != null && check.gameRequired && !check.gamePassed) return NextStep.LEVEL_GAME
     if (stats.energy < needsThreshold) return NextStep.SLEEP
+    // Допуск плана разрешает завершить уровень с неполным взносом. Напоминаем
+    // о собственном обещании, пока есть деньги; правила завершения не меняем.
+    if (savingsPlanLeft > 0 && availableBalance > 0) return NextStep.SAVE
     if (check.willPass) return NextStep.FINISH
-    if (!check.savingsAdded) return NextStep.SAVE
+    if (!check.savingsAdded && availableBalance > 0) return NextStep.SAVE
     return null
 }
 
@@ -148,6 +159,13 @@ sealed interface HomeUiState {
         val levelGames: List<LevelGame> = emptyList(),
         /** Почему план пока не сходится — словами и числом; null — сходится или плана нет. */
         val planGap: PlanGap? = null,
+        /** Невнесённая часть обещанного взноса, без допуска оценки плана. */
+        val savingsPlanLeft: Int = 0,
+        val reserveMode: Boolean = false,
+        /** Порог трёх шкал ухода из правил игры. */
+        val needsThreshold: Int = 50,
+        /** Критически низкая шкала — отдельный порог, не условие прохождения уровня. */
+        val criticalThreshold: Int = 30,
     ) : HomeUiState {
         /** Уровень завершается только после подтверждения плана. */
         val canClosePeriod: Boolean get() = phase == PeriodPhase.ACTIVE
@@ -330,6 +348,9 @@ class HomeViewModel(
         val state = saved.state
         val level = game.level(state)
         val check = game.levelCheck(state)
+        val savingsPlanLeft = game.planReport(state)?.let {
+            (it.plan.savings - it.facts.savings).coerceAtLeast(0)
+        } ?: 0
         return HomeUiState.Ready(
             petName = saved.profile.petName,
             appearance = saved.profile.appearance,
@@ -348,6 +369,10 @@ class HomeViewModel(
             levelGame = state.currentPeriod.levelTaskId?.let { content.task(it)?.title },
             levelGames = levelGames(state),
             planGap = planGap(state, check),
+            savingsPlanLeft = savingsPlanLeft,
+            reserveMode = game.isReserveMode(state),
+            needsThreshold = content.economy.pet.needsThreshold,
+            criticalThreshold = content.economy.pet.emotionLow,
             // Что лежит на столе и что в ванной, решает не список имён, а эффект
             // предмета: добавят в контент новую еду — она появится на столе сама.
             food = previews(state) { it.effect.satiety > 0 },
@@ -386,6 +411,8 @@ class HomeViewModel(
                 stats = state.pet,
                 needsThreshold = content.economy.pet.needsThreshold,
                 asleep = state.sleepingSince != null,
+                savingsPlanLeft = savingsPlanLeft,
+                availableBalance = state.balance,
             ),
         )
     }

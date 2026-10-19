@@ -14,7 +14,6 @@ import ru.finney.pet.domain.model.ReserveTask
 import ru.finney.pet.domain.model.SorterTask
 import ru.finney.pet.domain.model.StandTask
 import ru.finney.pet.domain.model.TaskDefinition
-import ru.finney.pet.domain.model.TaskOutcome
 
 /**
  * Проверка одного задания: числа в допустимых пределах и игру можно выиграть.
@@ -106,10 +105,10 @@ object TaskChecks {
         task.events.filter { it.price <= 0 }.forEach { add("$at — событие «${it.label}»: цена должна быть > 0") }
         duplicates(task.events.map { it.day.toString() }).forEach { add("$at — два соблазна в дне $it") }
         if (task.mood <= 0) add("$at — mood должен быть > 0")
-        // Игра учит откладывать понемногу, а не «никогда ничего»: копить всё подряд не должно выигрывать.
+        // Игра учит откладывать понемногу, а не «никогда ничего»: копить всё подряд проходит, но без бонуса.
         val saveAll = TaskEngines.evaluate(task, TaskInput.DailyDeposits(List(task.days) { task.incomePerDay }))
-        if ((saveAll as? TaskEvaluation.Done)?.outcome == TaskOutcome.SUCCESS) {
-            add("$at — выигрывает «откладывать всё»: соблазнов меньше, чем сердечек в mood")
+        if ((saveAll as? TaskEvaluation.Done)?.bonus == true) {
+            add("$at — «откладывать всё» получает бонус: соблазнов меньше, чем сердечек в mood")
         } else if (task.startSaved + task.days * task.incomePerDay >= task.goal.price && TaskEngines.raceSolution(task) == null) {
             add("$at — цель не набрать, сохранив Финни настроение: не хватает свободных монет на радости")
         }
@@ -120,7 +119,7 @@ object TaskChecks {
         task.surprises.filter { it.price <= 0 }.forEach { add("$at — сюрприз «${it.label}»: price должен быть > 0") }
         duplicates(task.spendings.map { it.id }).forEach { add("$at — повторяется трата $it") }
         task.spendings.filter { it.price <= 0 }.forEach { add("$at — ${it.id}: цена должна быть > 0") }
-        // Выигрыш — нужное, хотя бы одно желаемое и запас на все сюрпризы. Без желаемого не выиграть.
+        // Бонус — нужное, хотя бы одно желаемое и запас на все сюрпризы. Без желаемого бонуса нет.
         val wants = task.spendings.filter { it.category == Category.WANTS }
         if (wants.isEmpty()) {
             add("$at — нет ни одного желаемого")
@@ -130,7 +129,7 @@ object TaskChecks {
         // то и при любом другом зерне тоже.
         val needs = task.spendings.filter { it.category == Category.NEEDS }.sumOf { it.price }
         if (task.amount - needs - wants.minOf { it.price } < TaskEngines.surprisesWorstCase(task)) {
-            add("$at — после нужного и самого дешёвого желаемого не остаётся запаса на все сюрпризы: игру не выиграть")
+            add("$at — после нужного и самого дешёвого желаемого не остаётся запаса на все сюрпризы: бонус не получить")
         }
     }
 

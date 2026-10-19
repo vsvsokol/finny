@@ -110,6 +110,10 @@ fun rejectionMessage(rejection: Rejection): RejectionMessage = when (rejection) 
         "Бонус добавляется по ${rejection.step}.",
         "Выбери сумму, кратную ${rejection.step}.",
     )
+    is Rejection.Locked -> RejectionMessage(
+        "Это пока закрыто.",
+        "Откроется на уровне ${rejection.unlockLevel}.",
+    )
     Rejection.TaskLocked -> RejectionMessage(
         "Это задание ещё закрыто.",
         "Откроется на следующих уровнях.",
@@ -236,8 +240,6 @@ fun ActionFeedbackSummary(feedback: ActionFeedback, modifier: Modifier = Modifie
                 feedback.title,
                 style = MaterialTheme.typography.titleMedium,
                 color = FinneyInk,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
         }

@@ -1,5 +1,21 @@
 package ru.finney.pet.ui.budget
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.testTag
+import ru.finney.pet.ui.components.fadingScroll
+import ru.finney.pet.ui.motion.LocalAnimations
 import androidx.compose.foundation.Image
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
@@ -12,9 +28,10 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
 import ru.finney.pet.domain.model.Category
 import ru.finney.pet.ui.components.Coin
+import ru.finney.pet.ui.components.ContextHelp
+import ru.finney.pet.ui.components.ContextHelpIcon
 import ru.finney.pet.ui.components.FinneyIcon
 import ru.finney.pet.ui.components.FinneyIcons
-import ru.finney.pet.ui.components.pointHere
 import ru.finney.pet.ui.components.FinneyQuietButton
 import ru.finney.pet.ui.components.PlanDonut
 import ru.finney.pet.ui.components.SavingsIcon
@@ -111,6 +128,9 @@ private const val STEP = AMOUNT_STEP
 @Composable
 fun BudgetScreen(
     onBack: () -> Unit,
+    onOpenShop: () -> Unit = onBack,
+    onOpenGoals: () -> Unit = onBack,
+    onOpenTasks: () -> Unit = onBack,
     viewModel: BudgetViewModel = viewModel(factory = BudgetViewModel.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -122,7 +142,7 @@ fun BudgetScreen(
         when (val s = state) {
             is BudgetUiState.Planning -> plannedSavings = s.savings
             is BudgetUiState.Active -> {
-                if (plannedSavings > 0) sounds.play(Sfx.PiggyIn)
+                if (plannedSavings > 0) sounds.play(Sfx.Correct)
                 plannedSavings = 0
             }
             BudgetUiState.Loading -> Unit
@@ -145,12 +165,13 @@ fun BudgetScreen(
             onConfirm = viewModel::confirm,
             onBack = onBack,
         )
-        is BudgetUiState.Active -> ActiveContent(state = s, onBack = onBack)
+        is BudgetUiState.Active -> ActiveContent(state = s, onBack = onBack,
+            onOpenShop = onOpenShop, onOpenGoals = onOpenGoals, onOpenTasks = onOpenTasks)
     }
 }
 
 @Composable
-private fun PlanningContent(
+internal fun PlanningContent(
     state: BudgetUiState.Planning,
     onNeedsChange: (Int) -> Unit,
     onWantsChange: (Int) -> Unit,
@@ -160,27 +181,34 @@ private fun PlanningContent(
     onConfirm: () -> Unit,
     onBack: () -> Unit,
 ) {
+    val animations = LocalAnimations.current
+    val scroll = rememberScrollState()
+    var savingsTop by remember { mutableIntStateOf(0) }
+    var awaitingGoal by remember { mutableStateOf(false) }
+    LaunchedEffect(state.goalLabel) {
+        if (state.goalLabel != null && awaitingGoal) {
+            awaitingGoal = false
+            if (animations) scroll.animateScrollTo(savingsTop, tween(320)) else scroll.scrollTo(savingsTop)
+        }
+    }
     FinneyScreen(
-        scrollable = true,
+        scrollable = false,
         verticalArrangement = Arrangement.spacedBy(16.dp),
         onClose = onBack,
         // Круг — в шапке, а не в прокрутке: на него смотрят, пока жмут «+» в части
         // внизу, и он должен быть виден всегда (плейтест).
         top = { PlanHeader(state) },
+        bottom = {
+            FinneyButton(text = "Подтвердить план", onClick = onConfirm, enabled = state.canConfirm)
+        },
     ) {
+        Column(Modifier.fillMaxSize().fadingScroll(scroll), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         // Зачем план — до того, как что-то раскладывать. Плейтест 29.09: «так и не
         // понимаю, зачем нужен план», а «не выполнил план» было загадкой в конце уровня.
-        PlanWhy()
-
-        // Пока ничего не разложено — одна строка, что делать. Дальше её место
-        // занимают сами части: круг уже показывает, что происходит.
-        if (state.planned == 0) {
-            Text(
-                "Жми «+» в каждой части — монетки лягут в круг.",
-                style = MaterialTheme.typography.bodyLarge,
-                color = FinneyInk,
-            )
-        }
+        Text(
+            "Планируем. Монетки пока не тратятся.",
+            style = MaterialTheme.typography.bodyMedium, color = FinneyInk,
+        )
 
         // Каждый уровень план собирается заново, и на плейтесте это было скучно:
         // одной кнопкой — как в прошлый раз, а дальше подправить «−/+».
@@ -195,11 +223,6 @@ private fun PlanningContent(
         // Шаг помещается в остаток — значит, добавлять ещё можно.
         val canAdd = state.remainder >= STEP
 
-        // Первый уровень — обучение: рука показывает, что жать дальше, по одному
-        // шагу. Плейтест 29.09: не дочитавший «Положи монетки в „Желаемое“» ребёнок
-        // жал погашенную «Подтвердить» и застревал.
-        val point = if (state.level <= 1) planPoint(state, canAdd) else null
-
         AmountRow(
             icon = categoryIcon(Category.NEEDS),
             label = "Нужное",
@@ -209,42 +232,59 @@ private fun PlanningContent(
             canAdd = canAdd,
             budget = state.budget,
             minimum = state.needsHint?.takeIf { it > 0 },
-            point = point == PlanPoint.NEEDS,
+            subtitle = "Еда и уход",
+            helpText = state.needsHelp,
         )
         AmountRow(
             icon = categoryIcon(Category.WANTS),
             label = "Желаемое",
             pictures = state.wantsItems.mapNotNull(::itemArt),
             value = state.wants,
+            subtitle = "Покупать необязательно",
+            helpText = state.wantsHelp,
             onChange = onWantsChange,
             canAdd = canAdd,
             budget = state.budget,
-            point = point == PlanPoint.WANTS,
         )
         // Без выбранной цели откладывать некуда: цель выбирается прямо здесь,
         // а не на другом экране, — иначе план было бы не собрать.
         // Рука показывает на весь выбор, а не на первую цель: на что копить, ребёнок
         // решает сам (плейтест 29.09 — «игра показывает, на что копить»).
-        if (state.goalLabel == null) {
-            FinneyCard(modifier = Modifier.pointHere(point == PlanPoint.GOAL, corner = RadiusCard)) {
-                CategoryTitle(SavingsIcon, "Копилка")
+        AnimatedContent(
+            targetState = state,
+            contentKey = { it.goalLabel != null },
+            modifier = Modifier.fillMaxWidth().testTag("plan-savings-transition")
+                .onGloballyPositioned { savingsTop = it.positionInParent().y.toInt() },
+            transitionSpec = {
+                val fade = if (animations) fadeIn(tween(160, delayMillis = 100)) togetherWith fadeOut(tween(100))
+                    else EnterTransition.None togetherWith ExitTransition.None
+                fade.using(SizeTransform { _, _ -> tween(if (animations) 320 else 0) })
+            },
+            label = "Выбор цели в плане",
+        ) { target ->
+            val interactive = !animations || transition.currentState == transition.targetState
+        if (target.goalLabel == null) {
+            FinneyCard {
+                CategoryTitle(SavingsIcon, "Копилка", helpText = target.savingsHelp)
                 Text("На что копим? Выбери сам — любую:", style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
-                state.goals.forEach { goal ->
-                    GoalChoice(goal, onClick = { onSelectGoal(goal.id) })
+                target.goals.forEach { goal ->
+                    GoalChoice(goal, onClick = { if (interactive) { awaitingGoal = true; onSelectGoal(goal.id) } })
                 }
             }
         } else {
             AmountRow(
                 icon = SavingsIcon,
                 label = "Копилка",
-                pictures = listOfNotNull(state.goalReward?.let(::itemArt)),
-                value = state.savings,
-                onChange = onSavingsChange,
-                canAdd = canAdd,
-                budget = state.budget,
-                subtitle = "Цель: ${state.goalLabel}",
-                point = point == PlanPoint.SAVINGS,
-            )
+                pictures = listOfNotNull(target.goalReward?.let(::itemArt)),
+                value = target.savings,
+                onChange = { if (interactive) onSavingsChange(it) },
+                canAdd = target.remainder >= STEP,
+                budget = target.budget,
+                subtitle = if (target.reserveMode) "Запас: монеты на потом" else "Цель: «${target.goalLabel}»",
+                helpText = target.savingsHelp,
+                )
+        }
+
         }
 
         FeedbackSound(feedback = null, rejection = state.rejection)
@@ -252,58 +292,12 @@ private fun PlanningContent(
 
         // Почему кнопка погашена — по пунктам и значком, а не одним серым цветом.
         // Чего не хватает, решает состояние из ViewModel, экран только показывает.
-        if (state.missing.isNotEmpty()) MissingList(state.missing)
-
-        FinneyButton(
-            text = "Подтвердить план",
-            onClick = onConfirm,
-            enabled = state.canConfirm,
-            modifier = Modifier.pointHere(point == PlanPoint.CONFIRM),
+        if (state.missing.isNotEmpty()) MissingList(state.missing.take(1))
+        ContextHelp(
+            label = "Зачем нужен план?", title = "План",
+            text = "Реши, сколько оставить на еду и уход, желания и выбранную цель. «Желаемое» — лимит, его можно не тратить. После подтверждения купи нужное в магазине, а взнос сделай в копилке. Выполненный план помогает пройти уровень.",
         )
-    }
-}
-
-/** Куда показывает рука на обучении. */
-private enum class PlanPoint { NEEDS, WANTS, GOAL, SAVINGS, CONFIRM }
-
-/**
- * Следующий шаг плана по порядку частей: пустая часть — её «+», цели нет — выбор цели
- * целиком, всё разложено — «Подтвердить». Нужное меньше «хотя бы» — тоже его «+».
- */
-private fun planPoint(state: BudgetUiState.Planning, canAdd: Boolean): PlanPoint? = when {
-    state.canConfirm && state.needs >= (state.needsHint ?: 0) -> PlanPoint.CONFIRM
-    !canAdd -> null
-    state.needs == 0 || state.needs < (state.needsHint ?: 0) -> PlanPoint.NEEDS
-    state.wants == 0 -> PlanPoint.WANTS
-    state.goalLabel == null -> PlanPoint.GOAL
-    state.savings == 0 -> PlanPoint.SAVINGS
-    else -> null
-}
-
-/**
- * Зачем план — одной фразой: план — обещание себе, и сдержанное обещание —
- * звезда «План» в итогах уровня. Значок — тетрадь плана, не звезда: звезда у нас —
- * «Желаемое» (Categories.kt), и рядом с его карточкой они путались бы.
- */
-@Composable
-private fun PlanWhy() {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(RadiusCard))
-            .background(FinneyCream)
-            .border(StrokeThin, FinneyInk, RoundedCornerShape(RadiusCard))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-    ) {
-        FinneyIcon(FinneyIcons.Plan, size = 32.dp)
-        Text(
-            "План — это обещание себе: сколько потратишь и сколько отложишь. Сдержишь — получишь звезду уровня.",
-            style = MaterialTheme.typography.bodyLarge,
-            color = FinneyInk,
-            modifier = Modifier.weight(1f),
-        )
+        }
     }
 }
 
@@ -325,6 +319,7 @@ private fun CategoryTitle(
     icon: FinneyIcons,
     label: String,
     modifier: Modifier = Modifier,
+    helpText: String? = null,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -333,6 +328,7 @@ private fun CategoryTitle(
     ) {
         FinneyIcon(icon, size = 30.dp)
         Text(label, style = MaterialTheme.typography.titleMedium, color = FinneyInk, modifier = Modifier.weight(1f))
+        helpText?.let { ContextHelpIcon(title = label, text = it) }
     }
 }
 
@@ -359,14 +355,14 @@ private fun AmountRow(
     budget: Int,
     minimum: Int? = null,
     subtitle: String? = null,
-    point: Boolean = false,
+    helpText: String? = null,
 ) {
     FinneyCard {
-        CategoryTitle(icon, label)
+        CategoryTitle(icon, label, helpText = helpText)
         subtitle?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = FinneyInk) }
         // Рисунки — над суммой, между «−» и «+»: что покупают на эти монеты, стоит
         // прямо на них, а не у края карточки. Диктору они не нужны: слово он уже прочёл.
-        AmountStepper(label = label, value = value, onChange = onChange, canAdd = canAdd, step = STEP, pointPlus = point) {
+        AmountStepper(label = label, value = value, onChange = onChange, canAdd = canAdd, step = STEP, pointPlus = false) {
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 pictures.forEach { art ->
                     Image(painter = painterResource(art), contentDescription = null, modifier = Modifier.size(40.dp))
@@ -498,10 +494,10 @@ private fun PlanHeader(state: BudgetUiState.Planning) {
             needs = state.needs,
             wants = state.wants,
             savings = state.savings,
-            diameter = 148.dp,
+            diameter = 112.dp,
         ) { BudgetCenter(state.budget) }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedText("План", style = MaterialTheme.typography.headlineLarge)
+            OutlinedText("План", style = MaterialTheme.typography.headlineMedium)
             RemainderNote(state.remainder)
         }
     }
@@ -568,7 +564,8 @@ private fun RejectionNote(rejection: Rejection) {
 }
 
 @Composable
-private fun ActiveContent(state: BudgetUiState.Active, onBack: () -> Unit) {
+internal fun ActiveContent(state: BudgetUiState.Active, onBack: () -> Unit,
+    onOpenShop: () -> Unit = onBack, onOpenGoals: () -> Unit = onBack, onOpenTasks: () -> Unit = onBack) {
     val report = state.report
     // «Дальше» внизу, а не только «✕»: сразу после подтверждения ребёнок попадает
     // сюда, и на плейтесте не понял, что крестик и есть путь дальше, в комнату.
@@ -579,6 +576,8 @@ private fun ActiveContent(state: BudgetUiState.Active, onBack: () -> Unit) {
         bottom = { FinneyButton(text = "Дальше", onClick = onBack) },
     ) {
         OutlinedText("План и факт", style = MaterialTheme.typography.headlineLarge)
+        Text("Черта — план. Заливка — что уже потратил или отложил. Монеты из плана сами не уходят.",
+            style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
 
         // Уровень и деньги — одной строкой сверху, как в редизайне 28.09: раньше «Сейчас
         // у тебя» стояло под панелью, и до него не долистывали.
@@ -627,6 +626,16 @@ private fun ActiveContent(state: BudgetUiState.Active, onBack: () -> Unit) {
         Row(modifier = Modifier.fillMaxWidth()) {
             PetHead(state.character, state.bodyColor, state.worn, HeadSize, Modifier.padding(top = HeadSize * 0.3f))
             SpeechBalloon(verdictSpeech(state.verdict), Modifier.weight(1f))
+        }
+        when (state.verdict) {
+            is PlanVerdict.SavingsShort -> FinneyButton("Отложить в копилку", onClick = onOpenGoals)
+            is PlanVerdict.Overspent -> {
+                Text("Нужное всё равно можно купить. Заработай монеты в игре: доход сверх плана покроет перерасход. Или возьми из копилки — цель станет дальше.",
+                    style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
+                FinneyButton("Заработать в игре", onClick = onOpenTasks)
+                FinneyQuietButton("Открыть копилку", onClick = onOpenGoals)
+            }
+            else -> FinneyButton("В магазин", onClick = onOpenShop)
         }
     }
 }

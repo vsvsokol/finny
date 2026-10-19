@@ -27,6 +27,8 @@ import ru.finney.pet.domain.model.GameState
 import ru.finney.pet.domain.model.PeriodPhase
 import ru.finney.pet.domain.model.SavedGame
 import ru.finney.pet.ui.components.ActionFeedback
+import ru.finney.pet.ui.isReserveMode
+import ru.finney.pet.ui.savingsBalance
 import ru.finney.pet.ui.components.changesBetween
 
 /** Цель в списке выбора: цена, накопленное и то, что с ней уже всё. */
@@ -42,7 +44,7 @@ sealed interface GoalsUiState {
 
     data class Ready(
         val goals: List<GoalRow>,
-        /** null — цель не выбрана: копить пока некуда. */
+        /** null — цель не выбрана или все награды уже собраны. */
         val progress: GoalProgress?,
         val balance: Int,
         /** Пополнять и снимать можно только после подтверждения плана. */
@@ -73,6 +75,9 @@ sealed interface GoalsUiState {
         val planSavingsLeft: Int = 0,
         /** Первые уровни: рука показывает на «Положить», пока по плану не отложено. */
         val guide: Boolean = false,
+        /** После всех наград копилка остаётся доступна как запас без цены и срока. */
+        val reserveMode: Boolean = false,
+        val reserveSaved: Int = 0,
     ) : GoalsUiState
 }
 
@@ -113,13 +118,8 @@ class GoalsViewModel(
     fun selectGoal(goalId: String) = run { session.execute { selectGoal(it, goalId) } }
 
     fun deposit(amount: Int) = run(
-        note = { _, after -> "Отложили $amount. ${leftLine(after)}" },
+        note = { _, _ -> "Отложили $amount монет." },
     ) { session.execute { deposit(it, amount) } }
-
-    private fun leftLine(state: GameState): String {
-        val left = game.goalProgress(state)?.remaining ?: return ""
-        return if (left > 0) "До цели осталось $left." else "Хватает — забирай!"
-    }
 
     /**
      * Первый шаг снятия: только показать, что будет. Сами деньги не двигаются,
@@ -143,7 +143,7 @@ class GoalsViewModel(
         val pending = screen.value.pendingWithdraw ?: return
         screen.update { it.copy(pendingWithdraw = null) }
         run(
-            note = { _, after -> "Сняли ${pending.amount}. ${leftLine(after)}" },
+            note = { _, _ -> "Взяли ${pending.amount} монет." },
         ) { session.execute { withdraw(it, pending.amount) } }
     }
 
@@ -154,11 +154,21 @@ class GoalsViewModel(
     fun completeGoal() = run(
         feedback = { before, after ->
             val goal = before.activeGoalId?.let(content::goal)
+            val returned = after.balance - before.balance
+            val next = if (game.isReserveMode(after)) {
+                "Все награды собраны! Теперь можно откладывать монеты в запас."
+            } else {
+                "Выбери новую цель в копилке."
+            }
             ActionFeedback(
                 title = "${goal?.label ?: "Цель"} — твоя!",
                 lines = changesBetween(before, after),
-                why = "Копил — и получилось! Она уже на питомце.",
-                next = "Переодеть можно в гардеробе. Выбери новую цель.",
+                why = buildList {
+                    add(if (goal?.reward != null) "Копил — и получилось! Награда уже на питомце." else "Копил — и получилось!")
+                    if (returned > 0) add("Остаток $returned монет вернулся в кошелёк.")
+                    add(next)
+                }.joinToString(" "),
+                next = next,
                 itemId = goal?.reward,
             )
         },
@@ -191,6 +201,7 @@ class GoalsViewModel(
     private fun toUiState(saved: SavedGame, screen: GoalsScreenState): GoalsUiState {
         val state = saved.state
         val progress = game.goalProgress(state)
+        val reserveMode = game.isReserveMode(state)
         val planSavingsLeft = game.planReport(state)
             ?.let { (it.plan.savings - it.facts.savings).coerceAtLeast(0) } ?: 0
         return GoalsUiState.Ready(
@@ -211,15 +222,19 @@ class GoalsViewModel(
             note = screen.note,
             pendingWithdraw = screen.pendingWithdraw,
             savingsMove = screen.savingsMove,
-            moves = state.activeGoalId?.let { id ->
+            moves = if (state.activeGoalId != null || reserveMode) {
                 state.ledger
-                    .filter { it.goalId == id && (it.type == EntryType.SAVINGS_DEPOSIT || it.type == EntryType.SAVINGS_WITHDRAW) }
+                    .filter { it.goalId == state.activeGoalId && it.type in setOf(
+                        EntryType.SAVINGS_DEPOSIT, EntryType.SAVINGS_WITHDRAW,
+                    ) }
                     .takeLast(HISTORY_ROWS)
                     .reversed()
                     .map { SavingsEntry(it.savingsDelta) }
-            }.orEmpty(),
+            } else emptyList(),
             planSavingsLeft = planSavingsLeft,
             guide = game.level(state) <= GUIDED_LEVELS && planSavingsLeft > 0,
+            reserveMode = reserveMode,
+            reserveSaved = if (reserveMode) game.savingsBalance(state) else 0,
         )
     }
 

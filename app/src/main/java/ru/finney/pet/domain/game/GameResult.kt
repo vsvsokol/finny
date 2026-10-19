@@ -58,4 +58,7 @@ sealed interface Rejection {
     data class UnknownTask(val id: String) : Rejection
     data object TaskLocked : Rejection
     data class InvalidTaskInput(val error: TaskInputError) : Rejection
+
+    /** Вещь или цель откроется на уровне [unlockLevel]. */
+    data class Locked(val unlockLevel: Int) : Rejection
 }

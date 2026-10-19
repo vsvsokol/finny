@@ -36,16 +36,6 @@ import ru.finney.pet.ui.theme.FinneyGreen
 import ru.finney.pet.ui.theme.FinneyInk
 import ru.finney.pet.ui.room.ItemPicture as RoomItemPicture
 
-/** Стадия роста = уровень: у каждого из шести уровней своё имя. */
-private val StageNames = mapOf(
-    1 to "малыш",
-    2 to "карапуз",
-    3 to "непоседа",
-    4 to "школьник",
-    5 to "подросток",
-    6 to "взрослый",
-)
-
 @Composable
 fun ProgressScreen(
     onBack: () -> Unit,
@@ -60,7 +50,19 @@ fun ProgressScreen(
             CircularProgressIndicator(color = FinneyInk)
         }
 
-        is ProgressUiState.Ready -> FinneyScreen(
+        is ProgressUiState.Ready -> ProgressContent(s, onBack, onOpenGlossary, onOpenPeriodResult)
+    }
+}
+
+/**
+ * Мини-игра, которую пробовали: её картинка — та же, что в сцене игры, — название
+ * и исход. Исход — словом и значком, не только цветом карточки (ТЗ п. 3.6).
+ * Тема отсюда убрана: ребёнку она ничего не говорит, взрослый видит её в своём разделе.
+ */
+@Composable
+internal fun ProgressContent(s: ProgressUiState.Ready, onBack: () -> Unit,
+    onOpenGlossary: () -> Unit, onOpenPeriodResult: (Int) -> Unit) {
+    FinneyScreen(
             backdrop = MenuBackdrop.SHAPES,
             scrollable = true,
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -70,13 +72,30 @@ fun ProgressScreen(
 
             FinneyPanel(title = "${s.petName} растёт") {
                 GaugeLine("Уровень", s.level, s.maxLevel)
-                Line("Стадия", StageNames[s.stage] ?: s.stage.toString())
+                Line("Стадия", stageName(s.stage))
                 Line("Целей достигнуто", s.goalsCompleted.toString())
             }
 
-            FinneyPanel(title = "Цель") {
+            s.nextProgress?.let { next ->
+                FinneyPanel(title = "Впереди") {
+                    Text("На уровне ${next.level}", style = MaterialTheme.typography.titleMedium, color = FinneyInk)
+                    next.changes.forEach { Body(it) }
+                    Body("Осталось пройти уровней: ${next.levelsLeft}.")
+                    Body("Уровень растёт после успешного завершения. Условия — на главном экране.")
+                }
+            }
+            if (s.level >= s.maxLevel) {
+                FinneyPanel(title = "Самый высокий уровень") {
+                    Body("Можно дальше заботиться о питомце, играть и копить.")
+                }
+            }
+
+            FinneyPanel(title = if (s.reserveMode) "Запас" else "Цель") {
                 val goal = s.goal
-                if (goal == null) {
+                if (s.reserveMode) {
+                    Body("Все награды собраны. Можно продолжать копить в запас.")
+                    Line("В запасе", "${s.reserveSaved} монет")
+                } else if (goal == null) {
                     Body("Цель пока не выбрана — выбери её в копилке.")
                 } else {
                     GaugeLine(goal.goal.label, goal.saved, goal.goal.price)
@@ -104,14 +123,8 @@ fun ProgressScreen(
 
             FinneyButton(text = "Справочник", onClick = onOpenGlossary)
         }
-    }
 }
 
-/**
- * Мини-игра, которую пробовали: её картинка — та же, что в сцене игры, — название
- * и исход. Исход — словом и значком, не только цветом карточки (ТЗ п. 3.6).
- * Тема отсюда убрана: ребёнку она ничего не говорит, взрослый видит её в своём разделе.
- */
 @Composable
 private fun GameLine(task: TaskRow) {
     FinneyCard(accent = if (task.passed) FinneyGreen else null) {

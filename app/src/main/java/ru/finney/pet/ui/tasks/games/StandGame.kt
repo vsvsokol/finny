@@ -338,20 +338,19 @@ private fun StandTally(ingredient: StandIngredient, spent: Int, earned: Int) {
             .fillMaxWidth()
             .clearAndSetSemantics { contentDescription = "Лимоны минус $spent, выручка $earned, итог $kept" },
     ) {
-        TallyCell(Modifier.weight(1f), "−$spent", FinneyCream) { ItemPicture(ingredient, ingredient.label, 24.dp) }
-        TallyCell(Modifier.weight(1f), "+$earned", FinneyCream) { CupIcon(22.dp, full = true) }
+        TallyCell(Modifier.weight(1f), "−$spent", FinneyCream, "Закупка") { ItemPicture(ingredient, ingredient.label, 24.dp) }
+        TallyCell(Modifier.weight(1f), "+$earned", FinneyCream, "Выручка") { CupIcon(22.dp, full = true) }
         Text("=", style = MaterialTheme.typography.titleLarge, color = FinneyInk)
-        TallyCell(Modifier.weight(1.2f), if (kept > 0) "+$kept" else if (kept < 0) "−${-kept}" else "0", if (kept > 0) FinneyYellow else FinneyCream) {
+        TallyCell(Modifier.weight(1.2f), if (kept > 0) "+$kept" else if (kept < 0) "−${-kept}" else "0", if (kept > 0) FinneyYellow else FinneyCream, "Заработок") {
             if (kept > 0) Text("✓", style = MaterialTheme.typography.titleLarge, color = FinneyInk) else Coin(size = 22.dp)
         }
     }
 }
 
 @Composable
-private fun TallyCell(modifier: Modifier, value: String, fill: Color, icon: @Composable () -> Unit) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+private fun TallyCell(modifier: Modifier, value: String, fill: Color, label: String, icon: @Composable () -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
             .defaultMinSize(minHeight = 44.dp)
             .clip(RoundedCornerShape(12.dp))
@@ -359,8 +358,11 @@ private fun TallyCell(modifier: Modifier, value: String, fill: Color, icon: @Com
             .border(StrokeRegular, FinneyInk, RoundedCornerShape(12.dp))
             .padding(horizontal = 6.dp, vertical = 4.dp),
     ) {
-        icon()
-        OutlinedText(value, style = MaterialTheme.typography.titleLarge)
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = FinneyInk)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            icon()
+            OutlinedText(value, style = MaterialTheme.typography.titleMedium)
+        }
     }
 }
 
@@ -463,7 +465,7 @@ private fun Stall(character: PetCharacter, cupPrice: Int) {
                 .background(Color.White)
                 .border(4.dp, FinneyInk, RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center,
-        ) { OutlinedText("Лимонад · $cupPrice", style = MaterialTheme.typography.headlineMedium) }
+        ) { OutlinedText("Стакан: $cupPrice монет", style = MaterialTheme.typography.titleLarge) }
     }
 }
 
@@ -479,7 +481,7 @@ private fun PourButton(cupPrice: Int, onPour: () -> Unit) {
             CupIcon(44.dp, full = true)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.clearAndSetSemantics {}) {
-            OutlinedText("Налить · +$cupPrice", style = MaterialTheme.typography.titleMedium)
+            OutlinedText("Налить за $cupPrice", style = MaterialTheme.typography.titleMedium)
             Coin(size = 20.dp)
         }
     }

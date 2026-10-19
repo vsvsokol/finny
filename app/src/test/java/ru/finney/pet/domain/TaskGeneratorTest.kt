@@ -181,7 +181,7 @@ class TaskGeneratorTest {
 
     /** «Дождливый день» на фиксированных зёрнах: пусто — неудача, разумно — успех с бонусом, жадно — неудача. */
     @Test
-    fun `дождливый день выигрывается балансом, а не бездействием`() {
+    fun `дождливый день — бонус за баланс, отказ от желаемого не провал`() {
         val template = content.taskTemplates.getValue("game_rainy")
         val empty = TaskInput.Reserve(setOf("food", "soap"), emptySet())
         val safe = TaskInput.Reserve(setOf("food", "soap", "icecream"), emptySet())
@@ -190,16 +190,22 @@ class TaskGeneratorTest {
         for (seed in 1L..100L) {
             val task = TaskGenerator.generate(template, seed) as ReserveTask
             assertEquals("зерно $seed: зонт и рюкзак вместе", 25, task.worstCase)
-            assertEquals("зерно $seed", TaskOutcome.FAIL, (TaskEngines.evaluate(task, empty) as TaskEvaluation.Done).outcome)
+            // Без радостей — пройдено, но без бонуса, хотя запас самый большой.
+            val joyless = TaskEngines.evaluate(task, empty) as TaskEvaluation.Done
+            assertEquals("зерно $seed", TaskOutcome.SUCCESS, joyless.outcome)
+            assertFalse("зерно $seed: без радостей бонуса нет", joyless.bonus)
             val ok = TaskEngines.evaluate(task, safe) as TaskEvaluation.Done
             assertEquals("зерно $seed", TaskOutcome.SUCCESS, ok.outcome)
             assertTrue("зерно $seed: запас 25 на все сюрпризы — бонус", ok.bonus)
             if (task.surprises.isEmpty()) continue
             stormy++
-            // Жадно: всё желаемое, запаса 5 — на любой сюрприз приходится отменять желаемое.
+            // Жадно: всё желаемое, запаса 5 — на любой сюрприз приходится откладывать желаемое.
+            // Сначала нужное — верный выбор: пройдено, но без бонуса.
             val shortage = TaskEngines.surprisesTotal(task) - TaskEngines.reserveLeft(task, all)
             val dropped = listOf("ball", "stickers", "icecream").let { if (shortage <= 10) it.take(1) else it.take(2) }.toSet()
-            assertEquals("зерно $seed", TaskOutcome.FAIL, (TaskEngines.evaluate(task, TaskInput.Reserve(all, dropped)) as TaskEvaluation.Done).outcome)
+            val greedy = TaskEngines.evaluate(task, TaskInput.Reserve(all, dropped)) as TaskEvaluation.Done
+            assertEquals("зерно $seed", TaskOutcome.SUCCESS, greedy.outcome)
+            assertFalse("зерно $seed: отложили желаемое — бонуса нет", greedy.bonus)
         }
         assertTrue("сюрпризы выпадают", stormy > 50)
     }

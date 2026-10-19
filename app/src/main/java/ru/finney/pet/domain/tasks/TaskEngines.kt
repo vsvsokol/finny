@@ -125,15 +125,15 @@ sealed interface TaskDetails {
 
     /**
      * [eventsTaken] — сколько соблазнов дня ребёнок себе позволил,
-     * [mood] — сердечки Финни на финише: 0 — загрустил по дороге.
+     * [mood] — сердечки Финни на финише: 0 — загрустил по дороге, цель засчитана без бонуса.
      */
     data class GoalRace(val saved: Int, val shortfall: Int, val eventsTaken: Int, val mood: Int) : TaskDetails
 
     /**
      * [reserve] — запас после плана; [surprises] — сколько стоило непредвиденное;
      * [shortage] — сколько не хватило запаса; [droppedNeeds] и [droppedWants] — сколько
-     * нужного и желаемого пришлось перенести (любой перенос — игра не пройдена);
-     * [keptWants] — желаемого осталось в плане (0 — неделя без радостей, тоже неудача);
+     * нужного и желаемого пришлось отложить (нужное — игра не пройдена, желаемое — пройдена
+     * без бонуса); [keptWants] — желаемого осталось в плане (0 — неделя без радостей, тоже без бонуса);
      * [left] — сколько запаса осталось на потом.
      */
     data class Reserve(
@@ -386,8 +386,9 @@ object TaskEngines {
     }
 
     /**
-     * Взносы, с которыми дорога проходится, или null, если никак. Перебор того, какие
-     * соблазны взять: в их день отложить остаток, в остальные — весь доход.
+     * Взносы, с которыми дорога проходится с бонусом — цель набрана и Финни не загрустил, —
+     * или null, если никак. Перебор того, какие соблазны взять: в их день отложить остаток,
+     * в остальные — весь доход.
      */
     fun raceSolution(task: GoalRaceTask): List<Int>? {
         val events = task.events.filter { it.day in 1..task.days && it.price <= task.incomePerDay }
@@ -398,7 +399,7 @@ object TaskEngines {
                     if (event == null) task.incomePerDay else (task.incomePerDay - event.price) / task.step * task.step
                 }
             }
-            .firstOrNull { (race(task, TaskInput.DailyDeposits(it)) as? TaskEvaluation.Done)?.outcome == TaskOutcome.SUCCESS }
+            .firstOrNull { (race(task, TaskInput.DailyDeposits(it)) as? TaskEvaluation.Done)?.bonus == true }
     }
 
     /** Сумма по чеку — как её посчитал кассир, с ошибками. */
@@ -608,11 +609,14 @@ object TaskEngines {
             val deposit = input.amounts.getOrNull(event.day - 1) ?: return@count false
             raceTaken(task, event, deposit)
         }
-        // Цель — не «никогда ничего не тратить»: без радостей Финни грустит, и копилка не засчитывается.
+        // Отказ от радостей — не провал: цель набрана — пройдено. Но учит игра «понемногу,
+        // но регулярно», поэтому бонус — только если Финни не загрустил по дороге.
         val mood = raceMood(task, input.amounts).last()
+        val success = saved >= task.goal.price
         return TaskEvaluation.Done(
-            outcome(saved >= task.goal.price && mood > 0),
+            outcome(success),
             TaskDetails.GoalRace(saved = saved, shortfall = maxOf(0, task.goal.price - saved), eventsTaken = taken, mood = mood),
+            bonus = success && mood > 0,
         )
     }
 
@@ -637,9 +641,9 @@ object TaskEngines {
         val droppedNeeds = input.dropped.count { byId.getValue(it).category == Category.NEEDS }
         val droppedWants = input.dropped.size - droppedNeeds
         val keptWants = (input.planned - input.dropped).count { byId.getValue(it).category == Category.WANTS }
-        // Выигрыш — баланс: и порадовать Финни, и оставить запас. Пустой план — неделя без
-        // радостей, жадный — сюрприз заставил отменить купленное. Оба — неудача.
-        val success = droppedNeeds == 0 && droppedWants == 0 && keptWants > 0
+        // Отказ от необязательного — не провал: отложил желаемое ради сюрприза или не взял
+        // его вовсе — пройдено, но без бонуса. Не пройдено, только если отложено нужное.
+        val success = droppedNeeds == 0
         return TaskEvaluation.Done(
             outcome(success),
             TaskDetails.Reserve(
@@ -651,9 +655,9 @@ object TaskEngines {
                 left = reserve + freed - total,
                 droppedWants = droppedWants,
             ),
-            // Бонус — за запас на все сюрпризы, даже те, что не случились: запас откладывают
-            // до того, как узнали, понадобится ли он.
-            bonus = success && reserve >= surprisesWorstCase(task),
+            // Бонус — за баланс: радость осталась в плане, и запаса хватило бы на все сюрпризы,
+            // даже те, что не случились: запас откладывают до того, как узнали, понадобится ли он.
+            bonus = success && droppedWants == 0 && keptWants > 0 && reserve >= surprisesWorstCase(task),
         )
     }
 
@@ -767,6 +771,25 @@ object TaskEngines {
                 bonus = pay.bonus,
             ),
         )
+    }
+
+    /**
+     * Объяснение итога для экрана. Пройдено, но можно лучше («Дождливый день» с отложенным
+     * желаемым или без радостей, «Дорога к цели» с грустным Финни) — своим текстом из
+     * контента, иначе [TaskDefinition.explainOk] / [TaskDefinition.explainFail].
+     */
+    fun explanation(task: TaskDefinition, outcome: TaskOutcome, details: TaskDetails): String {
+        if (outcome == TaskOutcome.FAIL) return task.explainFail
+        val partial = when {
+            task is ReserveTask && details is TaskDetails.Reserve -> when {
+                details.droppedWants > 0 -> task.explainDropped
+                details.keptWants == 0 -> task.explainNoJoy
+                else -> null
+            }
+            task is GoalRaceTask && details is TaskDetails.GoalRace -> if (details.mood == 0) task.explainSad else null
+            else -> null
+        }
+        return partial ?: task.explainOk
     }
 
     private fun outcome(success: Boolean) = if (success) TaskOutcome.SUCCESS else TaskOutcome.FAIL

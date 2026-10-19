@@ -120,6 +120,8 @@ internal fun ChoresGame(task: ChoresTask, character: PetCharacter, onClose: () -
                 }
 
                 // Дела — без панели вокруг: её поля съедали место, а плитки и так в рамках.
+                Text("День ${selected + 1}: нажми дело внизу. Пустой день останется для отдыха.",
+                    style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     task.chores.chunked(2).forEach { pair ->
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -176,6 +178,7 @@ private fun GoalCard(task: ChoresTask, earned: Int, rest: Int) {
             .border(3.dp, FinneyInk, RoundedCornerShape(14.dp))
             .padding(horizontal = 12.dp, vertical = 6.dp),
     ) {
+        Text("Копим на «${task.goal.label}»", style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             ItemPicture(task.goal, task.goal.label, 44.dp)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -265,7 +268,8 @@ private fun DayCard(
                 modifier = Modifier.fillMaxWidth().height(slotsHeight(hours)),
             ) {
                 FinneyIcon(FinneyIcons.Lamp, size = 36.dp)
-                Text("отдых", style = MaterialTheme.typography.labelMedium, color = FinneyInk)
+                Text(if (selected) "выбери дело" else "пусто", style = MaterialTheme.typography.bodyMedium,
+                    color = FinneyInk, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             }
         } else {
             chores.forEachIndexed { n, chore ->

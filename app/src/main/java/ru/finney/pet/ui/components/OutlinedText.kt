@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -52,6 +53,7 @@ fun OutlinedText(
             text = text,
             style = style.copy(color = outline, drawStyle = Stroke(width = widthPx * 2f)),
             textAlign = textAlign,
+            modifier = Modifier.clearAndSetSemantics {},
         )
         Text(
             text = text,

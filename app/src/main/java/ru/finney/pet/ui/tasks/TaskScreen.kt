@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -23,6 +24,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,10 +45,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ru.finney.pet.domain.model.TaskOutcome
 import ru.finney.pet.domain.model.TaskTheme
+import ru.finney.pet.domain.tasks.TaskEngines
 import ru.finney.pet.ui.components.AlertBadge
 import ru.finney.pet.ui.components.CheckBadge
 import ru.finney.pet.ui.components.Coin
 import ru.finney.pet.ui.components.FinneyButton
+import ru.finney.pet.ui.components.FinneyIcon
+import ru.finney.pet.ui.components.FinneyIconButton
+import ru.finney.pet.ui.components.FinneyIcons
 import ru.finney.pet.ui.components.FinneyQuietButton
 import ru.finney.pet.ui.components.FinneyScreen
 import ru.finney.pet.ui.components.OutlinedText
@@ -106,15 +114,7 @@ fun TaskScreen(
                     TaskPhase.INTRO -> TaskIntro(s, onStart = viewModel::start, onBack = onBack, onOpenBudget = onOpenBudget)
                     // Крестик и системное «назад» посреди игры закрывают её: до итога ничего не засчитано.
                     TaskPhase.PLAY -> key(s.attempt) {
-                        TaskGame(
-                            task = s.task,
-                            character = s.character,
-                            balance = s.balance,
-                            inputError = s.inputError,
-                            onInputSeen = viewModel::inputSeen,
-                            onClose = onBack,
-                            onSubmit = viewModel::submit,
-                        )
+                        TaskPlay(s, viewModel::inputSeen, onBack, viewModel::submit)
                     }
                     TaskPhase.RESULT -> TaskResultScene(s, onReplay = viewModel::replay, onDone = onBack)
                 }
@@ -123,9 +123,23 @@ fun TaskScreen(
     }
 }
 
+@Composable
+internal fun TaskPlay(state: TaskUiState.Ready, onInputSeen: () -> Unit,
+    onBack: () -> Unit, onSubmit: (ru.finney.pet.domain.tasks.TaskInput) -> Unit) {
+    var helpOpen by rememberSaveable { mutableStateOf(false) }
+    Box(Modifier.fillMaxSize()) {
+        TaskGame(state.task, state.character, state.balance, state.inputError, onInputSeen, onBack, onSubmit)
+        FinneyIconButton(onClick = { helpOpen = true }, contentDescription = "Как играть", size = 48.dp,
+            modifier = Modifier.align(Alignment.TopCenter).systemBarsPadding().padding(top = 8.dp)) {
+            FinneyIcon(FinneyIcons.Help, size = 24.dp)
+        }
+    }
+    if (helpOpen) GameHelpDialog(state.task) { helpOpen = false }
+}
+
 /** Вступление в той же сцене, что игра: питомец рассказывает, что делать. */
 @Composable
-private fun TaskIntro(state: TaskUiState.Ready, onStart: () -> Unit, onBack: () -> Unit, onOpenBudget: () -> Unit) {
+internal fun TaskIntro(state: TaskUiState.Ready, onStart: () -> Unit, onBack: () -> Unit, onOpenBudget: () -> Unit) {
     GameScene(backdrop = backdropFor(state.task), onClose = onBack, money = state.balance) {
         // Питомец стоит внизу, на полу сцены, а «Играть» прижата к краю —
         // раньше всё собиралось наверху, и под кнопкой оставалось полэкрана пустоты.
@@ -142,19 +156,24 @@ private fun TaskIntro(state: TaskUiState.Ready, onStart: () -> Unit, onBack: () 
             },
         ) {
             OutlinedText(state.task.title, style = MaterialTheme.typography.headlineLarge, textAlign = TextAlign.Center)
-            Spacer(Modifier.height(GapInner))
             // Без заголовка на рамке: персиковое «Что делать» стояло вплотную к панели и
             // спорило с названием игры того же цвета (плейтест 29.09). Что это правила,
             // говорят номера шагов. Тема ребёнку ничего не говорит — она у взрослого.
             ScenePanel(title = null, modifier = Modifier.fillMaxWidth()) {
+                Text(gameHelp(state.task).role, style = MaterialTheme.typography.bodyMedium, color = FinneyInk)
                 IntroSteps(state.task.intro)
+                Text(
+                    "Монеты внутри игры — для тренировки. В кошелёк Финни поступает только награда.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = FinneyInk,
+                )
             }
             Spacer(Modifier.weight(1f))
             // Сколько дадут — монеткой в пузыре, а не фразой. Уже пройдено — просто «ещё?».
             if (state.completed) {
-                PetSays(state.character, "Сыграем ещё?", petSize = 160.dp)
+                PetSays(state.character, "Сыграем ещё?", petSize = 128.dp)
             } else {
-                PetOffers(state.character, state.reward.success, petSize = 160.dp)
+                PetOffers(state.character, state.reward.success, petSize = 128.dp)
             }
             if (state.available && state.needsPlan) {
                 ScenePanel(title = null, modifier = Modifier.fillMaxWidth()) {
@@ -233,7 +252,7 @@ private fun StepNumber(n: Int) {
  * ([ResultBody]); награда — своей плашкой; объяснение говорит питомец.
  */
 @Composable
-private fun TaskResultScene(state: TaskUiState.Ready, onReplay: () -> Unit, onDone: () -> Unit) {
+internal fun TaskResultScene(state: TaskUiState.Ready, onReplay: () -> Unit, onDone: () -> Unit) {
     val result = state.result ?: return
     val success = result.outcome == TaskOutcome.SUCCESS
     // Джингл итога, следом — монеты награды летят в кошелёк. Раз на попытку.
@@ -304,7 +323,7 @@ private fun TaskResultScene(state: TaskUiState.Ready, onReplay: () -> Unit, onDo
                 // Объяснение — репликой питомца во всю ширину, хвостиком к нему: так оно
                 // отделено от пунктов и читается как совет, а не как ещё один абзац.
                 Bubble(
-                    if (success) state.task.explainOk else state.task.explainFail,
+                    TaskEngines.explanation(state.task, result.outcome, result.details),
                     Tail.DOWN_RIGHT,
                     Modifier.fillMaxWidth(),
                     maxWidth = 600.dp,

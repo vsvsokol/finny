@@ -21,6 +21,8 @@ import ru.finney.pet.domain.model.LedgerEntry
 import ru.finney.pet.domain.model.SavedGame
 import ru.finney.pet.domain.model.TaskOutcome
 import ru.finney.pet.domain.model.TaskTheme
+import ru.finney.pet.ui.isReserveMode
+import ru.finney.pet.ui.savingsBalance
 import ru.finney.pet.ui.tasks.games.taskIcon
 
 /**
@@ -61,6 +63,9 @@ sealed interface ProgressUiState {
         val tasks: List<TaskRow>,
         /** Новые периоды сверху. */
         val history: List<HistoryPeriod>,
+        val reserveMode: Boolean = false,
+        val reserveSaved: Int = 0,
+        val nextProgress: NextProgress? = null,
     ) : ProgressUiState
 }
 
@@ -86,7 +91,10 @@ class ProgressViewModel(
             level = game.level(state),
             maxLevel = content.economy.maxLevel,
             stage = game.stage(state),
+            nextProgress = nextProgress(content, game.level(state), state.currentPeriod.number, state.isDemo),
             goal = game.goalProgress(state),
+            reserveMode = game.isReserveMode(state),
+            reserveSaved = if (game.isReserveMode(state)) game.savingsBalance(state) else 0,
             goalsCompleted = state.ledger.count { it.type == EntryType.GOAL_COMPLETE },
             lastClosedPeriod = state.periods.lastOrNull { it.result != null }?.number,
             lastClosedLevel = state.periods.lastOrNull { it.result != null }?.let { game.levelAfter(state, it.number - 1) },
@@ -148,8 +156,10 @@ fun GameContent.entryLabel(entry: LedgerEntry): String = when (entry.type) {
         }
         "Покупка: ${item?.label ?: "предмет"}" + (kind?.let { " ($it)" } ?: "")
     }
-    EntryType.SAVINGS_DEPOSIT -> "В копилку" + (entry.goalId?.let(::goal)?.let { " на «${it.label}»" } ?: "")
-    EntryType.SAVINGS_WITHDRAW -> "Из копилки" + (entry.goalId?.let(::goal)?.let { " с «${it.label}»" } ?: "")
+    EntryType.SAVINGS_DEPOSIT -> if (entry.goalId == null) "В запас" else "В копилку" +
+        (entry.goalId.let(::goal)?.let { " на «${it.label}»" } ?: "")
+    EntryType.SAVINGS_WITHDRAW -> if (entry.goalId == null) "Из запаса" else "Из копилки" +
+        (entry.goalId.let(::goal)?.let { " с «${it.label}»" } ?: "")
     EntryType.GOAL_COMPLETE -> "Цель достигнута" + (entry.goalId?.let(::goal)?.let { ": ${it.label}" } ?: "")
 }
 

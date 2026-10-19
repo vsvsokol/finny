@@ -26,6 +26,7 @@ import ru.finney.pet.domain.model.ItemKind
 import ru.finney.pet.domain.model.PetCharacter
 import ru.finney.pet.domain.model.Plan
 import ru.finney.pet.domain.model.SavedGame
+import ru.finney.pet.ui.isReserveMode
 import ru.finney.pet.ui.room.itemArt
 
 sealed interface BudgetUiState {
@@ -64,12 +65,18 @@ sealed interface BudgetUiState {
          * null — прошлого плана нет, он не помещается или копить пока не на что.
          */
         val lastPlan: Plan? = null,
+        val reserveMode: Boolean = false,
+        /** Объяснения берутся из того же контента, что и справочник. */
+        val needsHelp: String? = null,
+        val wantsHelp: String? = null,
+        val savingsHelp: String? = null,
     ) : BudgetUiState {
         val planned: Int get() = needs + wants + savings
         val remainder: Int get() = budget - planned
         /** ТЗ п. 2.5.5: сумма разложена минимум по трём направлениям — в каждом хоть что-то. */
         val allDirections: Boolean get() = listOf(needs, wants, savings).count { it > 0 } >= directions
-        val canConfirm: Boolean get() = remainder >= 0 && allDirections && !isSaving
+        val canConfirm: Boolean get() = remainder >= 0 && allDirections &&
+            (savings == 0 || goalLabel != null) && !isSaving
 
         /**
          * Чего не хватает, чтобы подтвердить, — пунктами для подписи у погашенной кнопки.
@@ -97,6 +104,7 @@ sealed interface BudgetUiState {
         val character: PetCharacter = PetCharacter.PUSHISTIK,
         val bodyColor: BodyColor = BodyColor.A,
         val worn: List<String> = emptyList(),
+        val incomeToRecover: Int = report.overspend,
     ) : BudgetUiState {
         /**
          * Одна фраза-итог вместо «10 из 10» по строкам (плейтест: «что я должен понять
@@ -105,7 +113,7 @@ sealed interface BudgetUiState {
          */
         val verdict: PlanVerdict get() = when {
             report.onTrack -> PlanVerdict.OnTrack
-            report.overspend > 0 -> PlanVerdict.Overspent(report.overspend)
+            incomeToRecover > 0 -> PlanVerdict.Overspent(incomeToRecover)
             report.facts.savings < report.plan.savings -> PlanVerdict.SavingsShort(report.plan.savings - report.facts.savings)
             else -> PlanVerdict.OffTrack
         }
@@ -189,13 +197,16 @@ class BudgetViewModel(
                 character = saved.profile.appearance.character,
                 bodyColor = saved.profile.appearance.bodyColor,
                 worn = state.worn,
+                incomeToRecover = (report.overspend - report.facts.unplannedIncome - content.economy.planTolerance)
+                    .coerceAtLeast(0),
             )
         }
         val goal = game.goalProgress(state)?.goal
+        val reserveMode = game.isReserveMode(state)
         // Прошлый план берётся как есть из истории уровней; предлагаем его, только если он
         // ещё помещается в бюджет и есть цель — иначе половину плана всё равно пришлось бы менять.
         val lastPlan = state.periods.dropLast(1).lastOrNull()?.plan
-            ?.takeIf { it.planned <= state.balance && goal != null }
+            ?.takeIf { it.planned <= state.balance && (goal != null || reserveMode) }
         return BudgetUiState.Planning(
             periodNumber = state.currentPeriod.number,
             level = game.level(state),
@@ -204,7 +215,7 @@ class BudgetViewModel(
             wants = draft.wants,
             savings = draft.savings,
             needsHint = game.needsHint(state),
-            goalLabel = goal?.label,
+            goalLabel = if (reserveMode) "Запас" else goal?.label,
             goals = if (state.activeGoalId == null) {
                 content.goals.filterNot { state.isGoalCompleted(it.id) }
             } else {
@@ -217,8 +228,15 @@ class BudgetViewModel(
             wantsItems = pictured(Category.WANTS),
             goalReward = goal?.reward,
             lastPlan = lastPlan,
+            reserveMode = reserveMode,
+            needsHelp = helpText("needs"),
+            wantsHelp = helpText("wants"),
+            savingsHelp = helpText("savings"),
         )
     }
+
+    private fun helpText(id: String): String? =
+        content.glossary.firstOrNull { it.id == id }?.text?.takeIf { it.isNotBlank() }
 
     /**
      * Товары части, у которых есть рисунок, — первые [ItemsShown] по порядку магазина.

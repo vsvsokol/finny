@@ -2,6 +2,7 @@ package ru.finney.pet.ui.home
 
 import ru.finney.pet.R
 import androidx.annotation.DrawableRes
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.Image
@@ -34,6 +35,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import android.content.pm.ApplicationInfo
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.Role
@@ -80,6 +82,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import ru.finney.pet.ui.components.guidedInput
+import ru.finney.pet.ui.components.ActionFeedbackSummary
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -101,7 +105,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import ru.finney.pet.domain.model.Category
 import ru.finney.pet.ui.components.CategoryBanner
 import ru.finney.pet.ui.components.CoinAmount
-import ru.finney.pet.ui.components.WalletButton
+import ru.finney.pet.ui.components.HomeShopButton
 import ru.finney.pet.ui.components.FeedbackDialog
 import ru.finney.pet.ui.components.ActionFeedbackCard
 import ru.finney.pet.ui.components.ActionFeedback
@@ -120,11 +124,9 @@ import ru.finney.pet.ui.components.FinneyIcon
 import ru.finney.pet.ui.components.FinneyIconButton
 import ru.finney.pet.ui.components.FinneyIcons
 import ru.finney.pet.ui.components.LevelBadge
-import ru.finney.pet.ui.components.FinneyNeedButton
 import ru.finney.pet.ui.components.FinneyPanel
 import ru.finney.pet.ui.components.WarningBadge
 import ru.finney.pet.ui.tasks.games.ItemPicture
-import ru.finney.pet.ui.components.HappinessBar
 import ru.finney.pet.ui.pet.PetMood
 import ru.finney.pet.ui.pet.PetView
 import ru.finney.pet.ui.pet.grownPet
@@ -132,6 +134,7 @@ import ru.finney.pet.ui.pet.rememberPoseProvider
 import ru.finney.pet.ui.pet.rememberPetAnimation
 import ru.finney.pet.ui.debug.DebugPanel
 import androidx.compose.animation.core.animateFloatAsState
+import ru.finney.pet.ui.components.RoomActionLabel
 import ru.finney.pet.ui.components.OutlinedText
 import ru.finney.pet.ui.progress.GlossaryBook
 import kotlinx.coroutines.launch
@@ -155,6 +158,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import ru.finney.pet.ui.pet.skin
+import ru.finney.pet.ui.pet.accessoryArt
 import ru.finney.pet.ui.room.FeedingGame
 import ru.finney.pet.ui.room.WashingGame
 import ru.finney.pet.ui.room.CareBlock
@@ -164,6 +168,20 @@ import ru.finney.pet.ui.room.DOOR_MS
 import ru.finney.pet.ui.room.WALK_MS
 import ru.finney.pet.ui.room.RoomScene
 import ru.finney.pet.ui.room.RoomSpot
+import ru.finney.pet.ui.room.InteriorPart
+import ru.finney.pet.ui.room.InteriorPicker
+import ru.finney.pet.ui.room.InteriorPickerHeight
+import ru.finney.pet.ui.room.InteriorPreview
+import ru.finney.pet.ui.room.TAKE_ALL_STEP_MS
+import ru.finney.pet.ui.room.focusOf
+import ru.finney.pet.ui.room.themeOf
+import ru.finney.pet.ui.room.withPart
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import ru.finney.pet.ui.theme.FinneyInk
 import ru.finney.pet.ui.theme.FinneySand
 import ru.finney.pet.ui.theme.RadiusField
@@ -175,28 +193,7 @@ import ru.finney.pet.ui.motion.PortalReveal
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 
-// Главный экран по макету main_screen_layout: сверху деньги, уровень и «бургер»,
-// слева по центру шкала настроения, внизу три кнопки комнат. Больше в макете
-// на главном ничего нет — ни имени, ни номера периода, ни подсказки про нужное,
-// ни отдельных полос сытости и чистоты: эти две переехали в кольца кнопок.
-//
-// Две строки макет не предусматривает, а ТЗ п. 2.5.3 требует: копилка
-// и активное задание. Они стоят узкими плашками в кремовой полосе над комнатой,
-// где пустая стена, и ничего собой не закрывают. Расхождение с макетом
-// намеренное и записано в docs/requirements-matrix.md.
-//
-// Фоном лежит комната (ui/room). Предмет в ней ровно один, и его меняют те же
-// нижние кнопки: комната одна, а стол, ванна и пустой зал — её состояния.
-// Уход происходит там же, где живёт питомец, — ребёнок не уходит в меню, чтобы
-// покормить. Интерфейс плавает поверх комнаты отдельным пластом: у комнаты
-// обводка чёрная, у кита FinneyInk, и сливаться им не положено.
-
-/**
- * На сколько шкала настроения заходит в поле экрана: от края остаётся 6 dp
- * вместо общих 16. В макете она стоит почти вплотную к краю.
- */
-private val HappinessEdgeShift: Dp = 10.dp
-
+// Главный экран по обновлённому макету: компактные действия справа и состояние у питомца.
 @Composable
 fun HomeScreen(
     onOpenBudget: () -> Unit,
@@ -277,7 +274,7 @@ fun HomeScreen(
     PortalReveal(ready = state is HomeUiState.Ready)
 }
 
-private const val PurchaseFeedbackMillis = 5_000L
+private const val PurchaseFeedbackMillis = 2_500L
 
 /** Сколько пути пальца с игрушкой рядом с питомцем — одно потряхивание. */
 private val ShakeTravel = 40.dp
@@ -294,9 +291,6 @@ private const val ToySoundGapMillis = 140L
 /** Паузы между вздохами грустного питомца. */
 private val SighPauseMs = 4_000L..8_000L
 
-/** Шкала настроения при нехватке радости покачивается с такой паузой. */
-private const val BarWobblePauseMillis = 3_000L
-
 /** Настроения, на которые питомец вздыхает. */
 private val SadEmotions = setOf(Emotion.HUNGRY, Emotion.DIRTY, Emotion.TIRED, Emotion.SAD)
 
@@ -312,21 +306,17 @@ private const val NightDim = 0.45f
  * Почему питомцу так — ТЗ п. 2.5.10: краткое объяснение причины эмоции и что сделать.
  * Спокойное состояние не комментируем: всё в порядке, лишний текст ни к чему.
  */
-private fun emotionReason(name: String, emotion: Emotion, hasToys: Boolean): String? = when (emotion) {
-    Emotion.HUNGRY -> "$name голоден: сытость низкая. Покорми на кухне"
-    Emotion.DIRTY -> "$name испачкался. Помой в ванной"
-    Emotion.TIRED -> "$name устал и хочет спать. Уложи его в капсулу в зале"
-    Emotion.SAD -> if (hasToys) {
-        "$name грустит: мало радости. Поиграй с ним игрушкой — возьми её с пола"
-    } else {
-        "$name грустит: мало радости. Загляни в магазин за «хочется»"
-    }
-    Emotion.HAPPY -> "$name доволен: о нём хорошо заботятся"
+private fun emotionReason(emotion: Emotion, hasToys: Boolean): String? = when (emotion) {
+    Emotion.HUNGRY -> "Я проголодался.\nПокорми меня!"
+    Emotion.DIRTY -> "Я испачкался.\nПомой меня!"
+    Emotion.TIRED -> "Я устал.\nХочу спать!"
+    Emotion.SAD -> if (hasToys) "Мне грустно.\nПоиграем?" else "Мне грустно.\nХочу игрушку!"
+    Emotion.HAPPY -> "Мне весело!\nСпасибо за заботу!"
     Emotion.CALM -> null
 }
 
 @Composable
-private fun HomeContent(
+internal fun HomeContent(
     state: HomeUiState.Ready,
     onOpenBudget: () -> Unit,
     onOpenShop: () -> Unit,
@@ -346,6 +336,8 @@ private fun HomeContent(
     purchased: ActionFeedback? = null,
     onHidePurchased: () -> Unit = {},
     rejectShown: Boolean = false,
+    actionLayout: HomeActionLayout = HomeActionLayout.SPLIT,
+    shopContent: @Composable (Int, () -> Unit) -> Unit = { balance, click -> HomeShopButton(balance, click) },
 ) {
     // Питомец спит — это ночь: он в капсуле, свет выключен, игра на паузе
     // до утра. Глаза закрываются, когда он уже внутри, и открываются,
@@ -377,6 +369,20 @@ private fun HomeContent(
     }
     val energyNow = sleep?.energyAt(now) ?: state.stats.energy
     var menuOpen by rememberSaveable { mutableStateOf(false) }
+    var savingsBounds by remember { mutableStateOf(Rect.Zero) }
+    var gamesBounds by remember { mutableStateOf(Rect.Zero) }
+    var headerBottom by remember { mutableFloatStateOf(0f) }
+    var speechVisible by remember { mutableStateOf(false) }
+    var speechBelow by remember { mutableStateOf(false) }
+    var speechRequest by remember { mutableIntStateOf(0) }
+    LaunchedEffect(state.emotion, speechRequest) {
+        speechVisible = speechRequest > 0 || state.emotion in SadEmotions
+        if (speechVisible) {
+            delay(6_000)
+            speechVisible = false
+        }
+    }
+
 
     // Во сне — сопение и приглушённая музыка. Дверь капсулы щёлкает, когда
     // питомец до неё дошёл; открыли приложение, а он уже спит, — без щелчка.
@@ -431,11 +437,18 @@ private fun HomeContent(
     // Панель «Игры уровня»: обязательная игра и две по желанию.
     var gamesOpen by rememberSaveable { mutableStateOf(false) }
 
+    // Выбор интерьера: какая вкладка открыта; null — панель закрыта. Пока выбирают,
+    // интерфейс главной расступается, а камера подлетает к выбранной вещи.
+    var roomEdit by rememberSaveable { mutableStateOf<InteriorPart?>(null) }
+    val editing = roomEdit != null
+    val editScope = rememberCoroutineScope()
+
     // «Назад» закрывает открытую панель, а не приложение: плейтест 29.09 — из
     // панели непройденного уровня было не выйти.
-    BackHandler(enabled = levelOpen || gamesOpen) {
+    BackHandler(enabled = levelOpen || gamesOpen || editing) {
         levelOpen = false
         gamesOpen = false
+        roomEdit = null
     }
 
     // Игра ухода: что выбрали в панели и теперь бросают в рот или трут о питомца.
@@ -505,8 +518,11 @@ private fun HomeContent(
             val s = currentState
             val gain = pendingShakes * s.moodPerShake
             val joyful = s.playLeft - gain > 0 && s.stats.mood + gain < 100
-            pendingShakes++
-            hearts.emit(Offset(pet.center.x, pet.top + pet.height * 0.2f), filled = joyful)
+            if (joyful) pendingShakes++
+            hearts.emit(Offset(
+                pet.center.x + (Random.nextFloat() - 0.5f) * pet.width * 0.45f,
+                pet.top + pet.height * (0.12f + Random.nextFloat() * 0.18f),
+            ), filled = joyful)
             if (joyful) {
                 if (animations) animation.playGiggle()
                 val now = System.currentTimeMillis()
@@ -551,6 +567,7 @@ private fun HomeContent(
 
     // Подсказка следующего шага: где стоят кнопки-цели и вспышка «уровень готов».
     val hintTargets = remember { HintTargets() }
+    var guided by rememberSaveable { mutableStateOf(true) }
     val burst = remember { Animatable(0f) }
     // Условия выполнены — дуга у значка закрылась. Вспышка — только на переходе:
     // что уже видели, помнит rememberSaveable, и вернувшись с игры уровня, ребёнок
@@ -606,7 +623,8 @@ private fun HomeContent(
     val toyBounds = remember { mutableStateMapOf<String, Rect>() }
     var toyShown by rememberSaveable { mutableStateOf(false) }
     val roomCalm = spot == RoomSpot.LIVING && !sleeping && playing == null && care == null &&
-        heldToy == null && !levelOpen && dreamCard == null && purchased == null && !rejectShown && !menuOpen && !moodHint && !gamesOpen
+        heldToy == null && !levelOpen && dreamCard == null && purchased == null && !rejectShown && !menuOpen && !moodHint && !gamesOpen &&
+        !editing
     val showToy = !state.toyPlayed && !toyShown && state.toys.isNotEmpty() && roomCalm
     LaunchedEffect(showToy, animations) {
         if (!showToy) return@LaunchedEffect
@@ -659,11 +677,27 @@ private fun HomeContent(
     // FinneyScreen тут не подходит: он заливает фон кремовым и сам растит колонку,
     // а под интерфейсом должна быть видна комната. Свой корень — ровно поэтому,
     // сам FinneyScreen не трогаем, на нём держатся пять других экранов.
+    val guideStep = if (sleep != null) NextStep.WAKE.takeIf { now >= sleep.enoughAt } else state.nextStep
+    val guideBusy = playing != null || care != null || levelOpen || debugOpen || rejectShown ||
+        menuOpen || moodHint || dreamCard != null || gamesOpen || editing
+    // Интерфейс главной расступается, пока выбирают интерьер, — комната целиком
+    // принадлежит выбору. Читается на отрисовке.
+    val hudShown by animateFloatAsState(
+        if (editing) 0f else 1f,
+        if (animations) spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow) else snap(),
+        label = "hudShown",
+    )
+    // Сколько снизу закрывает панель выбора: камера ставит вещь посередине того, что над ней.
+    // Заголовок и «Готово» висят над рамкой — их высота тоже закрыта.
+    val pickerCovers = InteriorPickerHeight + 36.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     Box(
         modifier = Modifier
             .fillMaxSize()
-            // Первым проходом, до детей, и ничего не поглощая: кнопки, питомец и игрушки
-            // получают касание как раньше, корень только замечает, что оно было.
+            .guidedInput(
+                active = guided && state.level == 1 && !guideBusy,
+                target = { guideStep?.let { hintTargets.spots[it]?.rect } },
+                escape = { hintTargets.escape },
+            )
             .pointerInput(Unit) {
                 awaitPointerEventScope {
                     while (true) {
@@ -690,7 +724,9 @@ private fun HomeContent(
             // Без анимаций прыжок мелькнул бы по кадру на шаг — не прыгаем вовсе.
             onHop = { if (animations) animation.playJoy() },
             toys = state.toys,
-            toysEnabled = !sleeping && playing == null && care == null,
+            toysEnabled = !sleeping && playing == null && care == null && !editing,
+            focus = roomEdit?.let { InteriorPreview.current.focusOf(it) },
+            focusBottom = pickerCovers,
             onToyDrag = ::onToyDrag,
             onToyDrop = ::onToyDrop,
             toyNudge = showcase::offsetFor,
@@ -709,7 +745,7 @@ private fun HomeContent(
                 pose = rememberPoseProvider(animation),
                 modifier = Modifier
                     .fillMaxSize()
-                    .onGloballyPositioned { petLayout = it.boundsInRoot() }
+                    .onGloballyPositioned { petLayout = it.boundsInRoot() }.testTag("home-pet")
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -727,9 +763,22 @@ private fun HomeContent(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .graphicsLayer {
+                    alpha = hudShown
+                    val s = 0.85f + 0.15f * hudShown
+                    scaleX = s
+                    scaleY = s
+                }
+                // Пока выбирают интерьер, кнопки главной не нажимаются: они растаяли,
+                // а палец, попавший в невидимую кнопку, увёл бы с экрана.
+                .then(if (editing) Modifier.pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+                    }
+                } else Modifier)
                 .systemBarsPadding()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(horizontal = 8.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
 
@@ -742,8 +791,11 @@ private fun HomeContent(
         // Крайние слоты одинаковой ширины (weight 1), поэтому уровень стоит
         // ровно по середине экрана, а не съезжает от длины суммы.
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().onGloballyPositioned {
+                val bottom = it.boundsInRoot().bottom
+                if (headerBottom != bottom) headerBottom = bottom
+            },
+            verticalAlignment = Alignment.Top,
         ) {
             // Верхний ряд во сне не гаснет: деньги, уровень и меню открыты
             // и ночью. Всё остальное на экране во сне закрыто (см. NightDim).
@@ -751,11 +803,11 @@ private fun HomeContent(
                 modifier = Modifier.weight(1f),
                 contentAlignment = Alignment.CenterStart,
             ) {
-                WalletButton(balance = state.balance, onClick = onOpenShop)
+                shopContent(state.balance, onOpenShop)
             }
 
             // Уровень — главный показатель роста, поэтому в полтора раза крупнее кнопок по краям.
-            // Центры всех трёх на одной линии: ряд выравнивается по вертикали.
+            // Верхние края кругов совпадают, сумма остаётся под магазином.
             Box(contentAlignment = Alignment.Center) {
                 // Нажатие — что нужно для уровня. Дуга вокруг — сколько условий уже выполнено.
                 LevelBadge(
@@ -799,13 +851,11 @@ private fun HomeContent(
                 // игры, план, гардероб, подсказка и раздел взрослого.
                 // Низ экрана из-за этого остался про комнаты, а не про меню.
                 Box {
-                    FinneyIconButton(
+                    DesignerHomeButton(
+                        icon = R.drawable.home_menu_icon,
+                        description = "Меню",
                         onClick = { menuOpen = true },
-                        contentDescription = "Меню",
-                        size = 56.dp,
-                    ) {
-                        FinneyIcon(FinneyIcons.Menu, size = 26.dp)
-                    }
+                    )
 
                     HomeMenu(
                         expanded = menuOpen,
@@ -820,129 +870,21 @@ private fun HomeContent(
             }
         }
 
-        // Копилка и мини-игры — то, чего макет на главном не предусмотрел,
-        // а ТЗ п. 2.5.3 требует видеть сразу. Обе плашки умещаются в одну строку
-        // и лежат в кремовой полосе над комнатой: строкой ниже начинается абажур
-        // лампы, и второй ряд его бы срезал. Сытость, чистота и настроение сюда
-        // не попадают — они переехали в кольца кнопок и в шкалу слева.
-        Row(
-            modifier = Modifier.fillMaxWidth().graphicsLayer { alpha = hudAlpha },
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            // У цели копилка — кольцом вокруг значка: «10 из 50» видно и не читая.
-            InfoChip(
-                icon = FinneyIcons.Piggy,
-                text = state.goal
-                    ?.let { "${it.goal.label}: ${it.saved} из ${it.goal.price}" }
-                    ?: "Копилка: ${state.totalSavings}",
-                action = "Копилка и цель",
-                onClick = onOpenGoals,
-                enabled = !sleeping,
-                progress = state.goal?.let { it.saved to it.goal.price },
-                modifier = Modifier.weight(1f).hintTarget(hintTargets, NextStep.SAVE, corner = RadiusField),
-            )
-
-            // Игры уровня — обязательная и две по желанию — всегда на виду: плашка
-            // открывает их список. Пока обязательная не пройдена, плашка называет её:
-            // это условие уровня. Дальше — сколько из трёх уже пройдено.
-            val games = state.levelGames
-            if (games.isNotEmpty() && state.levelGame != null) {
-                // Пройденная — не тонкой галочкой в конце строки (плейтест 28.09, п. 46),
-                // а крупным «✓» вместо звезды, зелёной заливкой и словом «пройдено».
-                // Зелёный здесь — итог действия ребёнка, и рядом значок с подписью.
-                val passed = games.count { it.passed }
-                val requiredPassed = state.check.gamePassed
-                InfoChip(
-                    icon = FinneyIcons.Star,
-                    text = when {
-                        !requiredPassed -> "Игра: ${state.levelGame}"
-                        passed == games.size -> "Все игры уровня"
-                        else -> "Игры: $passed из ${games.size}"
-                    },
-                    action = "Игры уровня",
-                    onClick = { gamesOpen = true },
-                    enabled = !sleeping,
-                    done = passed == games.size,
-                    doneTitle = "Пройдены!",
-                    progress = (passed to games.size).takeIf { requiredPassed && passed < games.size },
-                    modifier = Modifier.weight(1f).hintTarget(hintTargets, NextStep.LEVEL_GAME, corner = RadiusField),
-                )
-            }
-        }
-
-        emotionReason(state.petName, state.emotion, hasToys = state.toys.isNotEmpty())?.takeIf { !sleeping }?.let { reason ->
-            Text(
-                text = reason,
-                style = MaterialTheme.typography.bodyMedium,
-                color = FinneyInk,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .graphicsLayer { alpha = hudAlpha }
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(FinneyCream.copy(alpha = 0.9f))
-                    .border(2.dp, FinneyInk, RoundedCornerShape(16.dp))
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-            )
-        }
-
-        // ---------- Середина: сама комната ----------
-        // Дырка в колонке: сквозь неё видно питомца и обстановку, которые рисует
-        // RoomScene под интерфейсом. Нажатия проходят насквозь — пустой Box
-        // их не ловит.
-        //
-        // Единственное, что здесь лежит, — шкала настроения у левого края:
-        // в макете на этом месте подписано «тут только шкала настроения»,
-        // и нарисована она там узкой и длинной.
-        //
-        // Высота — доля свободного места, а не число: на 360 dp и на 412 dp
-        // середина экрана разная, и шкала должна тянуться вместе с ней. К низу
-        // не опускается: на 0.55 кружок-лицо заканчивается выше борта ванны.
-        //
-        // К краю шкала прижата сдвигом, а не своими отступами колонки: поля
-        // экрана в 16 dp нужны кнопкам и плашкам, а шкале они только мешали —
-        // она отъезжала к питомцу.
-        BoxWithConstraints(
+        // Кольца освобождают комнату, а сумма и активная игра остаются видны по ТЗ 2.5.3.
+        Box(
             modifier = Modifier.fillMaxWidth().weight(1f),
-            contentAlignment = Alignment.TopStart,
         ) {
-            val barWidth = 36.dp
-            val barHeight = maxHeight * 0.55f - barWidth
-            // Мало радости — шкала покачивается: на неё стоит нажать.
-            val wobble = remember { Animatable(0f) }
-            // Без анимаций покачивание было бы дрожью в пять кадров — шкала стоит, и зовёт
-            // на неё лицо-кружок внизу.
-            LaunchedEffect(state.moodLow, sleeping, animations) {
-                if (!state.moodLow || sleeping || !animations) {
-                    wobble.snapTo(0f)
-                    return@LaunchedEffect
-                }
-                while (true) {
-                    delay(BarWobblePauseMillis)
-                    for (target in floatArrayOf(1f, -1f, 0.6f, -0.4f, 0f)) wobble.animateTo(target, tween(90))
-                }
-            }
-            HappinessBar(
-                value = state.stats.mood,
-                // Кружок-лицо выступает под капсулой на ширину шкалы — вычитаем.
-                height = barHeight,
-                width = barWidth,
-                modifier = Modifier
-                    .offset(x = -HappinessEdgeShift)
-                    .graphicsLayer {
-                        rotationZ = wobble.value * 4f
-                        alpha = if (sleeping) NightDim else hudAlpha
-                    }
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClickLabel = "Что поднимает настроение",
-                        onClick = { if (!sleeping) moodHint = !moodHint },
-                    ),
+            HomeSideActions(
+                state = state, layout = actionLayout, enabled = !sleeping && playing == null,
+                alpha = hudAlpha, hintTargets = hintTargets, onOpenGoals = onOpenGoals,
+                onOpenGames = { gamesOpen = true },
+                // Обустраивают зал днём: во сне свет выключен, а на кухне и в ванной нет торшера.
+                onOpenRoom = if (spot == RoomSpot.LIVING && !sleeping) ({ roomEdit = InteriorPart.WALL }) else null,
+                onSavingsBounds = { if (savingsBounds != it) savingsBounds = it },
+                onGamesBounds = { if (gamesBounds != it) gamesBounds = it },
             )
             if (moodHint) {
-                // Касание мимо подсказки её закрывает. Слой — только на средней части
-                // экрана и только пока подсказка открыта; сама шкала лежит под ним
-                // и закрывает её так же.
+                // Подробная помощь про игрушки закрывается касанием за её пределами.
                 Box(
                     Modifier
                         .matchParentSize()
@@ -955,8 +897,8 @@ private fun HomeContent(
                 )
                 MoodHint(
                     onClose = { moodHint = false },
-                    // Отступом, а не сдвигом: сдвинутая плашка не знает, что справа кончился экран.
-                    modifier = Modifier.padding(start = barWidth + 4.dp, top = barHeight * 0.35f),
+                    playLeft = state.playLeft,
+                    hasToys = state.toys.isNotEmpty(),
                 )
             }
 
@@ -983,11 +925,12 @@ private fun HomeContent(
         // закрывают сон.
         Row(
             modifier = Modifier.fillMaxWidth().graphicsLayer { alpha = hudAlpha },
-            horizontalArrangement = Arrangement.SpaceEvenly,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            FinneyNeedButton(
-                icon = FinneyIcons.Lamp,
-                label = "Зал и сон",
+            HomeCareAction(
+                icon = R.drawable.home_sleep_icon,
+                label = "Сон",
+                description = "Сон",
                 // Как у кухни и ванной: первое нажатие — комната, второе — уложить
                 // спать. Гардероб — в меню.
                 onClick = {
@@ -998,30 +941,107 @@ private fun HomeContent(
                     }
                 },
                 value = energyNow,
+                critical = energyNow < state.criticalThreshold,
                 selected = spot == RoomSpot.LIVING,
-                modifier = Modifier.hintTarget(hintTargets, NextStep.SLEEP),
+                buttonModifier = Modifier.hintTarget(hintTargets, NextStep.SLEEP),
+                modifier = Modifier.weight(1f),
             )
             // Спящего не кормят и не моют: кнопки полупрозрачные и не нажимаются.
-            FinneyNeedButton(
-                icon = FinneyIcons.Food,
-                label = "Покормить",
+            HomeCareAction(
+                icon = R.drawable.home_eat_icon,
+                label = "Еда",
+                description = "Покормить",
                 onClick = { goTo(RoomSpot.KITCHEN, CareTarget.FOOD) },
                 value = state.stats.satiety,
+                critical = state.stats.satiety < state.criticalThreshold,
                 selected = spot == RoomSpot.KITCHEN,
                 enabled = !sleeping,
-                modifier = Modifier.hintTarget(hintTargets, NextStep.FEED).graphicsLayer { alpha = if (sleeping) NightDim else 1f },
+                buttonModifier = Modifier.hintTarget(hintTargets, NextStep.FEED),
+                modifier = Modifier.weight(1f).graphicsLayer { alpha = if (sleeping) NightDim else 1f },
             )
-            FinneyNeedButton(
-                icon = FinneyIcons.Bath,
-                label = "Помыть",
+            HomeCareAction(
+                icon = R.drawable.home_wash_icon,
+                label = "Мытьё",
+                description = "Помыть",
                 onClick = { goTo(RoomSpot.BATH, CareTarget.BATH) },
                 value = state.stats.hygiene,
+                critical = state.stats.hygiene < state.criticalThreshold,
                 selected = spot == RoomSpot.BATH,
                 enabled = !sleeping,
-                modifier = Modifier.hintTarget(hintTargets, NextStep.WASH).graphicsLayer { alpha = if (sleeping) NightDim else 1f },
+                buttonModifier = Modifier.hintTarget(hintTargets, NextStep.WASH),
+                modifier = Modifier.weight(1f).graphicsLayer { alpha = if (sleeping) NightDim else 1f },
             )
         }
 
+        }
+
+        // Значки привязаны к реальной области питомца, в том числе при его прогулке.
+        if (!sleeping && !guideBusy && petLayout != Rect.Zero &&
+            !(guided && state.level == 1 && guideStep != null)) {
+            PetMoodHeart(
+                emotion = state.emotion, value = state.stats.mood, speaking = speechVisible,
+                onClick = { speechRequest++ },
+                modifier = Modifier.layout { measurable, constraints ->
+                    val pet = petBounds()
+                    val placeable = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
+                    val margin = 12.dp.roundToPx()
+                    var x = (pet.right - placeable.width * 0.8f).toInt()
+                        .coerceIn(margin, (constraints.maxWidth - placeable.width - margin).coerceAtLeast(margin))
+                    val y = (pet.top + pet.height * 0.12f).toInt()
+                        .coerceIn(margin, (constraints.maxHeight - placeable.height - margin).coerceAtLeast(margin))
+                    val bounds = Rect(x.toFloat(), y.toFloat(),
+                        x + placeable.width.toFloat(), y + placeable.height.toFloat())
+                    val obstacle = listOf(savingsBounds, gamesBounds).firstOrNull {
+                        it != Rect.Zero && bounds.overlaps(it.inflate(8.dp.toPx()))
+                    }
+                    if (obstacle != null) {
+                        val away = if (obstacle.center.x > constraints.maxWidth / 2)
+                            minOf(pet.left - placeable.width * 0.2f, obstacle.left - placeable.width - 8.dp.toPx())
+                        else maxOf(pet.right - placeable.width * 0.8f, obstacle.right + 8.dp.toPx())
+                        x = away.toInt().coerceIn(margin,
+                            (constraints.maxWidth - placeable.width - margin).coerceAtLeast(margin))
+                    }
+                    layout(constraints.maxWidth, constraints.maxHeight) { placeable.place(x, y) }
+                },
+            )
+            PetSpeechBubble(
+                visible = speechVisible, tailAbove = speechBelow,
+                text = emotionReason(state.emotion, state.toys.isNotEmpty()) ?: "Мне хорошо!",
+                onClick = {
+                    speechVisible = false
+                    when (state.emotion) {
+                        Emotion.HUNGRY -> goTo(RoomSpot.KITCHEN, CareTarget.FOOD)
+                        Emotion.DIRTY -> goTo(RoomSpot.BATH, CareTarget.BATH)
+                        Emotion.TIRED -> if (spot == RoomSpot.LIVING) onSleep() else spot = RoomSpot.LIVING
+                        Emotion.SAD -> if (state.toys.isNotEmpty()) moodHint = true else onOpenShop()
+                        else -> Unit
+                    }
+                },
+                modifier = Modifier.layout { measurable, constraints ->
+                    val pet = petBounds()
+                    val placeable = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
+                    val margin = 12.dp.roundToPx()
+                    // Речь не закрывает баланс, сумму копилки и активное задание при прогулке.
+                    val actions = listOf(savingsBounds, gamesBounds).filter { it != Rect.Zero }
+                    val sideLimit = if (actionLayout == HomeActionLayout.RIGHT_COLUMN)
+                        actions.minOfOrNull { it.left }?.toInt() ?: constraints.maxWidth else constraints.maxWidth
+                    val maxX = (sideLimit - placeable.width - margin).coerceAtLeast(margin)
+                    val x = (pet.center.x - placeable.width * 0.65f).toInt().coerceIn(margin, maxX)
+                    val actionsBottom = if (actionLayout == HomeActionLayout.SPLIT)
+                        actions.maxOfOrNull { it.bottom } ?: headerBottom else headerBottom
+                    val minY = (actionsBottom + 8.dp.toPx()).toInt().coerceAtLeast(margin)
+                    val headTop = pet.top + pet.height * currentState.appearance.character.skin.hat.brim
+                    val desiredAbove = (headTop - placeable.height - 8.dp.toPx()).toInt()
+                    val maxY = (constraints.maxHeight - placeable.height - 128.dp.roundToPx()).coerceAtLeast(minY)
+                    val below = desiredAbove < minY
+                    if (speechBelow != below) speechBelow = below
+                    val neck = currentState.appearance.character.skin.neck
+                    val belowHead = (pet.top + pet.height * neck + 8.dp.toPx()).toInt()
+                    val y = (if (below) belowHead else desiredAbove)
+                        .coerceIn(minY, maxY)
+                    layout(constraints.maxWidth, constraints.maxHeight) { placeable.place(x, y) }
+                },
+            )
         }
 
         // Облачко-мысль над спящим: сон-загадка по справочнику (SleepCards.kt).
@@ -1058,14 +1078,14 @@ private fun HomeContent(
         // Подсказка говорит одна: всё, что уже открыто поверх комнаты или ещё объясняет
         // своё (окно отказа, меню, подсказка настроения, сон-загадка), её глушит.
         val busy = playing != null || care != null || levelOpen || debugOpen || rejectShown ||
-            menuOpen || moodHint || dreamCard != null || gamesOpen
-        val tutorial = state.level == 1
+            menuOpen || moodHint || dreamCard != null || gamesOpen || editing
+        val tutorial = state.level == 1 && guided
         // Итог покупки на обучении — не отдельной карточкой, а в пузыре подсказки,
         // над следующим шагом: «Купили: каша, −10 · +40» и «Дальше: сыграй в игру».
         // Плейтест 29.09: подсказка ждала, пока уйдёт карточка, — ребёнок смотрел на
         // «уведомление», не понимал, что его надо смахнуть, и игра стояла.
         // После обучения — как было: карточка сверху, подсказка после неё.
-        val noteInBubble = purchased != null && tutorial && step != null && !busy
+        val noteInBubble = false
         val quiet = busy || (purchased != null && !noteInBubble)
         val hint = step.takeIf { !quiet }
         // Подсказка проявляется, когда ребёнок замешкался, и гаснет от касания. Какой
@@ -1098,6 +1118,7 @@ private fun HomeContent(
             burst = { burst.value },
             hand = hintWithHand(state.level),
             visibility = { visibility },
+            onSkip = { guided = false },
         )
 
         ToyShowcaseLayer(showcase, toyBounds, caption = "Возьми игрушку и потряси — ${state.petName} обрадуется")
@@ -1302,6 +1323,8 @@ private fun HomeContent(
                     planGap = state.planGap,
                     canEarn = state.levelGames.any { !it.passed && it.reward > 0 },
                     asleep = sleeping,
+                    careStats = state.stats.copy(energy = energyNow),
+                    needsThreshold = state.needsThreshold,
                     onFinish = {
                         levelOpen = false
                         onClosePeriod()
@@ -1374,22 +1397,43 @@ private fun HomeContent(
             }
         }
 
-        // Итог покупки — поверх всего, но только если его не взял пузырь подсказки.
-        if (purchased != null && !noteInBubble) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .systemBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 96.dp),
-                contentAlignment = Alignment.TopCenter,
-            ) {
-                ActionFeedbackCard(
-                    feedback = purchased,
-                    compact = true,
-                    modifier = Modifier.clickable(onClickLabel = "Скрыть", onClick = onHidePurchased),
-                )
-            }
+        // Выбор интерьера: панель выезжает снизу на пружине, над ней — комната.
+        // Выбранное сразу встаёт в комнату; «Готово» и «Назад» просто закрывают.
+        AnimatedVisibility(
+            visible = editing,
+            enter = slideInVertically(spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMediumLow)) { it },
+            exit = slideOutVertically(tween(250)) { it },
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
+            var shownPart by remember { mutableStateOf(InteriorPart.WALL) }
+            roomEdit?.let { shownPart = it }
+            InteriorPicker(
+                interior = InteriorPreview.current,
+                part = shownPart,
+                onPart = { roomEdit = it },
+                onPick = { part, theme -> InteriorPreview.current = InteriorPreview.current.withPart(part, theme) },
+                onTakeAll = { theme ->
+                    // Тему целиком — со стены: камера отъезжает, и видно, как меняется всё по очереди.
+                    roomEdit = InteriorPart.WALL
+                    editScope.launch {
+                        for (part in InteriorPart.entries) {
+                            if (InteriorPreview.current.themeOf(part) == theme) continue
+                            delay(TAKE_ALL_STEP_MS)
+                            InteriorPreview.current = InteriorPreview.current.withPart(part, theme)
+                        }
+                    }
+                },
+                onDone = { roomEdit = null },
+            )
         }
+
+        // Карточка завершает переход даже после очистки разового события.
+        HomeFeedbackToast(
+            feedback = purchased.takeUnless { noteInBubble }, onDismiss = onHidePurchased,
+            modifier = Modifier.align(Alignment.TopCenter).systemBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 96.dp),
+        )
+
     }
 }
 
@@ -1423,6 +1467,8 @@ private fun SleepPanel(
             style = MaterialTheme.typography.titleMedium,
             color = FinneyInk,
         )
+        Text("Энергия — силы Финни. Сон возвращает их бесплатно.",
+            style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
         // Ждать полного сна не обязательно: для уровня хватает порога, и панель говорит,
         // когда он будет. Иначе ребёнок сидел перед капсулой весь час (плейтест).
         Text(
@@ -1461,6 +1507,8 @@ private fun LevelPanel(
     planGap: PlanGap?,
     canEarn: Boolean,
     asleep: Boolean,
+    careStats: PetStats,
+    needsThreshold: Int,
     onFinish: () -> Unit,
     onAction: (LevelAction) -> Unit,
     onOpenBudget: () -> Unit,
@@ -1469,7 +1517,13 @@ private fun LevelPanel(
     modifier: Modifier = Modifier,
 ) {
     var confirmRestart by rememberSaveable { mutableStateOf(false) }
-    val missing = missingSteps(check, levelGame, planGap, canEarn)
+    var careOpen by rememberSaveable { mutableStateOf(false) }
+    val careActions = buildList {
+        if (careStats.satiety < needsThreshold) add("покорми")
+        if (careStats.hygiene < needsThreshold) add("помой")
+        if (careStats.energy < needsThreshold) add(if (asleep) "дай выспаться" else "уложи спать")
+    }
+    val missing = missingSteps(check, levelGame, planGap, canEarn, careActions)
     // Нажали на запертое «Завершить» — строки «чего не хватает» вздрагивают.
     var nudge by remember { mutableIntStateOf(0) }
     // Прокрутка: с пунктами «чего не хватает» панель выше экрана 360 × 740, и без
@@ -1531,6 +1585,8 @@ private fun LevelPanel(
                     ConditionTile(
                         label = "Уход",
                         spoken = "Сыт, чист и выспался",
+                        onClick = { careOpen = !careOpen },
+                        expanded = careOpen,
                         done = check.needsCovered,
                         modifier = Modifier.weight(1f),
                     ) { LevelIcon(R.drawable.ic_level_care) }
@@ -1550,6 +1606,18 @@ private fun LevelPanel(
                         done = check.savingsAdded,
                         modifier = Modifier.weight(1f),
                     ) { LevelIcon(R.drawable.ic_level_piggy) }
+                }
+                if (careOpen) {
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Для ухода каждая шкала должна быть не ниже $needsThreshold из 100.",
+                            style = MaterialTheme.typography.bodyMedium, color = FinneyInk)
+                        listOf("Сытость" to careStats.satiety, "Чистота" to careStats.hygiene,
+                            "Энергия" to careStats.energy).forEach { (label, value) ->
+                            val mark = if (value >= needsThreshold) "✓" else "!"
+                            Text("$mark $label: $value из 100",
+                                style = MaterialTheme.typography.bodyMedium, color = FinneyInk)
+                        }
+                    }
                 }
                 if (check.willPass) {
                     Text(
@@ -1652,7 +1720,8 @@ private data class Missing(val title: String, val steps: List<MissingStep>)
  * закрывают перерасход (`PeriodRules.planMatched`). Плейтест 29.09: «не понимаю,
  * зачем план и почему он не получается».
  */
-private fun missingSteps(check: LevelCheck, levelGame: String?, planGap: PlanGap?, canEarn: Boolean): Missing {
+private fun missingSteps(check: LevelCheck, levelGame: String?, planGap: PlanGap?, canEarn: Boolean,
+    careActions: List<String>): Missing {
     val game = mutableListOf<MissingStep>()
     if (levelGame != null && check.levelTaskId != null && check.gameRequired && !check.gamePassed) {
         game += MissingStep("Пройди игру «$levelGame»", LevelAction.GAME)
@@ -1664,7 +1733,8 @@ private fun missingSteps(check: LevelCheck, levelGame: String?, planGap: PlanGap
     val overspent = planGap?.overspent ?: 0
     val open = mutableListOf<MissingStep>()
     if (!check.needsCovered) {
-        open += MissingStep("Уход: покорми, помой и уложи спать", LevelAction.CARE)
+        val action = careActions.joinToString(", ").ifEmpty { "проверь шкалы" }
+        open += MissingStep("Уход: $action", LevelAction.CARE)
     }
     // Копилка пуста, а по плану в неё что-то задумано, — один взнос закрывает оба.
     val savingsClosesPlan = !check.savingsAdded && !check.planMatched && savingsLeft > 0 && overspent == 0
@@ -1965,7 +2035,7 @@ private fun LevelGameRow(game: String, passed: Boolean, required: Boolean) {
             maxLines = 2,
             modifier = Modifier.weight(1f),
         )
-        CheckSquare(passed, side = 34.dp)
+        Text(if (passed) "✓" else "—", style = MaterialTheme.typography.titleLarge, color = FinneyInk)
     }
 }
 
@@ -1983,6 +2053,7 @@ private fun ConditionTile(
     done: Boolean,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
+    expanded: Boolean? = null,
     icon: @Composable () -> Unit,
 ) {
     val tap = if (onClick != null) {
@@ -1994,7 +2065,10 @@ private fun ConditionTile(
         modifier = modifier
             .clip(RoundedCornerShape(RadiusCard))
             .then(tap)
-            .clearAndSetSemantics { contentDescription = "$spoken: ${if (done) "да" else "пока нет"}" },
+            .clearAndSetSemantics {
+                contentDescription = "$spoken: ${if (done) "да" else "пока нет"}"
+                expanded?.let { stateDescription = if (it) "Показатели раскрыты" else "Показать показатели" }
+            },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -2007,37 +2081,19 @@ private fun ConditionTile(
                 .border(StrokeRegular, FinneyInk, RoundedCornerShape(RadiusCard)),
             contentAlignment = Alignment.Center,
         ) { icon() }
-        Text(label, style = LevelItemText, color = FinneyInk, maxLines = 1)
-        CheckSquare(done)
-    }
-}
-
-/** Отметка условия: квадрат с галочкой или пустой — отличаются формой, а не цветом. */
-@Composable
-private fun CheckSquare(done: Boolean, side: Dp = 40.dp) {
-    val shape = RoundedCornerShape(RadiusCheckbox)
-    Box(
-        modifier = Modifier
-            .size(side)
-            .clip(shape)
-            .background(if (done) FinneyYellow else FinneyCream)
-            .border(StrokeRegular, FinneyInk, shape),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (done) {
-            Canvas(Modifier.size(side * 0.6f)) {
-                val w = size.minDimension
-                drawPath(
-                    Path().apply {
-                        moveTo(w * 0.08f, w * 0.52f)
-                        lineTo(w * 0.38f, w * 0.82f)
-                        lineTo(w * 0.92f, w * 0.20f)
-                    },
-                    color = FinneyInk,
-                    style = Stroke(width = w * 0.18f, cap = StrokeCap.Round, join = StrokeJoin.Round),
-                )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(label, style = LevelItemText, color = FinneyInk, maxLines = 1)
+            expanded?.let { open ->
+                Canvas(Modifier.size(12.dp)) {
+                    val edgeY = size.height * if (open) 0.7f else 0.3f
+                    val middleY = size.height - edgeY
+                    val middle = Offset(size.width * 0.5f, middleY)
+                    drawLine(FinneyInk, Offset(size.width * 0.15f, edgeY), middle, strokeWidth = 2.dp.toPx())
+                    drawLine(FinneyInk, middle, Offset(size.width * 0.85f, edgeY), strokeWidth = 2.dp.toPx())
+                }
             }
         }
+        Text(if (done) "✓ Готово" else "Ещё нет", style = MaterialTheme.typography.bodyMedium, color = FinneyInk)
     }
 }
 
@@ -2137,6 +2193,7 @@ private val LevelBadgeSize = 66.dp
 private fun InfoChip(
     icon: FinneyIcons,
     text: String,
+    detail: String? = null,
     action: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -2145,7 +2202,7 @@ private fun InfoChip(
     done: Boolean = false,
     doneTitle: String = "Пройдена!",
 ) {
-    Row(
+    Column(
         modifier = modifier
             .graphicsLayer { alpha = if (enabled) 1f else NightDim }
             .clip(RoundedCornerShape(RadiusField))
@@ -2153,34 +2210,18 @@ private fun InfoChip(
             .border(StrokeThin, FinneyInk, RoundedCornerShape(RadiusField))
             .clickable(enabled = enabled, onClickLabel = action, onClick = onClick)
             .defaultMinSize(minHeight = 48.dp)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        if (done) {
-            // Тот же размер, что кольцо копилки рядом: полоса над комнатой не растёт.
-            CheckBadge(size = 32.dp)
-        } else if (progress != null) {
-            // 32 dp — ровно высота плашки без полей: полоса над комнатой не растёт.
-            FillRing(progress.first, progress.second, diameter = 32.dp) { FinneyIcon(icon, size = 17.dp) }
-        } else {
-            FinneyIcon(icon, size = 22.dp)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(text, style = MaterialTheme.typography.bodyMedium, color = FinneyInk,
+                modifier = Modifier.weight(1f))
+            if (done) CheckBadge(size = 28.dp)
+            else FinneyIcon(icon, size = 28.dp)
         }
-        if (done) {
-            // «Пройдена!» — первой строкой и целиком: длинное название иначе съедало
-            // обе строки, и слово обрезалось. Название — ниже, сколько влезет.
-            Column {
-                Text(doneTitle, style = MaterialTheme.typography.bodyMedium, color = FinneyInk, maxLines = 1)
-                Text(text, style = MaterialTheme.typography.bodyMedium, color = FinneyInk, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        } else {
-            Text(
-                text = text,
-                style = MaterialTheme.typography.bodyMedium,
-                color = FinneyInk,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+        detail?.takeIf { it.isNotBlank() }?.let {
+            Text(it, style = MaterialTheme.typography.labelMedium, color = FinneyInk)
         }
     }
 }
@@ -2189,7 +2230,7 @@ private fun InfoChip(
  * Эмоция домена → выражение лица питомца. Отдельная функция, потому что
  * состояний лица четыре, а эмоций больше: грусть и голод выглядят одинаково.
  */
-private fun Emotion.toMood(): PetMood = when (this) {
+internal fun Emotion.toMood(): PetMood = when (this) {
     Emotion.HAPPY, Emotion.CALM -> PetMood.HAPPY
     // Голод и усталость отдельного лица не имеют: такой питомец выглядит грустным.
     // Лицо сна — закрытые глаза — только для настоящего сна в капсуле.

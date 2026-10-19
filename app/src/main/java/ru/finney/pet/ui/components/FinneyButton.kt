@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +40,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -58,6 +62,8 @@ import ru.finney.pet.ui.theme.FinneyStrokeRatio
 import ru.finney.pet.ui.theme.FinneyPeach
 import ru.finney.pet.ui.theme.FinneyPink
 import ru.finney.pet.ui.theme.FinneySand
+import ru.finney.pet.ui.theme.StrokeThin
+import ru.finney.pet.ui.theme.RadiusField
 import ru.finney.pet.ui.theme.StrokeRegular
 import ru.finney.pet.ui.theme.FinneyTheme
 import ru.finney.pet.ui.theme.FinneyYellow
@@ -459,26 +465,66 @@ fun FinneyNeedButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     value: Int? = null,
+    /** Низкая потребность отмечается независимо от выбранной комнаты. */
+    critical: Boolean = false,
     selected: Boolean = false,
     size: Dp = 64.dp,
     enabled: Boolean = true,
 ) {
     val clamped = value?.coerceIn(0, 100)
-    ProgressRing(
-        diameter = size,
-        progress = clamped?.let { it / 100f },
-        modifier = modifier,
+    val sounds = LocalSounds.current
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        if (pressed) PressedScale else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label = "roomPress",
+    )
+    // Круг и подпись — одна кнопка, в том числе для TalkBack и подсказки-пальца.
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
+            .clickable(enabled = enabled, role = Role.Button, interactionSource = source, indication = null) {
+                sounds.play(Sfx.Tap)
+                onClick()
+            }
+            .semantics {
+                this.selected = selected
+                if (clamped != null) stateDescription = "$clamped из 100" +
+                    if (critical) ", критически низко" else ""
+            },
     ) {
-        FinneyIconButton(
-            onClick = onClick,
-            contentDescription = if (clamped == null) label else "$label, $clamped из 100",
-            size = size,
-            enabled = enabled,
-            selected = selected,
-        ) {
-            FinneyIcon(icon, size = size / 2)
+        Box {
+            ProgressRing(diameter = size, progress = clamped?.let { it / 100f }) {
+                Box(
+                    modifier = Modifier.size(size)
+                        .graphicsLayer { scaleX = scale; scaleY = scale }
+                        .clip(CircleShape).buttonFill(pressed || selected, round = true),
+                    contentAlignment = Alignment.Center,
+                ) { FinneyIcon(icon, size = size / 2) }
+            }
+            if (critical) WarningBadge(size = 22.dp, modifier = Modifier.align(Alignment.TopEnd))
         }
+        Text(label, style = MaterialTheme.typography.labelMedium, color = FinneyInk,
+            textAlign = TextAlign.Center, modifier = Modifier.padding(top = 2.dp)
+                .background(FinneyCream, RoundedCornerShape(6.dp))
+                .padding(horizontal = 4.dp, vertical = 1.dp))
     }
+}
+
+/** Непрозрачная подпись сохраняет контраст на обоях и тёмном полу любой комнаты. */
+@Composable
+fun RoomActionLabel(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = FinneyInk,
+        textAlign = TextAlign.Center,
+        modifier = modifier
+            .background(FinneyCream, RoundedCornerShape(RadiusField))
+            .border(StrokeThin, FinneyInk, RoundedCornerShape(RadiusField))
+            .padding(horizontal = 4.dp, vertical = 4.dp),
+    )
 }
 
 /**

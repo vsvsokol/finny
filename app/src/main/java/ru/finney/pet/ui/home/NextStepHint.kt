@@ -13,13 +13,20 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.IconButton
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -27,6 +34,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -48,6 +56,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.platform.testTag
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.min
@@ -56,6 +65,7 @@ import kotlin.math.sin
 import ru.finney.pet.ui.components.ActionFeedback
 import ru.finney.pet.ui.components.ActionFeedbackSummary
 import ru.finney.pet.ui.components.PointingHandLength
+import ru.finney.pet.ui.components.FinneyQuietButton
 import ru.finney.pet.ui.components.drawPointingHand
 import ru.finney.pet.ui.theme.FinneyCream
 import ru.finney.pet.ui.theme.FinneyGlare
@@ -91,6 +101,7 @@ class HintSpot(val rect: Rect, val corner: Dp?)
 /** Где на экране стоят цели подсказки. Кнопки сообщают о себе через [hintTarget]. */
 class HintTargets {
     internal val spots = mutableStateMapOf<NextStep, HintSpot>()
+    internal var escape by mutableStateOf<Rect?>(null)
 }
 
 /**
@@ -107,14 +118,14 @@ fun Modifier.hintTarget(targets: HintTargets, vararg steps: NextStep, corner: Dp
 
 /** Одна строка к подсказке для первого уровня: до шести слов, чтобы прочитать на бегу. */
 fun NextStep.bubble(): String = when (this) {
-    NextStep.PLAN -> "Составь план — нажми уровень"
-    NextStep.FEED -> "Покорми питомца"
-    NextStep.WASH -> "Помой питомца"
+    NextStep.PLAN -> "Составь план"
+    NextStep.FEED -> "Покорми Финни, чтобы он был сыт."
+    NextStep.WASH -> "Помой Финни, чтобы он стал чистым."
     NextStep.LEVEL_GAME -> "Сыграй в игру уровня"
     NextStep.SLEEP -> "Уложи питомца спать"
     NextStep.WAKE -> "Выспался — можно будить!"
     NextStep.FINISH -> "Заверши уровень!"
-    NextStep.SAVE -> "Отложи в копилку"
+    NextStep.SAVE -> "Отложи монетки на выбранную вещь."
 }
 
 /**
@@ -167,6 +178,7 @@ fun NextStepOverlay(
     hand: Boolean = true,
     visibility: () -> Float = { 1f },
     note: ActionFeedback? = null,
+    onSkip: (() -> Unit)? = null,
 ) {
     var origin by remember { mutableStateOf(Offset.Zero) }
     val spot = step?.let { targets.spots[it] }
@@ -197,8 +209,8 @@ fun NextStepOverlay(
             if (spotlight) drawSpotlight(target, corner)
             val tap = if (animate) TapPhase.at(cycle.value) else TapPhase.Still
             if (step == NextStep.FINISH) drawGlow(target, if (animate) 0.75f + 0.25f * (1f - tap.distance) else 1f)
-            drawHintRing(target, corner, tap.wave)
-            if (hand) drawHand(target, tap)
+            drawHintRing(target, corner, if (spotlight) 0f else tap.wave)
+            if (hand && !spotlight) drawHand(target, tap)
         }
 
         if (target != null && bubble != null) {
@@ -209,34 +221,43 @@ fun NextStepOverlay(
                     .layout { measurable, constraints ->
                         val margin = 16.dp.roundToPx()
                         val placeable = measurable.measure(
-                            Constraints(maxWidth = (constraints.maxWidth - 2 * margin).coerceAtLeast(0)),
+                            Constraints(
+                                maxWidth = minOf(240.dp.roundToPx(), (constraints.maxWidth - 2 * margin).coerceAtLeast(0)),
+                                maxHeight = (constraints.maxHeight - 2 * margin).coerceAtLeast(0),
+                            ),
                         )
                         val below = target.center.y < constraints.maxHeight / 2f
-                        val reach = (RingGap + PulseTravel + HandTravel + PointingHandLength + 8.dp).toPx()
+                        val reach = if (spotlight) 8.dp.toPx()
+                            else (RingGap + PulseTravel + HandTravel + PointingHandLength + 8.dp).toPx()
                         val x = (target.center.x - placeable.width / 2f)
                             .coerceIn(margin.toFloat(), (constraints.maxWidth - margin - placeable.width).toFloat().coerceAtLeast(margin.toFloat()))
-                        val y = if (below) target.bottom + reach else target.top - reach - placeable.height
+                        val desiredY = if (below) target.bottom + reach else target.top - reach - placeable.height
+                        val y = desiredY.coerceIn(
+                            margin.toFloat(),
+                            (constraints.maxHeight - margin - placeable.height).toFloat().coerceAtLeast(margin.toFloat()),
+                        )
                         layout(constraints.maxWidth, constraints.maxHeight) {
                             placeable.place(IntOffset(x.roundToInt(), y.roundToInt()))
                         }
                     }
                     .graphicsLayer { alpha = visibility() }
-                    .clearAndSetSemantics {
-                        contentDescription = listOfNotNull(note?.title, "Подсказка: $bubble").joinToString(". ")
-                    }
+                    .testTag("home-guidance")
                     .background(FinneyCream, RoundedCornerShape(16.dp))
                     .border(2.dp, FinneyInk, RoundedCornerShape(16.dp))
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
             ) {
-                if (note != null) {
-                    ActionFeedbackSummary(note)
-                    Box(Modifier.fillMaxWidth().height(2.dp).background(FinneyInk.copy(alpha = 0.3f)))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(bubble, style = MaterialTheme.typography.bodyMedium, color = FinneyInk,
+                        modifier = Modifier.weight(1f, fill = false))
+                    if (spotlight && onSkip != null) {
+                        IconButton(onClick = onSkip, modifier = Modifier.size(48.dp)
+                            .onGloballyPositioned { targets.escape = it.boundsInRoot() }
+                            .semantics { contentDescription = "Закрыть подсказки" }) {
+                            Text("×", fontSize = 26.sp, color = FinneyInk,
+                                modifier = Modifier.clearAndSetSemantics { })
+                        }
+                    }
                 }
-                Text(
-                    text = if (note != null) "Дальше: $bubble" else bubble,
-                    style = if (note != null) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge,
-                    color = FinneyInk,
-                )
             }
         }
     }
@@ -285,7 +306,7 @@ private fun DrawScope.drawSpotlight(target: Rect, corner: Dp?) {
         addRect(Rect(Offset.Zero, size))
         addRoundRect(hole)
     }
-    drawPath(path, FinneyInk.copy(alpha = 0.55f))
+    drawPath(path, FinneyInk.copy(alpha = 0.35f))
 }
 
 /** Кольцо по форме цели: у круглой кнопки — круг, у плашки — её же скруглённый прямоугольник. */
@@ -293,8 +314,7 @@ private fun DrawScope.drawHintRing(target: Rect, corner: Dp?, wave: Float) {
     val gap = RingGap.toPx()
     fun ring(extra: Float, alpha: Float) {
         val path = Path().apply { addRoundRect(around(target, corner, gap + extra)) }
-        drawPath(path, FinneyYellow.copy(alpha = alpha), style = Stroke(8.dp.toPx()))
-        drawPath(path, FinneyInk.copy(alpha = alpha), style = Stroke(3.dp.toPx()))
+        drawPath(path, FinneyYellow.copy(alpha = alpha), style = Stroke(4.dp.toPx()))
     }
     // Волна от нажатия поверх постоянного кольца: движение зовёт взгляд, кольцо — держит.
     if (wave > 0f) ring(PulseTravel.toPx() * wave, 1f - wave)

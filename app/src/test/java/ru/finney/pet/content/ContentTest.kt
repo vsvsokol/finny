@@ -1,6 +1,8 @@
 package ru.finney.pet.content
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import ru.finney.pet.domain.model.BasketTask
@@ -20,6 +22,7 @@ import ru.finney.pet.domain.model.TaskOutcome
 import ru.finney.pet.domain.model.TaskTheme
 import ru.finney.pet.domain.pet.PetRules
 import ru.finney.pet.domain.progress.Progression
+import ru.finney.pet.domain.progress.Unlocks
 import ru.finney.pet.domain.tasks.TaskEngines
 import ru.finney.pet.domain.tasks.TaskEvaluation
 import ru.finney.pet.domain.tasks.TaskInput
@@ -175,16 +178,29 @@ class ContentTest {
     }
 
     @Test
-    fun `сложность растёт с уровнем — на каждом уровне с 2 по 9 что-то новое, дальше не реже раза в 2 уровня`() {
-        assertTrue("у каждой игры есть вариант первого уровня", content.taskSeries.all { it.first().unlockLevel == 1 })
+    fun `сложность растёт с уровнем — игры открываются по одной и усложняются не сразу, дальше новое не реже раза в 2 уровня`() {
+        assertTrue("на первом уровне хотя бы две игры", content.taskSeries.count { it.first().unlockLevel == 1 } >= 2)
+        assertTrue("все игры открываются к 10-му уровню", content.taskSeries.all { it.first().unlockLevel <= 10 })
         assertTrue("у каждой игры несколько вариантов", content.taskSeries.all { it.size >= 2 })
+        // Игра сначала открывается, а сложнее становится не раньше чем через два уровня.
+        for (variants in content.taskSeries) variants.zipWithNext().forEach { (a, b) ->
+            assertTrue("${b.id}: на уровне ${b.unlockLevel}, сразу после ${a.id} на ${a.unlockLevel}", b.unlockLevel - a.unlockLevel >= 2)
+        }
         val levels = content.tasks.map { it.unlockLevel }.toSet()
-        for (level in 2..minOf(9, content.economy.maxLevel)) assertTrue("на уровне $level ничего не меняется", level in levels)
         // Уровней 30, вариантов меньше: после девятого новое реже, но без долгих пустот,
         // и растянуто почти до конца — последние уровни не повторяют одно и то же с шестого.
         val sorted = levels.sorted()
         sorted.zipWithNext().forEach { (a, b) -> assertTrue("между уровнями $a и $b ничего нового", b - a <= 2) }
         assertTrue("новое кончается на уровне ${sorted.last()} из ${content.economy.maxLevel}", sorted.last() >= content.economy.maxLevel - 6)
+    }
+
+    @Test
+    fun `новый уровень открывает новое — со 2-го по 10-й ни одного пустого, звание на каждой стадии`() {
+        for (level in 2..minOf(10, content.economy.maxLevel)) {
+            assertFalse("на уровне $level ничего не открывается", Unlocks.at(level, content).isEmpty)
+        }
+        assertEquals(content.economy.stageStartLevels.size, content.economy.stageTitles.size)
+        for (start in content.economy.stageStartLevels) assertNotNull("на уровне $start нет звания", Unlocks.at(start, content).title)
     }
 
     private fun outcome(task: TaskDefinition, input: TaskInput): TaskOutcome {
@@ -204,8 +220,9 @@ class ContentTest {
                 .first { items -> items.sumOf { it.price } <= task.limit && task.rules.all { TaskEngines.ruleMet(task, it, items.map { i -> i.id }.toSet()) } }
             TaskInput.Basket(win.map { it.id }.toSet()) to TaskInput.Basket(emptySet())
         }
-        // Проигрыш — «откладывать всё»: копилка полная, а Финни грустный. Так игра не учит «никогда ничего не тратить».
-        is GoalRaceTask -> TaskInput.DailyDeposits(TaskEngines.raceSolution(task)!!) to TaskInput.DailyDeposits(List(task.days) { task.incomePerDay })
+        // Проигрыш — ничего не откладывать: цель не набрана. «Откладывать всё» — не проигрыш,
+        // а пройдено без бонуса (проверяет TaskChecks).
+        is GoalRaceTask -> TaskInput.DailyDeposits(TaskEngines.raceSolution(task)!!) to TaskInput.DailyDeposits(List(task.days) { 0 })
         is ReserveTask -> {
             val needs = task.spendings.filter { it.category == Category.NEEDS }.map { it.id }.toSet()
             // Неудача: все желаемые, какие влезают, без запаса; на сюрпризы приходится переносить нужное.

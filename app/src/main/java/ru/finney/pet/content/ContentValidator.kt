@@ -2,7 +2,9 @@ package ru.finney.pet.content
 
 import ru.finney.pet.domain.model.Category
 import ru.finney.pet.domain.model.GameContent
+import ru.finney.pet.domain.model.GoalRaceTask
 import ru.finney.pet.domain.model.ItemKind
+import ru.finney.pet.domain.model.ReserveTask
 import ru.finney.pet.domain.tasks.TaskChecks
 
 /**
@@ -52,6 +54,16 @@ object ContentValidator {
         if (needs.none { it.effect.hygiene > 0 }) add("shop.json: нет обязательного товара, поднимающего чистоту")
 
         duplicates(content.goals.map { it.id }).forEach { add("goals.json: повторяется id $it") }
+
+        // Открытия по уровням (docs/economy.md, раздел 8). План на первом же уровне — во всех трёх
+        // направлениях (ТЗ п. 2.5.5), поэтому нужное, хоть одна радость и хоть одна цель открыты сразу.
+        if (e.stageTitles.isNotEmpty() && e.stageTitles.size != stages) add("economy.json: stageTitles — нужно $stages значения, по числу стадий")
+        if (e.stageTitles.any { it.isBlank() }) add("economy.json: stageTitles — пустое звание")
+        content.shop.filter { it.unlockLevel !in 1..e.maxLevel }.forEach { add("shop.json: ${it.id} — unlockLevel должен быть от 1 до ${e.maxLevel}") }
+        content.goals.filter { it.unlockLevel !in 1..e.maxLevel }.forEach { add("goals.json: ${it.id} — unlockLevel должен быть от 1 до ${e.maxLevel}") }
+        needs.filter { it.unlockLevel != 1 }.forEach { add("shop.json: ${it.id} — нужное открыто всегда, unlockLevel только 1") }
+        if (content.forSale.none { it.category == Category.WANTS && it.unlockLevel == 1 }) add("shop.json: на уровне 1 нечего купить из «хочется» — план не составить")
+        if (content.goals.none { it.unlockLevel == 1 }) add("goals.json: на уровне 1 нет цели — копилку в плане не заполнить")
         content.goals.filter { it.price <= 0 }.forEach { add("goals.json: ${it.id} — цена должна быть > 0") }
 
         duplicates(content.glossary.map { it.id }).forEach { add("glossary.json: повторяется id $it") }
@@ -65,6 +77,14 @@ object ContentValidator {
             if (task.unlockPeriod < 1) add("$at — unlockPeriod должен быть ≥ 1")
             if (task.unlockLevel !in 1..e.maxLevel) add("$at — unlockLevel должен быть от 1 до ${e.maxLevel}")
             addAll(TaskChecks.problems(task))
+            // «Пройдено, но можно лучше» — своим текстом, иначе экран скажет «ничего не отменили».
+            if (task is ReserveTask) {
+                if (task.explainDropped.isNullOrBlank()) add("$at — нет explainDropped: что сказать, если желаемое отложили ради сюрприза")
+                if (task.explainNoJoy.isNullOrBlank()) add("$at — нет explainNoJoy: что сказать, если в плане не было желаемого")
+            }
+            if (task is GoalRaceTask && task.explainSad.isNullOrBlank()) {
+                add("$at — нет explainSad: что сказать, если цель набрана, а Финни загрустил")
+            }
         }
 
         for (variants in content.taskSeries) {

@@ -101,6 +101,11 @@ internal fun ChangeGame(task: ChangeTask, character: PetCharacter, onClose: () -
     }
 
     GameScene(backdrop = Backdrop.STORE, onClose = onClose) {
+        Text(
+            if (give) "Ты кассир: отсчитай сдачу" else "Ты покупатель: заплати ровно",
+            style = MaterialTheme.typography.bodyMedium, color = FinneyInk,
+            modifier = Modifier.padding(top = HudHeight),
+        )
         val density = LocalDensity.current
         val barsTop = with(density) { WindowInsets.systemBars.getTop(this).toDp() }
         val barsBottom = with(density) { WindowInsets.systemBars.getBottom(this).toDp() }

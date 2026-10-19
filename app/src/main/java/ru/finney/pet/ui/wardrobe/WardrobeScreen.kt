@@ -82,7 +82,7 @@ fun WardrobeScreen(
 }
 
 @Composable
-private fun WardrobeContent(
+internal fun WardrobeContent(
     state: WardrobeUiState.Ready,
     onWear: (String) -> Unit,
     onTakeOff: (String?) -> Unit,

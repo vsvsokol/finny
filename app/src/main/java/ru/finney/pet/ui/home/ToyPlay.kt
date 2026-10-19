@@ -6,6 +6,9 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import ru.finney.pet.ui.components.FinneyPanel
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -14,6 +17,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -147,61 +151,26 @@ fun HeartBurstLayer(burst: HeartBurst) {
  * висит, пока её не закроют крестиком или касанием мимо (ТЗ п. 8.1 — не торопить).
  */
 @Composable
-fun MoodHint(onClose: () -> Unit, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            // По ширине картинок: иначе строка с крестиком растягивала плашку за край экрана.
-            .width(IntrinsicSize.Max)
-            .clip(RoundedCornerShape(20.dp))
-            .background(FinneyCream)
-            .border(StrokeRegular, FinneyInk, RoundedCornerShape(20.dp))
-            .padding(start = 12.dp, bottom = 10.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "Радость поднимают:",
-                style = MaterialTheme.typography.titleMedium,
-                color = FinneyInk,
-                maxLines = 1,
-                modifier = Modifier.semantics { heading() },
-            )
-            Spacer(Modifier.weight(1f))
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(48.dp)
-                    .clickable(onClickLabel = "Закрыть подсказку", role = Role.Button, onClick = onClose)
-                    .semantics { contentDescription = "Закрыть подсказку" },
-            ) {
-                Text("✕", style = MaterialTheme.typography.titleLarge, color = FinneyInk)
+fun MoodHint(onClose: () -> Unit, playLeft: Int = 0, hasToys: Boolean = false) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = onClose) {
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            FinneyPanel(title = "Радость", onClose = onClose) {
+                Text("Радость — настроение Финни: от 0 до 100.",
+                    style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    for (art in listOf(R.drawable.item_toy_ball, R.drawable.item_treat_candy, R.drawable.acc_hat_cowboy)) {
+                        Image(painterResource(art), contentDescription = null, modifier = Modifier.size(48.dp))
+                    }
+                }
+                Text("Поиграй игрушкой в зале или купи сладость в магазине. Сладость действует один раз.",
+                    style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
+                if (hasToys) Text(
+                    if (playLeft > 0) "Игрушки дадут ещё до $playLeft радости на этом уровне."
+                    else "Финни наигрался. Новая прибавка от игрушек — на следующем уровне.",
+                    style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
+                Text("Сытость и чистоту поднимай отдельно: едой и мытьём.",
+                    style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
             }
         }
-        Row(
-            modifier = Modifier
-                .padding(end = 12.dp)
-                .clearAndSetSemantics { contentDescription = "игрушки, сладости и шляпы поднимают радость" },
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            for (art in listOf(R.drawable.item_toy_ball, R.drawable.item_treat_candy, R.drawable.acc_hat_cowboy)) {
-                Image(painter = painterResource(art), contentDescription = null, modifier = Modifier.size(48.dp))
-            }
-            ThickArrow(Modifier.size(28.dp))
-            HeartIcon(filled = true, size = 44.dp)
-            ThickArrow(Modifier.size(24.dp).rotate(-90f))
-        }
-    }
-}
-
-/** Стрелка вправо толстой чертой, а не «→» шрифта: у Glina она тонкая и терялась. */
-@Composable
-private fun ThickArrow(modifier: Modifier) {
-    Canvas(modifier) {
-        val w = 4.dp.toPx()
-        val y = size.height / 2
-        val head = size.height * 0.35f
-        drawLine(FinneyInk, Offset(w / 2, y), Offset(size.width - w / 2, y), w, StrokeCap.Round)
-        drawLine(FinneyInk, Offset(size.width - head, y - head), Offset(size.width - w / 2, y), w, StrokeCap.Round)
-        drawLine(FinneyInk, Offset(size.width - head, y + head), Offset(size.width - w / 2, y), w, StrokeCap.Round)
     }
 }

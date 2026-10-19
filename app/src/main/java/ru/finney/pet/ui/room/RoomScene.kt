@@ -7,6 +7,9 @@ import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.StartOffset
@@ -42,11 +45,17 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -64,6 +73,7 @@ import ru.finney.pet.ui.sound.Sfx
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.PI
+import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.random.Random
 
@@ -113,8 +123,18 @@ private const val FOAM_PERIOD_MS = 3400
  */
 private const val SKY_LOOP_MS = 120_000
 
+/**
+ * За сколько колесо обозрения за окном цирка делает оборот. Медленно, как
+ * настоящее: быстрое колесо за окном отвлекает от питомца.
+ */
+private const val WHEEL_TURN_MS = 40_000
+
+/** Светлячки за окном леса разгораются и гаснут — не до темноты, чтобы не мигали. */
+private const val TWINKLE_MS = 1_800
+private const val TWINKLE_LOW = 0.35f
+
 /** Фон неба в экспорте, им же залиты края полосы. */
-private val SkyColor = Color(0xFF261F46)
+internal val SkyColor = Color(0xFF261F46)
 
 /**
  * Паузы между пролётами НЛО, мс. Первая короткая — чтобы ребёнок успел его
@@ -197,6 +217,12 @@ private val UfoPauseMs = 20_000L..45_000L
  * @param onToyDrop игрушку отпустили.
  * @param toyNudge сдвиг рисунка игрушки в пикселях — показ и подпрыгивание, см. [RoomToy].
  * @param onToyPlaced где игрушка на экране.
+ * @param interior задник, окно и торшер. Сменённая часть не подменяется, а меняется
+ *   с анимацией: стену прокатывает валик, окно схлопывается и раскрывается, торшер
+ *   падает сверху и мигает, включаясь.
+ * @param focus что показать крупно, пока выбирают интерьер ([focusOf]); null — обычный вид.
+ * @param focusBottom сколько снизу закрыто панелью выбора: часть [focus] встаёт
+ *   посередине того, что над ней осталось.
  */
 @Composable
 fun RoomScene(
@@ -214,11 +240,15 @@ fun RoomScene(
     onToyDrop: (toyId: String) -> Unit = {},
     toyNudge: (toyId: String) -> Offset = { Offset.Zero },
     onToyPlaced: (toyId: String, bounds: Rect) -> Unit = { _, _ -> },
+    interior: RoomInterior = InteriorPreview.current,
+    focus: RelRect? = null,
+    focusBottom: Dp = 0.dp,
     pet: @Composable BoxScope.() -> Unit = {},
 ) {
     // Где питомец в зале сейчас: сдвиг от его обычного места, доля ширины холста.
     val stroll = remember { Animatable(0f) }
-    val ufo = remember { UfoState() }
+    // Летун у окна свой у каждого интерьера: сменили окно — пролёт начинается заново.
+    val flyer = remember(interior.window) { WindowFlyer(interior.window) }
 
     // Ночь: свет в комнате выключен. Гаснет, когда за питомцем закрылась дверь,
     // загорается, как только его будят, — до того, как дверь открылась.
@@ -228,17 +258,29 @@ fun RoomScene(
     val lights = RoomSpot.entries.associateWith { room ->
         rememberRoomLighting(
             lampOn = lampOn && !dark && (room.hasLamp || room.ceilingLight),
-            ufo = ufo::light,
+            ufo = flyer::light,
             window = room.hasWindow,
             ceiling = room.ceilingLight,
+            interior = interior,
         )
     }
-    // НЛО летает одно на все комнаты: окна во время перехода два, а пролёт один.
-    // Гудит, только если окно сейчас видно.
+    // Летун один на все комнаты: окна во время перехода два, а пролёт один.
+    // Звучит, только если окно сейчас видно.
     val sounds = LocalSounds.current
     val currentSpot by rememberUpdatedState(spot)
-    LaunchedEffect(ufo) { ufo.fly(onStart = { if (currentSpot.hasWindow) sounds.play(Sfx.Ufo) }) }
+    LaunchedEffect(flyer) { flyer.fly(onStart = { life -> if (currentSpot.hasWindow) life.sound?.let(sounds::play) }) }
     val animations = LocalAnimations.current
+
+    // Смена частей интерьера: у каждой своя анимация и свой звук. Звуки игрушек
+    // сюда не берём — их узнают сразу («кубик Рубика»), а это не игрушка.
+    val walls = rememberPartSwap(interior.wall, WALL_SWAP_MS) { sounds.play(Sfx.Pour) }
+    val windows = rememberPartSwap(interior.window, WINDOW_SWAP_MS) { sounds.play(Sfx.WashClean) }
+    val lamps = rememberPartSwap(interior.lamp, LAMP_SWAP_MS) {
+        delay((LAMP_SWAP_MS * LAMP_LANDS).toLong())
+        sounds.play(Sfx.CapsuleDoor)
+        delay((LAMP_SWAP_MS * (LAMP_FLICKERS - LAMP_LANDS)).toLong())
+        sounds.play(Sfx.Tap)
+    }
 
     // Отход ко сну: питомец прыгает в капсулу (walk 0 → 1), камера наезжает,
     // закрывается дверь, гаснет свет. Живёт на всю сцену, а не на зал:
@@ -357,6 +399,46 @@ fun RoomScene(
             )
         }
 
+        // Камера выбора интерьера: выбранная часть крупно над панелью выбора.
+        // Масштаб не меньше «холст во всю ширину» и сдвиг зажат, как у камеры сна:
+        // за краем холста пусто, и показывать это нельзя.
+        val edit = with(density) {
+            val target = focus?.let { rect ->
+                val w = maxWidth.toPx()
+                val h = (maxHeight - focusBottom).toPx().coerceAtLeast(1f)
+                val left = shiftX.toPx()
+                val top = shiftY.toPx()
+                val cw = canvasW.toPx()
+                val ch = canvasH.toPx()
+                val pad = FOCUS_PAD.toPx()
+                val rw = cw * rect.width
+                val rh = ch * rect.height
+                val s = minOf((w - 2 * pad) / rw, (h - 2 * pad) / rh, FOCUS_MAX_ZOOM).coerceAtLeast(w / cw)
+                val cx = left + cw * (rect.left + rect.width / 2f)
+                val cy = top + ch * (rect.top + rect.height / 2f)
+                val x = (w / 2f - s * cx).coerceIn(minOf(w - s * (left + cw), -s * left), -s * left)
+                val y = (h / 2f - s * cy).coerceIn(minOf(h - s * (top + ch), -s * top), -s * top)
+                Triple(s, x, y)
+            } ?: Triple(1f, 0f, 0f)
+            val spec = if (animations) spring<Float>(dampingRatio = 0.8f, stiffness = Spring.StiffnessVeryLow) else snap()
+            Triple(
+                animateFloatAsState(target.first, spec, label = "focusScale"),
+                animateFloatAsState(target.second, spec, label = "focusX"),
+                animateFloatAsState(target.third, spec, label = "focusY"),
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    transformOrigin = TransformOrigin(0f, 0f)
+                    scaleX = edit.first.value
+                    scaleY = edit.first.value
+                    translationX = edit.second.value
+                    translationY = edit.third.value
+                },
+        ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -379,7 +461,10 @@ fun RoomScene(
                     canvasH = canvasH,
                     shiftX = shiftX,
                     shiftY = shiftY,
-                    ufo = ufo,
+                    walls = walls,
+                    windows = windows,
+                    lamps = lamps,
+                    flyer = flyer,
                     capsule = capsule,
                     walk = { walk.value },
                     stroll = { stroll.value },
@@ -403,6 +488,7 @@ fun RoomScene(
             }
         }
 
+        }
         }
 
         // Ночь поверх комнаты: свет выключен. Лежит вне камеры — увеличенная
@@ -446,7 +532,10 @@ private fun RoomCanvas(
     canvasH: Dp,
     shiftX: Dp,
     shiftY: Dp,
-    ufo: UfoState,
+    walls: PartSwap<WallSkin>,
+    windows: PartSwap<WindowSkin>,
+    lamps: PartSwap<LampSkin>,
+    flyer: WindowFlyer,
     capsule: Boolean,
     walk: () -> Float,
     stroll: () -> Float,
@@ -472,10 +561,12 @@ private fun RoomCanvas(
                 .requiredSize(canvasW, canvasH),
         ) {
             Box(modifier = Modifier.fillMaxSize().roomLight(lighting)) {
-                Layer(Room.Back, canvasW, canvasH)
-                if (room.hasWindow) Window(canvasW, canvasH, ufo)
-                if (room.hasLamp) Layer(Room.Lamp, canvasW, canvasH)
+                WallSwap(walls, canvasW, canvasH)
+                if (room.hasWindow) WindowSwap(windows, canvasW, canvasH, flyer)
+                if (room.hasLamp) LampSwap(lamps, canvasW, canvasH)
             }
+            // Искры и вспышки — поверх света: свет ночной и приглушил бы их.
+            SwapEffects(walls, windows.takeIf { room.hasWindow }, lamps.takeIf { room.hasLamp })
 
             val visibility = petVisibility
             val ground = Room.petGround(room).let { if (room == RoomSpot.LIVING) it.shiftedX(stroll()) else it }
@@ -577,104 +668,190 @@ private fun Pet(
 }
 
 /**
- * Окно: небо, НЛО, рама.
+ * Окно: вид, то, что за ним живёт, и рама.
  *
- * Рама шире проёма (0.350..0.979 против 0.428..0.881) и кладётся последней —
- * она перекрывает его края, и стык не виден. Небо и НЛО обрезаны проёмом:
- * за рамой им делать нечего.
+ * Рама шире проёма и кладётся последней — она перекрывает края вида, и стык
+ * не виден. Вид и живое за окном рисуются в отдельном слое ровно по проёму,
+ * а живое — режимом SrcAtop, только поверх вида: у иллюминатора и шестиугольника
+ * проём не прямоугольный, и рыбка или пчела в его углах оказались бы на обоях.
  *
- * Небо медленно плывёт влево — полоса [Room.WindowSky] повторяется встык и
- * сдвигается на свою ширину за [SKY_LOOP_MS]. Камеры в комнате нет, поэтому
- * движение идёт от времени. Края полосы — ровный фон неба (см. pack_room.py),
- * так что на стыке шва нет, а в конце круга сдвиг ровно на ширину полосы,
- * и перескок в начало не виден.
+ * Небо по умолчанию медленно плывёт влево — полоса [WindowView.Sky] повторяется
+ * встык и сдвигается на свою ширину за [SKY_LOOP_MS]. Камеры в комнате нет,
+ * поэтому движение идёт от времени. Края полосы — ровный фон неба (см.
+ * pack_room.py), так что на стыке шва нет, а в конце круга сдвиг ровно на
+ * ширину полосы, и перескок в начало не виден.
  *
- * Между пролётами НЛО не рисуется вовсе, а не ждёт за краем: раньше оно
+ * Между пролётами летун не рисуется вовсе, а не ждёт за краем: раньше НЛО
  * стояло там всю паузу, и на экране торчал его обрезанный край.
+ *
+ * Все движения читаются только на отрисовке и не пересобирают окно.
  */
 @Composable
-private fun Window(canvasW: Dp, canvasH: Dp, ufo: UfoState) {
-    val hole = Room.WindowHole
-    val sky = ImageBitmap.imageResource(Room.WindowSky.image)
+internal fun Window(window: WindowSkin, canvasW: Dp, canvasH: Dp, flyer: WindowFlyer) {
+    val hole = window.hole
     val animations = LocalAnimations.current
-    val driftAnim by rememberInfiniteTransition(label = "sky").animateFloat(
+    val clock = rememberInfiniteTransition(label = "window")
+    val driftAnim = clock.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(SKY_LOOP_MS, easing = LinearEasing)),
         label = "drift",
     )
-    val drift = if (animations) driftAnim else 0f
+    val turnAnim = clock.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(WHEEL_TURN_MS, easing = LinearEasing)),
+        label = "turn",
+    )
+    val glimmerAnim = clock.animateFloat(
+        initialValue = TWINKLE_LOW,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(TWINKLE_MS, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "glimmer",
+    )
+
+    val view = when (val v = window.view) {
+        is WindowView.Sky -> v.strip
+        is WindowView.Picture -> v.layer
+    }
+    val viewImage = ImageBitmap.imageResource(view.image)
+    // Картинки живого — в том же порядке, в каком рисуются.
+    val life = window.life
+    val lifeImages = when (life) {
+        is WindowLife.Flyer -> listOf(life.layer)
+        is WindowLife.Wheel -> listOf(life.wheel, life.stand) + life.cabins
+        is WindowLife.Twinkle -> listOf(life.layer)
+        null -> emptyList()
+    }.map { ImageBitmap.imageResource(it.image) }
 
     Box(
         modifier = Modifier
             .offset(canvasW * hole.left, canvasH * hole.top)
             .requiredSize(canvasW * hole.width, canvasH * hole.height)
-            .clipToBounds()
-            // Сдвиг читается только на отрисовке: небо плывёт, не пересобирая окно.
+            // Свой слой: SrcAtop кладёт живое только на вид, а не на всю комнату под ним.
+            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
             .drawBehind {
-                drawRect(SkyColor)
-                val strip = Room.WindowSky.rect
-                val tileW = size.width * strip.width / hole.width
-                val tileH = size.height * strip.height / hole.height
-                val top = size.height * (strip.top - hole.top) / hole.height
-                var x = size.width * (strip.left - hole.left) / hole.width - drift * tileW
-                while (x > 0f) x -= tileW
-                // Сдвиг дробный, и полоса рисуется масштабом, а не в целых
-                // пикселях: иначе на такой скорости небо ползло бы рывками.
-                while (x < size.width) {
-                    translate(x, top) {
-                        scale(tileW / sky.width, tileH / sky.height, pivot = Offset.Zero) { drawImage(sky) }
+                val unit = Size(size.width / hole.width, size.height / hole.height)
+                when (window.view) {
+                    is WindowView.Sky -> {
+                        drawRect(SkyColor)
+                        val strip = view.rect
+                        val tileW = strip.width * unit.width
+                        val tileH = strip.height * unit.height
+                        val top = (strip.top - hole.top) * unit.height
+                        val drift = if (animations) driftAnim.value else 0f
+                        var x = (strip.left - hole.left) * unit.width - drift * tileW
+                        while (x > 0f) x -= tileW
+                        // Сдвиг дробный, и полоса рисуется масштабом, а не в целых
+                        // пикселях: иначе на такой скорости небо ползло бы рывками.
+                        while (x < size.width) {
+                            translate(x, top) {
+                                scale(tileW / viewImage.width, tileH / viewImage.height, pivot = Offset.Zero) { drawImage(viewImage) }
+                            }
+                            x += tileW
+                        }
                     }
-                    x += tileW
+
+                    is WindowView.Picture -> drawRoomImage(viewImage, view.rect, hole, unit)
+                }
+
+                when (life) {
+                    is WindowLife.Flyer -> flyer.flight?.let { current ->
+                        val t = flyer.progress.value
+                        val corner = flyer.corner(current, t)
+                        val rect = life.layer.rect
+                        val at = Offset(hole.left + corner.x, hole.top + corner.y)
+                        val centre = Offset((corner.x + rect.width / 2f) * unit.width, (corner.y + rect.height / 2f) * unit.height)
+                        // Пчела и рыбка нарисованы смотрящими в одну сторону: летят в другую — разворачиваются.
+                        val mirror = life.facesRight != null && life.facesRight != current.headingRight(t)
+                        withTransform({
+                            rotate(current.tilt(t), centre)
+                            if (mirror) scale(-1f, 1f, centre)
+                        }) {
+                            drawRoomImage(lifeImages[0], rect, hole, unit, at, BlendMode.SrcAtop)
+                        }
+                    }
+
+                    is WindowLife.Wheel -> {
+                        val angle = if (animations) turnAnim.value else 0f
+                        val hub = Offset((life.hub.x - hole.left) * unit.width, (life.hub.y - hole.top) * unit.height)
+                        rotate(angle, hub) { drawRoomImage(lifeImages[0], life.wheel.rect, hole, unit, blend = BlendMode.SrcAtop) }
+                        // Подставка перед колесом: её шапка закрывает ось, как в сборке художника.
+                        drawRoomImage(lifeImages[1], life.stand.rect, hole, unit, blend = BlendMode.SrcAtop)
+                        // Кабинка висит на ободе за верхнюю середину: точка подвеса
+                        // идёт по кругу вместе с колесом, а сама кабинка не наклоняется.
+                        val radians = angle * PI.toFloat() / 180f
+                        val cos = cos(radians)
+                        val sin = sin(radians)
+                        life.cabins.forEachIndexed { i, cabin ->
+                            val r = cabin.rect
+                            val hang = Offset(((r.left + r.right) / 2f - hole.left) * unit.width, (r.top - hole.top) * unit.height) - hub
+                            val moved = Offset(hang.x * cos - hang.y * sin, hang.x * sin + hang.y * cos)
+                            translate(moved.x - hang.x, moved.y - hang.y) {
+                                drawRoomImage(lifeImages[2 + i], r, hole, unit, blend = BlendMode.SrcAtop)
+                            }
+                        }
+                    }
+
+                    is WindowLife.Twinkle -> {
+                        val glimmer = if (animations) glimmerAnim.value else 1f
+                        drawRoomImage(lifeImages[0], life.layer.rect, hole, unit, blend = BlendMode.SrcAtop, alpha = glimmer)
+                    }
+
+                    null -> Unit
                 }
             },
-    ) {
+    )
 
-        val size = Room.WindowUfo.rect
-        ufo.flight?.let { current ->
-            Image(
-                painter = painterResource(Room.WindowUfo.image),
-                contentDescription = null,
-                contentScale = ContentScale.FillBounds,
-                modifier = Modifier
-                    .requiredSize(canvasW * size.width, canvasH * size.height)
-                    // Прогресс читается только здесь, на отрисовке: кадры пролёта
-                    // двигают готовую картинку и не пересобирают окно.
-                    .graphicsLayer {
-                        val t = ufo.progress.value
-                        val corner = ufo.corner(current, t)
-                        translationX = corner.x * canvasW.toPx()
-                        translationY = corner.y * canvasH.toPx()
-                        rotationZ = current.tilt(t)
-                    },
-            )
-        }
-    }
-
-    Layer(Room.WindowFrame, canvasW, canvasH)
+    Layer(window.frame, canvasW, canvasH)
 }
 
 /**
- * НЛО за окном: пролёты и где оно сейчас.
+ * Слой комнаты внутри куска холста [area]: на долю холста там [unit] пикселей.
+ * [at] — куда встаёт левый верхний угол слоя. Масштабом, а не в целых
+ * пикселях: летуны движутся плавно.
+ */
+private fun DrawScope.drawRoomImage(
+    image: ImageBitmap,
+    rect: RelRect,
+    area: RelRect,
+    unit: Size,
+    at: Offset = Offset(rect.left, rect.top),
+    blend: BlendMode = BlendMode.SrcOver,
+    alpha: Float = 1f,
+) {
+    translate((at.x - area.left) * unit.width, (at.y - area.top) * unit.height) {
+        scale(rect.width * unit.width / image.width, rect.height * unit.height / image.height, pivot = Offset.Zero) {
+            drawImage(image, alpha = alpha, blendMode = blend)
+        }
+    }
+}
+
+/**
+ * Летун за окном — НЛО, пчела, рыбка: пролёты и где он сейчас.
  *
  * Живёт в сцене, а не в окне: где НЛО, нужно ещё и свету — пролетая,
  * оно подсвечивает комнату зелёным, и тень питомца поворачивается за ним.
+ * У окна без летуна пролётов нет.
  */
 @Stable
-private class UfoState {
+internal class WindowFlyer(private val window: WindowSkin) {
+    private val life = window.life as? WindowLife.Flyer
+
     var flight by mutableStateOf<UfoFlight?>(null)
         private set
     val progress = Animatable(0f)
 
-    suspend fun fly(onStart: () -> Unit) {
+    suspend fun fly(onStart: (WindowLife.Flyer) -> Unit) {
+        val life = life ?: return
         var pause = UfoFirstPauseMs
         while (true) {
             delay(Random.nextLong(pause.first, pause.last))
-            // Без анимаций пролёт — один кадр НЛО у края окна: не летит вовсе.
+            // Без анимаций пролёт — один кадр летуна у края окна: не летит вовсе.
             if (!motionEnabled()) continue
             val next = Random.nextUfoFlight()
             flight = next
-            onStart()
+            onStart(life)
             progress.snapTo(0f)
             progress.animateTo(1f, tween(next.durationMs, easing = LinearEasing))
             flight = null
@@ -683,27 +860,27 @@ private class UfoState {
     }
 
     /**
-     * Левый верхний угол НЛО относительно проёма, в долях холста.
+     * Левый верхний угол летуна относительно проёма, в долях холста.
      *
      * Путь от «целиком за одним краем проёма» до «целиком за другим»: пролёт
-     * кончается, только когда НЛО ушло из окна полностью, и не обрывается
+     * кончается, только когда летун ушёл из окна полностью, и не обрывается
      * на полпути.
      */
     fun corner(current: UfoFlight, t: Float): Offset {
-        val hole = Room.WindowHole
-        val ufo = Room.WindowUfo.rect
-        val x = -ufo.width + current.along(t) * (hole.width + ufo.width)
+        val hole = window.hole
+        val size = life?.layer?.rect ?: return Offset.Zero
+        val x = -size.width + current.along(t) * (hole.width + size.width)
         return Offset(
-            x = if (current.fromLeft) x else hole.width - ufo.width - x,
-            y = current.height(t) * (hole.height - ufo.height),
+            x = if (current.fromLeft) x else hole.width - size.width - x,
+            y = current.height(t) * (hole.height - size.height),
         )
     }
 
-    /** Середина НЛО в долях холста и насколько оно в проёме; null — пролёта нет. */
+    /** Середина НЛО в долях холста и насколько оно в проёме; null — пролёта нет или летун не светит. */
     fun light(): Pair<Offset, Float>? {
+        val ufo = life?.takeIf { it.glows }?.layer?.rect ?: return null
         val current = flight ?: return null
-        val hole = Room.WindowHole
-        val ufo = Room.WindowUfo.rect
+        val hole = window.hole
         val corner = corner(current, progress.value)
         val centre = Offset(
             hole.left + corner.x + ufo.width / 2f,
@@ -729,7 +906,7 @@ private class UfoState {
  * за противоположным», высота 0..1 от верха проёма до низа.
  */
 @Immutable
-private data class UfoFlight(
+internal data class UfoFlight(
     val durationMs: Int,
     val fromLeft: Boolean,
     val startHeight: Float,
@@ -743,6 +920,9 @@ private data class UfoFlight(
     /** Повисев, улететь туда же, откуда прилетело. */
     val turnBack: Boolean,
 ) {
+    /** Летит ли вправо в момент [t]: повисев, может развернуться обратно. */
+    fun headingRight(t: Float): Boolean = fromLeft != (turnBack && hoverAt != null && t >= HOVER_OUT)
+
     /** Сколько пути пройдено к моменту [t]. */
     fun along(t: Float): Float {
         val stop = hoverAt ?: return t
@@ -916,7 +1096,7 @@ private fun LitLayer(
 }
 
 @Composable
-private fun Layer(layer: RoomLayer, canvasW: Dp, canvasH: Dp) {
+internal fun Layer(layer: RoomLayer, canvasW: Dp, canvasH: Dp) {
     Image(
         painter = painterResource(layer.image),
         contentDescription = null,

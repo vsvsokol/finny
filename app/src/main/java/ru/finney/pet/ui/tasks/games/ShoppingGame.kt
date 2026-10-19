@@ -214,7 +214,8 @@ private fun Goods(item: ShelfItem, inCart: Boolean, modifier: Modifier, onToggle
         }
         Text(item.label, style = MaterialTheme.typography.labelMedium, color = FinneyInk, textAlign = TextAlign.Center)
         item.promo?.let { OutlinedText(it, style = MaterialTheme.typography.labelLarge) }
-        PriceTag(if (item.qty > 1) "${item.qty} шт · ${item.price}" else item.price.toString())
+        if (item.qty > 1) Text("${item.qty} шт. в наборе", style = MaterialTheme.typography.bodyMedium, color = FinneyInk)
+        PriceTag(item.price.toString())
     }
 }
 
@@ -229,8 +230,8 @@ internal fun PriceTag(text: String) {
             .border(2.dp, FinneyInk, RoundedCornerShape(8.dp))
             .padding(horizontal = 6.dp),
     ) {
-        Box(Modifier.size(12.dp).clip(CircleShape).background(FinneyGreen).border(2.dp, FinneyGreenDark, CircleShape))
         Text(text, style = MaterialTheme.typography.labelLarge, color = FinneyInk)
+        Coin(size = 20.dp)
     }
 }
 
