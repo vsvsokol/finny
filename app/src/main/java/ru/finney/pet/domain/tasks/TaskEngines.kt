@@ -211,8 +211,12 @@ data class StandDayResult(
     val money: Int,
 )
 
-/** Ошибки кассира: строки чека, которые нужно отметить, и сколько сдачи недодали. */
-data class ReceiptErrors(val lines: Set<String>, val changeShort: Int)
+/**
+ * Ошибки кассира: строки чека, которые нужно отметить, и сколько сдачи недодали.
+ * [changeEither] — сдачу можно и отметить, и не отмечать: кассир честно отсчитал её от своего
+ * чека с ошибкой, а по ценникам она меньше. Ребёнок прав в обоих прочтениях (плейтест 02.10).
+ */
+data class ReceiptErrors(val lines: Set<String>, val changeShort: Int, val changeEither: Boolean = false)
 
 sealed interface TaskEvaluation {
     /** [bonus] — успех с бонусом: к награде добавляется [ru.finney.pet.domain.model.TaskReward.bonus]. */
@@ -418,7 +422,12 @@ object TaskEngines {
             check.wrongPrice.map { it.id } + duplicates.map { it.id }
         }.toSet(),
         changeShort = changeShort(task),
+        changeEither = changeEither(task),
     )
+
+    /** Отметка сдачи не ошибка: недодачи нет, но строки чека с ошибкой — по ценникам сдача другая. */
+    private fun changeEither(task: ReceiptTask): Boolean =
+        changeShort(task) == 0 && task.cart.any { checkItem(task, it).let { c -> c.wrongPrice.isNotEmpty() || c.duplicates > 0 } }
 
     /** Недоданная сдача: сдача считается от суммы чека, какой бы она ни была. */
     private fun changeShort(task: ReceiptTask): Int = maxOf(0, task.paid - receiptTotal(task) - task.change)
@@ -733,7 +742,7 @@ object TaskEngines {
         when {
             short > 0 && input.change -> { found++; refund += short }
             short > 0 -> { missed++; lost += short }
-            input.change -> extra++
+            input.change && !changeEither(task) -> extra++
         }
         return TaskEvaluation.Done(
             outcome(missed == 0 && extra == 0),
