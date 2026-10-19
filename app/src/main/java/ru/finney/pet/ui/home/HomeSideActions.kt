@@ -15,6 +15,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import ru.finney.pet.R
+import ru.finney.pet.ui.components.FinneyButton
 import ru.finney.pet.ui.components.HomeMoneyBadge
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -29,6 +30,7 @@ internal enum class HomeActionLayout { RIGHT_COLUMN, SPLIT }
 internal fun BoxScope.HomeSideActions(
     state: HomeUiState.Ready, layout: HomeActionLayout, enabled: Boolean, alpha: Float,
     hintTargets: HintTargets, onOpenGoals: () -> Unit, onOpenGames: () -> Unit,
+    onClaimGoal: () -> Unit,
     onSavingsBounds: (Rect) -> Unit, onGamesBounds: (Rect) -> Unit,
     onOpenRoom: (() -> Unit)? = null,
 ) {
@@ -42,7 +44,8 @@ internal fun BoxScope.HomeSideActions(
                     if (ready) ". Награда готова" else "" else "Накоплено ${state.totalSavings} монет. " +
                     if (state.reserveMode) "Режим запаса" else "Цель ещё не выбрана",
                 progress = if (goal != null) goal.saved.toFloat() / goal.goal.price.coerceAtLeast(1) else 0f,
-                progressColor = FinneyGreen, goalArt = goal?.goal?.reward?.let(::accessoryArt)?.res,
+                // Прогресс копилки — жёлтый, как деньги: зелёный — только итог действия.
+                progressColor = FinneyYellow, goalArt = goal?.goal?.reward?.let(::accessoryArt)?.res,
                 // Без цели копить некуда — «!» зовёт её выбрать.
                 warning = goal == null && !state.reserveMode,
                 ready = ready, enabled = enabled,
@@ -50,6 +53,11 @@ internal fun BoxScope.HomeSideActions(
             HomeMoneyBadge(state.totalSavings, Modifier.padding(top = 3.dp)
                 .testTag("home-savings-money").semantics { contentDescription = "Накоплено ${state.totalSavings} монет" })
             if (goal == null && !state.reserveMode) ActionCaption("Выбрать цель")
+            // Накопили — забрать не уходя в копилку: вещь сразу на питомце, это и есть отклик.
+            if (ready) FinneyButton(
+                text = "Забрать", onClick = onClaimGoal, enabled = enabled, fillWidth = false, compact = true,
+                textStyle = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 4.dp),
+            )
             // Обустроить комнату — под копилкой: слева столбец про «моё», справа — про уровень.
             if (onOpenRoom != null) {
                 RoomEditButton(onOpenRoom, Modifier.padding(top = 14.dp))

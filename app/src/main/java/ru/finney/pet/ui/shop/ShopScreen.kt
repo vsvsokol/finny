@@ -14,6 +14,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.delay
 import ru.finney.pet.domain.model.ItemKind
+import ru.finney.pet.domain.model.ShopItem
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.semantics.semantics
+import ru.finney.pet.ui.components.FinneyIcon
+import ru.finney.pet.ui.components.FinneyIcons
+import ru.finney.pet.ui.components.WarningBadge
+import ru.finney.pet.ui.theme.RadiusField
+import ru.finney.pet.ui.theme.StrokeThin
 import ru.finney.pet.ui.components.ActionFeedbackSummary
 import ru.finney.pet.ui.components.FeedbackSound
 import androidx.compose.runtime.getValue
@@ -55,6 +65,8 @@ fun ShopScreen(
     onBack: () -> Unit,
     onOpenBudget: () -> Unit,
     onOpenHistory: () -> Unit,
+    /** null — пока навигация не ведёт из магазина в копилку, плитка цели без перехода. */
+    onOpenGoals: (() -> Unit)? = null,
     viewModel: ShopViewModel = viewModel(factory = ShopViewModel.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -69,6 +81,7 @@ fun ShopScreen(
             onSelect = viewModel::select,
             onBuy = { viewModel.buy(it) },
             onBuyFromWants = { viewModel.buy(it, fromWants = true) },
+            onOpenGoals = onOpenGoals,
             onDismiss = viewModel::dismissFeedback,
             onBack = onBack,
             onOpenBudget = onOpenBudget,
@@ -87,8 +100,9 @@ internal fun ShopContent(
     onOpenBudget: () -> Unit,
     onOpenHistory: () -> Unit,
     onBuyFromWants: (String) -> Unit = {},
+    onOpenGoals: (() -> Unit)? = null,
 ) {
-    val selected = (state.needs + state.wants + state.toys).firstOrNull { it.item.id == state.selectedId }
+    val selected = state.shelves.flatMap { it.previews }.firstOrNull { it.item.id == state.selectedId }
     FeedbackSound(state.feedback, null)
     LaunchedEffect(state.feedback) {
         if (state.feedback != null) { delay(4_000); onDismiss() }
@@ -118,35 +132,22 @@ internal fun ShopContent(
             onAction = onOpenBudget,
         )
 
-        ShopSection(
-            title = "Нужное",
-            kind = SectionKind.NEEDS,
-            planLeft = state.needsLeft,
-            previews = state.needs,
-            selectedId = state.selectedId,
-            onSelect = onSelect,
-        )
-        ShopSection(
-            title = "Хочется",
-            kind = SectionKind.WANTS,
-            planLeft = state.wantsLeft,
-            previews = state.wants,
-            selectedId = state.selectedId,
-            onSelect = onSelect,
-        )
-        // Игрушки — тоже «хочется» и тратятся из той же части плана (остаток — в полосе выше).
-        // Отдельно — потому что покупаются один раз и остаются в зале. Все куплены — раздел уходит.
-        if (state.toys.isNotEmpty()) {
+        state.saving?.let { SavingCard(it, onOpenGoals) }
+
+        // Пустой раздел (игрушки все куплены или ещё не открыты) уходит целиком.
+        state.shelves.filter { it.previews.isNotEmpty() }.forEach { row ->
             ShopSection(
-                title = "Игрушки",
-                kind = SectionKind.TOYS,
-                planLeft = null,
-                previews = state.toys,
+                row = row,
+                planLeft = when (row.shelf) {
+                    ShopShelf.FOOD, ShopShelf.CLEAN -> state.needsLeft
+                    ShopShelf.TREATS -> state.wantsLeft
+                    // Игрушки тратятся из той же части плана, остаток уже в полосе «Радостей».
+                    ShopShelf.TOYS -> null
+                },
                 selectedId = state.selectedId,
                 onSelect = onSelect,
             )
         }
-
         state.upcoming?.let { item ->
             FinneyPanel(title = "Скоро") { UpcomingItem(item) }
         }
@@ -154,28 +155,29 @@ internal fun ShopContent(
     }
 }
 
-/** Что за раздел магазина: от этого цвет и слова его полосы. */
-private enum class SectionKind { NEEDS, WANTS, TOYS }
-
+/**
+ * Раздел магазина плитками по три (19.10: по две выходило полотно на несколько
+ * экранов). Картинка мельче магазинной по умолчанию, чтобы три плитки влезали в 360 dp.
+ */
 @Composable
 private fun ShopSection(
-    title: String,
-    kind: SectionKind,
+    row: ShelfRow,
     planLeft: Int?,
-    previews: List<PurchasePreview>,
     selectedId: String?,
     onSelect: (String) -> Unit,
 ) {
     CarePanel(
-        title = title,
-        options = previews.map { CareOption(it.item, it, isSelected = it.item.id == selectedId) },
+        title = row.shelf.title,
+        options = row.previews.map { CareOption(it.item, it, isSelected = it.item.id == selectedId) },
         onPick = onSelect,
         onConfirm = {},
         onDismiss = null,
         allowShortage = true,
-        header = { SectionBanner(kind, planLeft) },
+        header = { SectionBanner(row.shelf, planLeft) },
         withConfirm = false,
         tiles = true,
+        tilePicture = ShopTilePicture,
+        columns = 3,
     )
 }
 
@@ -196,13 +198,16 @@ private fun ShopHeader(balance: Int, onBack: () -> Unit) {
     }
 }
 
-/** Полоса раздела. У игрушек заголовок «Игрушки», поэтому «хочется» сказано в полосе. */
+/** Полоса раздела: заголовок говорит, что это, полоса — нужное оно или «хочется». */
 @Composable
-private fun SectionBanner(kind: SectionKind, planLeft: Int?) = when (kind) {
-    SectionKind.NEEDS -> CategoryBanner(Category.NEEDS, "Нужное — сначала", planLeft)
-    SectionKind.WANTS -> CategoryBanner(Category.WANTS, "Хочется — потом", planLeft)
-    SectionKind.TOYS -> CategoryBanner(Category.WANTS, "Это «хочется». Игрушка лежит в зале", planLeft)
+private fun SectionBanner(shelf: ShopShelf, planLeft: Int?) = when (shelf) {
+    ShopShelf.FOOD -> CategoryBanner(Category.NEEDS, "Нужное — сначала", planLeft)
+    ShopShelf.CLEAN -> CategoryBanner(Category.NEEDS, "Тоже нужное", planLeft)
+    ShopShelf.TREATS -> CategoryBanner(Category.WANTS, "Хочется — потом", planLeft)
+    ShopShelf.TOYS -> CategoryBanner(Category.WANTS, "Хочется. Игрушка лежит в зале", planLeft)
 }
+
+private val ShopTilePicture = 64.dp
 
 /**
  * Низ магазина: что выбрано и «Купить». Пока ничего не выбрано — подсказка
@@ -239,6 +244,16 @@ private fun BuyBar(
                 },
                 style = MaterialTheme.typography.bodyLarge, color = FinneyInk,
             )
+            // На плитке только «!»: сколько не хватает и где взять — здесь, у выбранного.
+            if (selected.shortage > 0) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    WarningBadge(size = 24.dp)
+                    Text(
+                        "Не хватает ${selected.shortage}. Монеты дают игры уровня.",
+                        style = MaterialTheme.typography.bodyLarge, color = FinneyInk,
+                    )
+                }
+            }
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 CoinAmount(amount = selected.item.price)
                 FinneyButton(

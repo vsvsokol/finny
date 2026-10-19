@@ -156,7 +156,9 @@ private fun Shelves(
 private fun ShoppingList(task: BasketTask, rules: List<BasketRule>, cart: Set<String>, modifier: Modifier) {
     Column(
         modifier = modifier
-            .padding(top = 4.dp, end = 8.dp)
+            // Отступ слева — под наклон: повёрнутый листок выносит левый верхний угол
+            // за край прокрутки сцены, и она срезала рамку с заголовком.
+            .padding(start = 8.dp, top = 4.dp, end = 8.dp)
             .rotate(-3f)
             .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp, bottomStart = 14.dp, bottomEnd = 14.dp))
             .background(Color.White)

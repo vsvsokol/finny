@@ -38,6 +38,8 @@ import ru.finney.pet.domain.model.ShopItem
 import ru.finney.pet.domain.model.StatEffect
 import ru.finney.pet.ui.components.pointHere
 import ru.finney.pet.ui.components.CheckBadge
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.semantics.stateDescription
 import ru.finney.pet.ui.components.CoinAmount
 import ru.finney.pet.ui.components.FinneyButton
 import ru.finney.pet.ui.components.FinneyCard
@@ -141,6 +143,8 @@ fun CarePanel(
     tiles: Boolean = false,
     groupBanner: (@Composable (Category) -> Unit)? = null,
     tilePicture: Dp = TilePicture,
+    columns: Int = 2,
+    footer: (@Composable () -> Unit)? = null,
     guide: Boolean = false,
     upcoming: ShopItem? = null,
     onConfirmFromWants: ((itemId: String) -> Unit)? = null,
@@ -159,7 +163,8 @@ fun CarePanel(
     FinneyPanel(title = title, onClose = onDismiss, modifier = modifier) {
         header?.invoke()
         if (options.isEmpty()) {
-            Text(
+            // Всё в разделе ещё закрыто — тогда вместо «нечего купить» строка «скоро».
+            footer?.invoke() ?: Text(
                 text = "Пока нечего купить",
                 style = MaterialTheme.typography.bodyLarge,
                 color = FinneyInk,
@@ -181,18 +186,22 @@ fun CarePanel(
             for ((category, group) in groups) {
                 if (category != null) groupBanner?.invoke(category)
                 if (tiles) {
-                    group.chunked(2).forEach { pair ->
+                    group.chunked(columns).forEach { row ->
                         // Высота ряда — по высокой плитке: у соседки с «не хватает» текста больше.
-                        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            pair.forEach { option ->
+                        Row(
+                            Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                            horizontalArrangement = Arrangement.spacedBy(if (columns > 2) 8.dp else 10.dp),
+                        ) {
+                            row.forEach { option ->
                                 CareTile(
                                     option,
                                     tilePicture,
+                                    short = columns > 2,
                                     onPick = { onPick(option.item.id) },
                                     modifier = Modifier.weight(1f).fillMaxHeight().pointHere(option == pointAt, corner = RadiusCard),
                                 )
                             }
-                            if (pair.size == 1) Spacer(Modifier.weight(1f))
+                            repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
                 } else {
@@ -205,6 +214,7 @@ fun CarePanel(
                     }
                 }
             }
+            footer?.invoke()
         }
 
         upcoming?.let { UpcomingItem(it) }
@@ -373,20 +383,24 @@ private fun CareRow(option: CareOption, onPick: () -> Unit, modifier: Modifier =
  * нехватки те же — заливка, «✓» и слова, не только цвет (ТЗ п. 3.6).
  */
 @Composable
-private fun CareTile(option: CareOption, picture: Dp, onPick: () -> Unit, modifier: Modifier = Modifier) {
+private fun CareTile(option: CareOption, picture: Dp, short: Boolean, onPick: () -> Unit, modifier: Modifier = Modifier) {
     val preview = option.preview
     val notEnough = preview.shortage > 0
     val needed = option.item.category == Category.NEEDS
+    // В три колонки плитка не пишет «Не хватает N» (19.10: на каждом товаре это шум):
+    // она бледнеет и ставит голубой «!», а сколько не хватает — в нижней панели выбранного.
     val accent = when {
-        notEnough -> FinneyBlue
+        notEnough && !short -> FinneyBlue
         option.isSelected -> FinneyYellow
         else -> null
     }
 
     FinneyCard(
         modifier = modifier
+            .alpha(if (short && notEnough && !option.isSelected) ShortageAlpha else 1f)
             .semantics(mergeDescendants = true) {
                 contentDescription = "${option.item.label}, ${if (needed) "нужное" else "желаемое"}"
+                if (notEnough) stateDescription = "не хватает ${preview.shortage}"
                 selected = option.isSelected
             }
             .clickable(onClickLabel = "Выбрать: ${option.item.label}", onClick = onPick),
@@ -395,6 +409,7 @@ private fun CareTile(option: CareOption, picture: Dp, onPick: () -> Unit, modifi
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             ItemPicture(option.item.id, itemFallback(option.item.id), size = picture)
             if (option.isSelected) CheckBadge(Modifier.align(Alignment.TopEnd), size = 28.dp)
+            if (short && notEnough) WarningBadge(Modifier.align(Alignment.TopStart), size = 24.dp)
         }
         Column(
             Modifier.fillMaxWidth(),
@@ -406,8 +421,8 @@ private fun CareTile(option: CareOption, picture: Dp, onPick: () -> Unit, modifi
             EffectChip(null, "радость", option.item.effect.mood, preview.statsBefore.mood, preview.statsAfter.mood)
             CoinAmount(amount = option.item.price)
         }
-        option.item.uses?.let { UsesNote(it, option.left) }
-        if (notEnough) {
+        option.item.uses?.let { UsesNote(it, option.left, short) }
+        if (notEnough && !short) {
             // В узкой плитке — коротко; что делать, сказано в отказе при попытке купить.
             Text(
                 text = "Не хватает ${preview.shortage}",
@@ -423,13 +438,15 @@ private fun CareTile(option: CareOption, picture: Dp, onPick: () -> Unit, modifi
 /**
  * Мыло не моет сразу, а встаёт на полочку в ванной: «+50» у него — за каждый раз.
  * Без этой строки покупка выглядела бы обманом — шкала после неё не двигается.
+ * [short] — плитка в три колонки: полная фраза вытягивала её на пол-экрана.
  */
 @Composable
-private fun UsesNote(uses: Int, left: Int?) {
+private fun UsesNote(uses: Int, left: Int?, short: Boolean = false) {
     Text(
-        text = when (left) {
-            null -> "На полочку в ванной: хватит на ${times(uses)}"
-            0 -> "Кончилось. Покупка — на ${times(uses)}"
+        text = when {
+            short -> "на ${times(uses)}"
+            left == null -> "На полочку в ванной: хватит на ${times(uses)}"
+            left == 0 -> "Кончилось. Покупка — на ${times(uses)}"
             else -> "Есть на ${times(left)}. Покупка — ещё на ${times(uses)}"
         },
         style = MaterialTheme.typography.bodyMedium,
@@ -439,6 +456,9 @@ private fun UsesNote(uses: Int, left: Int?) {
     )
 }
 
+/** Плитка, на которую не хватает денег, в три колонки: бледная, но читаемая. */
+private const val ShortageAlpha = 0.6f
+
 /** Картинка товара в плитке: на 360 dp плитка ~135 dp, картинка занимает её почти целиком. */
 private val TilePicture = 88.dp
 
@@ -446,9 +466,10 @@ private val TilePicture = 88.dp
  * Что станет со шкалой: «+20» и значок шкалы одной плашкой. Раньше значок стоял
  * отдельно от числа, и их читали порознь; теперь «+20» и вилка — одно целое.
  * Плашка молчит, только если предмет эту шкалу не трогает вовсе. Шкала уже полная —
- * плашка остаётся со словом «полно»: раньше она пропадала, и у мыла при чистой
- * шкале не было написано ничего, будто оно бесполезно. [icon] null — радость,
- * её знак — лицо, как под шкалой на главном.
+ * плашка остаётся с «+0»: раньше она пропадала, и у мыла при чистой шкале не было
+ * написано ничего, будто оно бесполезно. Слово «полно» звучало странно и в плитке
+ * по три не влезало вместе со значком — значок сжимался в соринку у края (20.10).
+ * [icon] null — радость, её знак — лицо, как под шкалой на главном.
  */
 @Composable
 private fun EffectChip(icon: FinneyIcons?, label: String, effect: Int, before: Int, after: Int) {
@@ -466,10 +487,8 @@ private fun EffectChip(icon: FinneyIcons?, label: String, effect: Int, before: I
                 contentDescription = if (before == after) "$label: уже полная" else "$label: было $before, станет $after"
             },
     ) {
-        if (delta == 0) {
-            Text("полно", style = MaterialTheme.typography.titleMedium, color = FinneyInk)
-        } else OutlinedText(
-            text = if (delta > 0) "+$delta" else "$delta",
+        OutlinedText(
+            text = if (delta >= 0) "+$delta" else "$delta",
             style = MaterialTheme.typography.titleLarge,
             // Направление — знаком «+» / «−», цвет один: зелёный «+» читался как похвала.
             fill = FinneyPeach,

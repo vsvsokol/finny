@@ -29,7 +29,6 @@ import ru.finney.pet.domain.model.SavedGame
 import ru.finney.pet.ui.components.ActionFeedback
 import ru.finney.pet.ui.isReserveMode
 import ru.finney.pet.ui.savingsBalance
-import ru.finney.pet.ui.components.changesBetween
 
 /** Цель в списке выбора: цена, накопленное и то, что с ней уже всё. */
 data class GoalRow(
@@ -37,6 +36,7 @@ data class GoalRow(
     val saved: Int,
     val isActive: Boolean,
     val isCompleted: Boolean,
+    val stage: GoalStage = GoalStage.OPEN,
 )
 
 sealed interface GoalsUiState {
@@ -153,26 +153,7 @@ class GoalsViewModel(
      * вещью и одной фразой: плейтест 29.09 назвал прежнее окно захламлённым.
      */
     fun completeGoal() = run(
-        feedback = { before, after ->
-            val goal = before.activeGoalId?.let(content::goal)
-            val returned = after.balance - before.balance
-            val next = if (game.isReserveMode(after)) {
-                "Все награды собраны! Теперь можно откладывать монеты в запас."
-            } else {
-                "Выбери новую цель в копилке."
-            }
-            ActionFeedback(
-                title = "${goal?.label ?: "Цель"} — твоя!",
-                lines = changesBetween(before, after),
-                why = buildList {
-                    add(if (goal?.reward != null) "Копил — и получилось! Награда уже на питомце." else "Копил — и получилось!")
-                    if (returned > 0) add("Остаток $returned монет вернулся в кошелёк.")
-                    add(next)
-                }.joinToString(" "),
-                next = next,
-                itemId = goal?.reward,
-            )
-        },
+        feedback = { before, after -> goalCompletedFeedback(game, content, before, after) },
     ) { session.execute { completeGoal(it) } }
 
     fun dismissFeedback() = screen.update { it.copy(feedback = null, rejection = null) }
@@ -205,16 +186,19 @@ class GoalsViewModel(
         val reserveMode = game.isReserveMode(state)
         val planSavingsLeft = game.planReport(state)
             ?.let { (it.plan.savings - it.facts.savings).coerceAtLeast(0) } ?: 0
+        // Закрытые цели не показываем, кроме одной ближайшей строкой «Скоро».
+        // Цель с отложенными монетами видна всегда — иначе монеты в ней будто пропали.
+        val goals = content.goals.map { goal ->
+            GoalRow(
+                goal = goal,
+                saved = state.goalSaved(goal.id),
+                isActive = goal.id == state.activeGoalId,
+                isCompleted = state.isGoalCompleted(goal.id),
+                stage = goalStage(game, state, goal),
+            )
+        }.filter { it.stage !in setOf(GoalStage.HIDDEN, GoalStage.SOON) || it.saved > 0 }
         return GoalsUiState.Ready(
-            goals = content.goals.filter { game.isUnlocked(state, it) || it.id == state.activeGoalId ||
-                state.isGoalCompleted(it.id) || state.goalSaved(it.id) > 0 }.map { goal ->
-                GoalRow(
-                    goal = goal,
-                    saved = state.goalSaved(goal.id),
-                    isActive = goal.id == state.activeGoalId,
-                    isCompleted = state.isGoalCompleted(goal.id),
-                )
-            },
+            goals = goals,
             progress = progress,
             upcoming = content.goals.filter { !game.isUnlocked(state, it) && it.id != state.activeGoalId &&
                 !state.isGoalCompleted(it.id) && state.goalSaved(it.id) == 0 }.minByOrNull { it.unlockLevel },

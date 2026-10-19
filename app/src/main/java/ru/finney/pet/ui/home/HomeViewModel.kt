@@ -50,6 +50,7 @@ import kotlin.random.Random
 import ru.finney.pet.domain.pet.Emotion
 import ru.finney.pet.ui.components.ActionFeedback
 import ru.finney.pet.ui.components.changesBetween
+import ru.finney.pet.ui.goals.goalCompletedFeedback
 
 /** Условий у уровня три: нужное, план, копилка. */
 const val LEVEL_CONDITIONS = 3
@@ -257,6 +258,9 @@ sealed interface HomeEvent {
 
     /** Питомец проснулся — сам или разбудили: сколько выспался (ТЗ п. 2.5.9). */
     data class Woke(val feedback: ActionFeedback) : HomeEvent
+
+    /** Забрали накопленное кнопкой у копилки: вещь уже на питомце. */
+    data class Rewarded(val feedback: ActionFeedback) : HomeEvent
 }
 
 class HomeViewModel(
@@ -325,6 +329,18 @@ class HomeViewModel(
                 }
                 is GameResult.Rejected -> _events.send(HomeEvent.Rejected(result.reason))
             }
+        }
+    }
+
+    /** Накопили — забрать прямо с главного, мини-кнопкой у копилки. */
+    fun completeGoal() {
+        viewModelScope.launch {
+            val before = session.activeGame.first()?.state ?: return@launch
+            val event = when (val result = session.execute { completeGoal(it) }) {
+                is GameResult.Ok -> HomeEvent.Rewarded(goalCompletedFeedback(game, content, before, result.state))
+                is GameResult.Rejected -> HomeEvent.Rejected(result.reason)
+            }
+            _events.send(event)
         }
     }
 

@@ -82,6 +82,9 @@ import ru.finney.pet.ui.theme.FinneyYellow
 /** Высота кнопки. Больше минимальных 48 dp из ТЗ п. 3.6 — по кнопке должен попадать ребёнок. */
 private val ButtonHeight = 64.dp
 
+/** Меньше нельзя: 48 dp — нижняя граница нажимаемого по ТЗ п. 3.6. */
+private val CompactButtonHeight = 48.dp
+
 /**
  * Доля высоты под нижнюю полосу. В эталоне полоса занимает y 90..119 из 120.
  * Это не тень-подложка и не градиент: плоский цвет, обрезанный общей формой кнопки.
@@ -192,6 +195,8 @@ fun FinneyButton(
     interactionSource: MutableInteractionSource? = null,
     calm: Boolean = false,
     textStyle: TextStyle = MaterialTheme.typography.titleLarge,
+    /** Мини-кнопка в плитке («Забрать» у накопленного наряда): 48 dp и узкие поля. */
+    compact: Boolean = false,
 ) {
     val sounds = LocalSounds.current
     val interactionSource = interactionSource ?: remember { MutableInteractionSource() }
@@ -210,7 +215,7 @@ fun FinneyButton(
         },
         modifier = modifier
             .then(if (fillWidth) Modifier.fillMaxWidth() else Modifier)
-            .defaultMinSize(minHeight = ButtonHeight)
+            .defaultMinSize(minHeight = if (compact) CompactButtonHeight else ButtonHeight)
             // Масштаб читается внутри graphicsLayer, то есть на отрисовке:
             // пружина не пересобирает кнопку на каждом кадре.
             .graphicsLayer {
@@ -230,7 +235,7 @@ fun FinneyButton(
                 .alpha(if (enabled) 1f else DisabledAlpha)
                 .clip(shape)
                 .buttonFill(pressed, round = false, calm = calm)
-                .padding(horizontal = 24.dp, vertical = 12.dp),
+                .padding(horizontal = if (compact) 10.dp else 24.dp, vertical = if (compact) 6.dp else 12.dp),
             contentAlignment = Alignment.Center,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

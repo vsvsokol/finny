@@ -239,6 +239,7 @@ fun HomeScreen(
                 is HomeEvent.Purchased -> purchased = event.feedback
                 // Итог сна — уже проснувшемуся, той же карточкой, что и покупка.
                 is HomeEvent.Woke -> purchased = event.feedback
+                is HomeEvent.Rewarded -> purchased = event.feedback
             }
         }
     }
@@ -269,6 +270,7 @@ fun HomeScreen(
             onWear = viewModel::wear,
             onTakeOff = viewModel::takeOff,
             onColour = viewModel::setBodyColor,
+            onClaimGoal = viewModel::completeGoal,
             purchased = purchased,
             onHidePurchased = { purchased = null },
             rejectShown = rejected != null,
@@ -351,6 +353,7 @@ internal fun HomeContent(
     onTakeOff: (itemId: String) -> Unit = {},
     onColour: (BodyColor) -> Unit = {},
     onOpenGlossary: () -> Unit = {},
+    onClaimGoal: () -> Unit = {},
     purchased: ActionFeedback? = null,
     onHidePurchased: () -> Unit = {},
     rejectShown: Boolean = false,
@@ -944,7 +947,7 @@ internal fun HomeContent(
         ) {
             HomeSideActions(
                 state = state, layout = actionLayout, enabled = !sleeping && playing == null && !inBath,
-                alpha = sideAlpha, hintTargets = hintTargets, onOpenGoals = onOpenGoals,
+                alpha = sideAlpha, hintTargets = hintTargets, onOpenGoals = onOpenGoals, onClaimGoal = onClaimGoal,
                 onOpenGames = { gamesOpen = true },
                 // Обустраивают зал днём: во сне свет выключен, а на кухне и в ванной нет торшера.
                 onOpenRoom = if (spot == RoomSpot.LIVING && !sleeping) ({ roomEdit = EditTab.WALL }) else null,
