@@ -166,9 +166,9 @@ fun MoodHint(onClose: () -> Unit, playLeft: Int = 0, hasToys: Boolean = false) {
                     style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
                 if (hasToys) Text(
                     if (playLeft > 0) "Игрушки дадут ещё до $playLeft радости на этом уровне."
-                    else "Финни наигрался. Новая прибавка от игрушек — на следующем уровне.",
+                    else "Финни уже наигрался. Новая радость от игрушек — на следующем уровне.",
                     style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
-                Text("Сытость и чистоту поднимай отдельно: едой и мытьём.",
+                Text("Сытость и чистоту поднимай отдельно: едой и ванной.",
                     style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
             }
         }

@@ -51,7 +51,13 @@ object ContentValidator {
         content.shop.filter { it.price <= 0 }.forEach { add("shop.json: ${it.id} — цена должна быть > 0") }
         val needs = content.shop.filter { it.category == Category.NEEDS }
         if (needs.none { it.effect.satiety > 0 }) add("shop.json: нет обязательного товара, поднимающего сытость")
-        if (needs.none { it.effect.hygiene > 0 }) add("shop.json: нет обязательного товара, поднимающего чистоту")
+        // Чистота — только мылом с полочки: мытьё тратит запас, а не покупает (docs/bath-plan.md).
+        if (needs.none { it.effect.hygiene > 0 && it.uses != null && !it.bathExtra }) add("shop.json: нет мыла — обязательного товара с чистотой и uses")
+        content.shop.filter { (it.uses ?: 1) <= 0 }.forEach { add("shop.json: ${it.id} — uses должен быть > 0") }
+        content.shop.filter { it.bathExtra && it.uses == null }.forEach { add("shop.json: ${it.id} — bathExtra только у предмета с uses") }
+        content.shop.filter { it.pairWith != null && content.item(it.pairWith)?.bathExtra != true }.forEach {
+            add("shop.json: ${it.id} — pairWith должен указывать на предмет ванны с bathExtra")
+        }
 
         duplicates(content.goals.map { it.id }).forEach { add("goals.json: повторяется id $it") }
 

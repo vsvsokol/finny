@@ -37,6 +37,18 @@ sealed interface Rejection {
     /** Питомец спит: не кормят, не моют, не играют и уровень не завершают. Открыты финансы и меню. */
     data object Asleep : Rejection
     data object NotAsleep : Rejection
+
+    /** На полочке не осталось этого мыла. */
+    data class NoStock(val id: String) : Rejection
+
+    /** Мыть нечем: [id] — не мыло с полочки. */
+    data class NotWashable(val id: String) : Rejection
+
+    /** Питомец и так чистый — мыло не тратим зря. */
+    data object AlreadyClean : Rejection
+
+    /** Водой чище уже не стать — нужно мыло, см. [ru.finney.pet.domain.model.BathRule.waterUpTo]. */
+    data object NeedsSoap : Rejection
     data class UnknownItem(val id: String) : Rejection
 
     /** Надеть можно только купленный аксессуар. */
