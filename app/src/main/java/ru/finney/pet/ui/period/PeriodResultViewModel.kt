@@ -65,6 +65,8 @@ sealed interface PeriodResultUiState {
         val income: Int = 0,
         val canPlanNext: Boolean = false,
         val growth: PeriodGrowth? = null,
+        /** Только новые открытия этого перехода, с учётом демо и периода доступности игр. */
+        val unlocks: List<String> = emptyList(),
     ) : PeriodResultUiState {
         /** Перерасход по нужному и желаемому сверх плана; 0, если уложились. */
         val overspend: Int
@@ -99,6 +101,8 @@ class PeriodResultViewModel(
         val before = game.levelAfter(state, period.number - 1)
         val after = game.levelAfter(state, period.number)
         val levelTask = period.levelTaskId?.let { content.task(it) }
+        val growth = periodGrowth(content, before, after, period.number, state.isDemo,
+            isLatest = state.currentPeriod.number == period.number + 1)
         return PeriodResultUiState.Ready(
             periodNumber = period.number,
             playedLevel = before,
@@ -111,9 +115,9 @@ class PeriodResultViewModel(
             passed = game.isPassed(period) == true,
             level = after,
             leveledUp = after > before,
-            growth = periodGrowth(content, before, after, period.number, state.isDemo,
-                isLatest = state.currentPeriod.number == period.number + 1)
-                ?.let { it.copy(changes = it.changes + unlockedNow(before, after, state.isDemo)) },
+            growth = growth?.let { it.copy(changes = it.changes - it.games.toSet()) },
+            unlocks = if (growth == null) emptyList() else
+                (growth.games + unlockedNow(before, after, state.isDemo)).distinct(),
             balance = state.balance,
             levelGame = levelTask?.title,
             levelGameIcon = levelTask?.let(::taskIcon),

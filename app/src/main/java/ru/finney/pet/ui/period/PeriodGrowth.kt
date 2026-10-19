@@ -6,7 +6,12 @@ import ru.finney.pet.ui.progress.nextProgress
 import ru.finney.pet.ui.progress.stageName
 
 /** Новое именно после этого перехода; старые итоги не выдают текущее будущее за свою награду. */
-data class PeriodGrowth(val changes: List<String>, val next: NextProgress?)
+data class PeriodGrowth(
+    val changes: List<String>,
+    val next: NextProgress?,
+    /** Открытия игр отдельно, чтобы итог мог показать их вместе с вещами, целями и званием. */
+    val games: List<String> = emptyList(),
+)
 
 internal fun periodGrowth(
     content: GameContent,
@@ -17,6 +22,7 @@ internal fun periodGrowth(
     isLatest: Boolean,
 ): PeriodGrowth? {
     if (!isLatest || after <= before) return null
+    val games = mutableListOf<String>()
     val changes = buildList {
         content.economy.stageStartLevels.forEachIndexed { index, level ->
             if (level in (before + 1)..after) add("Новая стадия: ${stageName(index + 1)}.")
@@ -29,9 +35,11 @@ internal fun periodGrowth(
             val available = isDemo || (current.unlockLevel <= after && current.unlockPeriod <= period + 1)
             if (available && (!wasAvailable || previous.id != current.id)) {
                 val label = if (wasAvailable) "Стала сложнее мини-игра" else "Открылась мини-игра"
-                add("$label: «${current.title}».")
+                val line = "$label: «${current.title}»."
+                add(line)
+                games.add(line)
             }
         }
     }.distinct()
-    return PeriodGrowth(changes, nextProgress(content, after, period + 1, isDemo))
+    return PeriodGrowth(changes, nextProgress(content, after, period + 1, isDemo), games.distinct())
 }

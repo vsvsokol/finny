@@ -204,6 +204,14 @@ internal fun PeriodResultContent(state: PeriodResultUiState.Ready, onBack: () ->
             }
         }
 
+        if (state.unlocks.isNotEmpty()) {
+            FinneyPanel(title = "Открылось") {
+                state.unlocks.forEach {
+                    Text(it, style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
+                }
+            }
+        }
+
         val met = listOf(state.needsCovered, state.planMatched, state.savingsAdded).count { it }
         FinneyPanel(title = "Звёзды уровня") {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
