@@ -1,20 +1,36 @@
 package ru.finney.pet.ui.progress
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import ru.finney.pet.ui.components.FinneyButton
+import ru.finney.pet.ui.components.FinneyIcon
 import ru.finney.pet.ui.components.FinneyPanel
 import ru.finney.pet.ui.components.fadingScroll
+import ru.finney.pet.ui.theme.FinneyCream
 import ru.finney.pet.ui.theme.FinneyInk
+import ru.finney.pet.ui.theme.StrokeRegular
 
 /**
  * Окно уровня, выбранного на карте. Про будущий уровень — только открытия: какая игра
@@ -38,7 +54,7 @@ internal fun LevelInfoPanel(
                     NodeStatus.DONE -> {
                         Body("Пройден. Звёзд: ${node.stars} из 3.")
                         if (node.failedTries > 0) Body("Не засчитались попытки: ${node.failedTries}.")
-                        Unlocks("Что открылось", node.unlocks)
+                        Unlocks("Что открылось", node.chips)
                     }
                     NodeStatus.CURRENT -> {
                         Body("Ты здесь.")
@@ -50,12 +66,12 @@ internal fun LevelInfoPanel(
                                 AmountLines(it)
                             }
                         }
-                        Unlocks("Открыто на этом уровне", node.unlocks)
+                        Unlocks("Открыто на этом уровне", node.chips)
                     }
                     NodeStatus.FUTURE -> {
-                        Body("Этот уровень впереди. Какая игра уровня будет обязательной, станет известно, когда до него дойдёшь.")
+                        Body("Этот уровень впереди.")
                         if (isDemo) Body("В режиме проверки игры, вещи и цели уже открыты.")
-                        Unlocks("На этом уровне", node.unlocks)
+                        Unlocks(if (isDemo) "На этом уровне" else "Откроется", node.chips)
                     }
                 }
             }
@@ -66,9 +82,37 @@ internal fun LevelInfoPanel(
     }
 }
 
+/** Открытия уровня фишками: рисунок и пара слов. Столбец фраз на плейтесте не читали. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Unlocks(title: String, lines: List<String>) {
+private fun Unlocks(title: String, chips: List<UnlockChip>) {
     Text(title, style = MaterialTheme.typography.titleMedium, color = FinneyInk, modifier = Modifier.fillMaxWidth())
-    if (lines.isEmpty()) Body("Новых игр, вещей и целей нет.")
-    lines.forEach { Body(it) }
+    if (chips.isEmpty()) {
+        Body("Новых игр, вещей и целей нет.")
+        return
+    }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        chips.forEach { Chip(it) }
+    }
+}
+
+@Composable
+private fun Chip(chip: UnlockChip) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier
+            .heightIn(min = 40.dp)
+            .clip(RoundedCornerShape(50))
+            .background(FinneyCream)
+            .border(StrokeRegular, FinneyInk, RoundedCornerShape(50))
+            .padding(start = 6.dp, end = 12.dp, top = 2.dp, bottom = 2.dp)
+            .semantics(mergeDescendants = true) {},
+    ) {
+        when {
+            chip.art != null -> Image(painterResource(chip.art), contentDescription = null, modifier = Modifier.size(32.dp))
+            chip.icon != null -> FinneyIcon(chip.icon, size = 24.dp)
+        }
+        Text(chip.label, style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
+    }
 }

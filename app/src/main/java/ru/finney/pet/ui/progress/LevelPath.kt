@@ -5,6 +5,9 @@ import ru.finney.pet.domain.game.GoalProgress
 import ru.finney.pet.domain.model.GameContent
 import ru.finney.pet.domain.model.GameState
 import ru.finney.pet.domain.progress.LevelUnlocks
+import ru.finney.pet.ui.components.FinneyIcons
+import ru.finney.pet.ui.pet.accessoryArt
+import ru.finney.pet.ui.room.itemArt
 
 enum class NodeStatus { DONE, CURRENT, FUTURE }
 
@@ -20,7 +23,13 @@ data class LevelNode(
     val resultPeriod: Int? = null,
     val failedTries: Int = 0,
     val unlocks: List<String> = emptyList(),
+    val chips: List<UnlockChip> = emptyList(),
+    /** Рисунки наград целей, которые открываются на уровне, — у узла на карте. */
+    val goalArt: List<Int> = emptyList(),
 )
+
+/** Открытие фишкой: рисунок или значок и одно-два слова вместо строки текста. */
+data class UnlockChip(val label: String, val art: Int? = null, val icon: FinneyIcons? = null)
 
 /** Строка про уход, где шкала ниже порога: «Сытость: 40 из 100». */
 data class CareShort(val label: String, val value: Int)
@@ -67,13 +76,16 @@ internal fun levelNodes(game: Game, content: GameContent, state: GameState): Lis
             level < current -> NodeStatus.DONE
             else -> NodeStatus.FUTURE
         }
+        val unlocks = game.unlocksAt(level)
         LevelNode(
             level = level,
             status = status,
             stars = passed?.result?.let { listOf(it.needsCovered, it.planMatched, it.savingsAdded).count { met -> met } } ?: 0,
             resultPeriod = passed?.number,
             failedTries = periods.count { game.isPassed(it) == false },
-            unlocks = unlockLines(game.unlocksAt(level), future = level > current, isDemo = state.isDemo),
+            unlocks = unlockLines(unlocks, future = level > current, isDemo = state.isDemo),
+            chips = unlockChips(unlocks),
+            goalArt = unlocks.goals.mapNotNull { goal -> goal.reward?.let(::accessoryArt)?.res },
         )
     }
 }
@@ -94,6 +106,15 @@ internal fun unlockLines(unlocks: LevelUnlocks, future: Boolean, isDemo: Boolean
         unlocks.goals.forEach { add(if (ahead) "Станет доступна цель «${it.label}»" else "Цель «${it.label}»") }
         unlocks.title?.let { add(if (future) "Новое звание: $it" else "Звание: $it") }
     }
+}
+
+/** Те же открытия, что в [unlockLines], но фишками для окна уровня на карте. */
+internal fun unlockChips(unlocks: LevelUnlocks): List<UnlockChip> = buildList {
+    unlocks.games.forEach { add(UnlockChip("«${it.title}»", icon = FinneyIcons.Star)) }
+    unlocks.harderGames.forEach { add(UnlockChip("«${it.title}» сложнее", icon = FinneyIcons.Star)) }
+    unlocks.items.forEach { add(UnlockChip(it.label, art = itemArt(it.id), icon = FinneyIcons.Cart)) }
+    unlocks.goals.forEach { add(UnlockChip("Цель: ${it.label}", art = it.reward?.let(::accessoryArt)?.res, icon = FinneyIcons.Piggy)) }
+    unlocks.title?.let { add(UnlockChip("Звание: $it")) }
 }
 
 internal fun currentLevel(game: Game, content: GameContent, state: GameState, petName: String, now: Long = System.currentTimeMillis()): CurrentLevel {

@@ -1,5 +1,6 @@
 package ru.finney.pet.ui.progress
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -32,6 +34,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -142,7 +145,14 @@ private fun PathStep(node: LevelNode, next: LevelNode?, selected: Boolean, onCli
                 },
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            NodeCircle(node, selected, onClick)
+            // Награда цели, которая здесь открывается, — у края узла: на карте видно, к чему идёшь.
+            Box {
+                NodeCircle(node, selected, onClick)
+                node.goalArt.firstOrNull()?.let {
+                    Image(painterResource(it), contentDescription = null,
+                        modifier = Modifier.align(Alignment.TopEnd).offset(x = 22.dp, y = (-6).dp).size(36.dp))
+                }
+            }
             NodeCaption(node)
         }
     }
