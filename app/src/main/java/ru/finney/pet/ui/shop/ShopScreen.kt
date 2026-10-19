@@ -38,6 +38,8 @@ import ru.finney.pet.ui.room.CarePanel
 import ru.finney.pet.ui.room.FromWantsOffer
 import ru.finney.pet.ui.room.ItemPicture
 import ru.finney.pet.ui.room.PickHint
+import ru.finney.pet.ui.room.UpcomingItem
+import ru.finney.pet.ui.components.FinneyPanel
 import ru.finney.pet.ui.room.itemFallback
 import ru.finney.pet.ui.theme.FinneyInk
 
@@ -145,6 +147,9 @@ internal fun ShopContent(
             )
         }
 
+        state.upcoming?.let { item ->
+            FinneyPanel(title = "Скоро") { UpcomingItem(item) }
+        }
         FinneyButton(text = "История трат", onClick = onOpenHistory)
     }
 }

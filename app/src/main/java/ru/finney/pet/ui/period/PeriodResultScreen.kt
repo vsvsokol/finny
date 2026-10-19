@@ -204,6 +204,14 @@ internal fun PeriodResultContent(state: PeriodResultUiState.Ready, onBack: () ->
             }
         }
 
+        if (state.unlocks.isNotEmpty()) {
+            FinneyPanel(title = "Открылось") {
+                state.unlocks.forEach {
+                    Text(it, style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
+                }
+            }
+        }
+
         val met = listOf(state.needsCovered, state.planMatched, state.savingsAdded).count { it }
         FinneyPanel(title = "Звёзды уровня") {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -252,6 +260,10 @@ internal fun PeriodResultContent(state: PeriodResultUiState.Ready, onBack: () ->
                         modifier = Modifier.weight(1f),
                     )
                 }
+            }
+            // Сколько отложено — числом: по банкам одной заливкой ребёнок его не читает.
+            if (state.facts.savings > 0) {
+                MoneyLine("Отложено в копилку", "+${state.facts.savings}")
             }
             if (state.facts.unplannedIncome > 0) {
                 MoneyLine("Пришло сверх плана", "+${state.facts.unplannedIncome}")

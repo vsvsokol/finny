@@ -46,6 +46,7 @@ sealed interface ShopUiState {
         val wantsLeft: Int?,
         val rejection: Rejection?,
         val feedback: ActionFeedback?,
+        val upcoming: ShopItem? = null,
         /** Нужное, которое выйдет за план, и сколько для него взять из радостей (Game.wantsToNeeds). */
         val fromWants: Map<String, Int> = emptyMap(),
     ) : ShopUiState
@@ -127,7 +128,7 @@ class ShopViewModel(
         val state = saved.state
         val report = game.planReport(state)
         fun previews(fits: (ShopItem) -> Boolean) = content.forSale
-            .filter { fits(it) && it.isOnSale(state) }
+            .filter { fits(it) && it.isOnSale(state) && game.isUnlocked(state, it) }
             .mapNotNull { game.previewPurchase(state, it.id) }
         return ShopUiState.Ready(
             balance = state.balance,
@@ -141,6 +142,8 @@ class ShopViewModel(
             fromWants = content.forSale.mapNotNull { item -> game.wantsToNeeds(state, item.id)?.let { item.id to it } }.toMap(),
             rejection = selection.rejection,
             feedback = selection.feedback,
+            upcoming = content.forSale.filter { it.isOnSale(state) && !game.isUnlocked(state, it) }
+                .minByOrNull { it.unlockLevel },
         )
     }
 

@@ -142,6 +142,7 @@ fun CarePanel(
     groupBanner: (@Composable (Category) -> Unit)? = null,
     tilePicture: Dp = TilePicture,
     guide: Boolean = false,
+    upcoming: ShopItem? = null,
     onConfirmFromWants: ((itemId: String) -> Unit)? = null,
     fromWantsLabel: String = "Взять и купить",
     overPlanLabel: String = "Купить сверх плана",
@@ -206,6 +207,7 @@ fun CarePanel(
             }
         }
 
+        upcoming?.let { UpcomingItem(it) }
         if (!withConfirm) return@FinneyPanel
         Spacer(Modifier.padding(top = 4.dp))
 
@@ -245,6 +247,17 @@ fun CarePanel(
             enabled = canBuy,
             modifier = Modifier.pointHere(guide && canBuy),
         )
+    }
+}
+
+/** Один тизер без действия покупки: доступ откроется на указанном уровне. */
+@Composable
+internal fun UpcomingItem(item: ShopItem) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        ItemPicture(item.id, itemFallback(item.id), 48.dp)
+        Text("Скоро: ${item.label} — на уровне ${item.unlockLevel}",
+            style = MaterialTheme.typography.bodyLarge, color = FinneyInk, modifier = Modifier.weight(1f))
     }
 }
 

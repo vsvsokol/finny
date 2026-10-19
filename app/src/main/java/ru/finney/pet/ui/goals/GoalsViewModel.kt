@@ -78,6 +78,7 @@ sealed interface GoalsUiState {
         /** После всех наград копилка остаётся доступна как запас без цены и срока. */
         val reserveMode: Boolean = false,
         val reserveSaved: Int = 0,
+        val upcoming: Goal? = null,
     ) : GoalsUiState
 }
 
@@ -205,7 +206,8 @@ class GoalsViewModel(
         val planSavingsLeft = game.planReport(state)
             ?.let { (it.plan.savings - it.facts.savings).coerceAtLeast(0) } ?: 0
         return GoalsUiState.Ready(
-            goals = content.goals.map { goal ->
+            goals = content.goals.filter { game.isUnlocked(state, it) || it.id == state.activeGoalId ||
+                state.isGoalCompleted(it.id) || state.goalSaved(it.id) > 0 }.map { goal ->
                 GoalRow(
                     goal = goal,
                     saved = state.goalSaved(goal.id),
@@ -214,6 +216,8 @@ class GoalsViewModel(
                 )
             },
             progress = progress,
+            upcoming = content.goals.filter { !game.isUnlocked(state, it) && it.id != state.activeGoalId &&
+                !state.isGoalCompleted(it.id) && state.goalSaved(it.id) == 0 }.minByOrNull { it.unlockLevel },
             balance = state.balance,
             canMoveMoney = state.currentPeriod.phase == PeriodPhase.ACTIVE,
             canComplete = progress != null && progress.remaining <= 0,

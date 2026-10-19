@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import ru.finney.pet.appContainer
+import ru.finney.pet.ui.progress.NextProgress
+import ru.finney.pet.ui.progress.homeUnlocks
 import ru.finney.pet.domain.pet.PetRules
 import ru.finney.pet.domain.game.Game
 import ru.finney.pet.domain.game.GameResult
@@ -180,6 +182,9 @@ sealed interface HomeUiState {
         val needsThreshold: Int = 50,
         /** Критически низкая шкала — отдельный порог, не условие прохождения уровня. */
         val criticalThreshold: Int = 30,
+        val title: String? = null,
+        val upcoming: NextProgress? = null,
+        val upcomingFood: ShopItem? = null,
     ) : HomeUiState {
         /** Уровень завершается только после подтверждения плана. */
         val canClosePeriod: Boolean get() = phase == PeriodPhase.ACTIVE
@@ -415,6 +420,10 @@ class HomeViewModel(
             stats = state.pet,
             emotion = game.emotion(state),
             level = level,
+            title = game.title(state),
+            upcoming = homeUnlocks(game, content, state),
+            upcomingFood = content.forSale.filter { it.effect.satiety > 0 && !game.isUnlocked(state, it) }
+                .minByOrNull { it.unlockLevel },
             check = check,
             stage = game.stage(state),
             balance = state.balance,
@@ -563,7 +572,7 @@ class HomeViewModel(
     }
 
     private fun previews(state: GameState, fits: (ShopItem) -> Boolean): List<PurchasePreview> =
-        content.shop.filter(fits).mapNotNull { game.previewPurchase(state, it.id) }
+        content.forSale.filter { fits(it) && game.isUnlocked(state, it) }.mapNotNull { game.previewPurchase(state, it.id) }
 
     companion object {
         val Factory = viewModelFactory {
