@@ -16,8 +16,10 @@
 виноват, он тут и нужен: комната позиционируется долями и масштабируется кодом,
 и автоматическое масштабирование по плотности экрана только мешало бы.
 
-Вход:  design/exports/environment/*.PNG — как прислал дизайнер.
-Выход: app/src/main/res/drawable-nodpi/room_*.webp + числа для RoomLayers.kt.
+Вход:  design/exports/environment/*.PNG — как прислал дизайнер;
+       design/exports/environment/interiors/<тема>/*.PNG — сменные интерьеры.
+Выход: app/src/main/res/drawable-nodpi/room_*.webp + числа для RoomLayers.kt
+       и RoomInteriors.kt.
 
 Без потерь, а не q90: края вырезаны по альфе, и лоссовая альфа даёт кайму по
 контуру — на чёрной обводке комнаты её видно особенно.
@@ -71,13 +73,21 @@ LAYERS = {
 
 
 def pack(source: str, target: str) -> tuple[str, tuple[float, float, float, float], int]:
-    path = next(SRC.glob(f"{source}.[pP][nN][gG]"))
+    return pack_file(next(SRC.glob(f"{source}.[pP][nN][gG]")), target)
+
+
+def open_canvas(path: Path) -> Image.Image:
     image = Image.open(path).convert("RGBA")
     if image.size != CANVAS:
         raise SystemExit(f"{path.name}: холст {image.size}, а слои комнаты ждут {CANVAS}")
+    return image
 
-    mask = image.split()[3].point(lambda v: 255 if v > ALPHA_FLOOR else 0)
-    box = mask.getbbox()
+
+def pack_file(path: Path, target: str, box: tuple[int, int, int, int] | None = None):
+    image = open_canvas(path)
+    if box is None:
+        mask = image.split()[3].point(lambda v: 255 if v > ALPHA_FLOOR else 0)
+        box = mask.getbbox()
     if box is None:
         raise SystemExit(f"{path.name}: ни одного непрозрачного пикселя")
 
@@ -141,19 +151,125 @@ def pack_sky() -> tuple[str, tuple[float, float, float, float], int]:
     return SKY_TARGET, rel, out.stat().st_size
 
 
+# ---------- Сменные интерьеры ----------
+#
+# Тема — папка в interiors/: задник, рама, вид за окном и торшер на том же холсте
+# 1440×2400, плюс то, что живёт за окном. Всё меняется по отдельности, поэтому
+# у каждой части своё место на холсте, а не общее с другими темами.
+# preview.PNG в каждой папке — собранная тема от художника для сверки, в ресурсы
+# не идёт.
+
+INTERIORS = SRC / "interiors"
+INTERIOR_PARTS = ("back", "window_frame", "window_view", "lamp")
+
+# Что живёт за окном. Пчела, рыбка и светлячки — один слой.
+INTERIOR_LIFE = {
+    "circus": ("wheel", "wheel_stand"),
+    "honey": ("bee",),
+    "sea": ("fish",),
+    "forest": ("fireflies",),
+    "town": (),
+}
+
+# Кабинки колеса обозрения нарисованы одним слоем, а вращаются по отдельности
+# и при этом висят ровно — каждая становится своим файлом room_circus_cabin_N.
+INTERIOR_SPLIT = {("circus", "wheel_cabins"): "cabin"}
+
+# В этих слоях художник оставил в стороне от рисунка точки по 1–3 пикселя:
+# по ним слой обрезался бы с огромным полем пустоты (у колеса — на 66 px вниз,
+# у вида леса — на 175 px вправо, у вида городка — до края холста). Обрезаем
+# по крупным пятнам, точки отбрасываем.
+INTERIOR_SPECKS = {("circus", "wheel"), ("forest", "window_view"), ("town", "window_view")}
+
+# Пятно мельче этой доли самого крупного в слое — мусор, а не часть рисунка.
+SPECK_SHARE = 0.01
+
+# Шаг сетки, по которой ищутся пятна: по каждому пикселю холста Python ходил бы минуту.
+SPOT_STEP = 2
+
+
+def spots(image: Image.Image) -> list[tuple[int, tuple[int, int, int, int]]]:
+    """Связные пятна непрозрачного: (размер, рамка в пикселях холста), крупные первыми."""
+    alpha = image.split()[3].load()
+    w, h = image.size
+    left = {(x, y) for y in range(0, h, SPOT_STEP) for x in range(0, w, SPOT_STEP) if alpha[x, y] > ALPHA_FLOOR}
+    found = []
+    while left:
+        start = left.pop()
+        stack, xs, ys = [start], [start[0]], [start[1]]
+        while stack:
+            x, y = stack.pop()
+            for dx in (-SPOT_STEP, 0, SPOT_STEP):
+                for dy in (-SPOT_STEP, 0, SPOT_STEP):
+                    near = (x + dx, y + dy)
+                    if near in left:
+                        left.remove(near)
+                        stack.append(near)
+                        xs.append(near[0])
+                        ys.append(near[1])
+        box = (max(0, min(xs) - SPOT_STEP), max(0, min(ys) - SPOT_STEP), min(w, max(xs) + SPOT_STEP), min(h, max(ys) + SPOT_STEP))
+        found.append((len(xs), box))
+    return sorted(found, reverse=True)
+
+
+def big_spots(path: Path) -> list[tuple[int, int, int, int]]:
+    found = spots(open_canvas(path))
+    return [box for size, box in found if size >= found[0][0] * SPECK_SHARE]
+
+
+def union(boxes: list[tuple[int, int, int, int]]) -> tuple[int, int, int, int]:
+    return min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes)
+
+
+def pack_interiors() -> dict[str, list[tuple[str, str, tuple[float, float, float, float], int]]]:
+    """По теме: (часть, имя ресурса, место на холсте, байт на диске)."""
+    themes = {}
+    for theme, life in INTERIOR_LIFE.items():
+        folder = INTERIORS / theme
+        packed = []
+        for part in INTERIOR_PARTS + life:
+            path = next(folder.glob(f"{part}.[pP][nN][gG]"))
+            box = union(big_spots(path)) if (theme, part) in INTERIOR_SPECKS else None
+            packed.append((part, *pack_file(path, f"room_{theme}_{part}", box)))
+        for (split_theme, source), name in INTERIOR_SPLIT.items():
+            if split_theme != theme:
+                continue
+            path = next(folder.glob(f"{source}.[pP][nN][gG]"))
+            # Слева направо, сверху вниз — порядок номеров не зависит от обхода пятен.
+            boxes = sorted(big_spots(path), key=lambda b: (b[1] // 100, b[0]))
+            for i, box in enumerate(boxes, start=1):
+                packed.append((f"{name}_{i}", *pack_file(path, f"room_{theme}_{name}_{i}", box)))
+        themes[theme] = packed
+    return themes
+
+
+def kotlin_rect(rel: tuple[float, float, float, float]) -> str:
+    return f"RelRect({rel[0]:.4f}f, {rel[1]:.4f}f, {rel[2]:.4f}f, {rel[3]:.4f}f)"
+
+
 def main() -> None:
     # Git Bash на Windows отдаёт stdout в cp1251, и кириллица в выводе бьётся.
     sys.stdout.reconfigure(encoding="utf-8")
 
     RES.mkdir(parents=True, exist_ok=True)
     packed = [pack(source, target) for source, target in LAYERS.items()] + [pack_sky()]
+    themes = pack_interiors()
 
     total_disk = sum(size for _, _, size in packed)
-    print(f"Упаковано {len(packed)} слоёв, {total_disk // 1024} КБ на диске\n")
+    theme_disk = sum(size for layers in themes.values() for *_, size in layers)
+    print(f"Упаковано {len(packed)} слоёв, {total_disk // 1024} КБ на диске")
+    print(f"Интерьеров {len(themes)}, слоёв {sum(map(len, themes.values()))}, {theme_disk // 1024} КБ на диске\n")
     print("Для RoomLayers.kt:\n")
     for target, rel, _ in packed:
         camel = "".join(part.capitalize() for part in target.removeprefix("room_").split("_")) or "Back"
-        print(f"    val {camel} = RoomLayer(R.drawable.{target}, RelRect({rel[0]:.4f}f, {rel[1]:.4f}f, {rel[2]:.4f}f, {rel[3]:.4f}f))")
+        print(f"    val {camel} = RoomLayer(R.drawable.{target}, {kotlin_rect(rel)})")
+
+    print("\nДля RoomInteriors.kt:")
+    for theme, layers in themes.items():
+        print(f"\n    // {theme}")
+        for part, target, rel, _ in layers:
+            camel = "".join(word.capitalize() for word in part.split("_"))
+            print(f"    private val {camel} = RoomLayer(R.drawable.{target}, {kotlin_rect(rel)})")
 
 
 if __name__ == "__main__":

@@ -148,17 +148,14 @@ internal const val PET_PAD_TOP = 0.6f
 private const val MAX_SHADOWS = 3
 
 /**
- * Где что светит, в долях холста 1440×2400.
+ * Как светит, в долях холста 1440×2400.
  *
- * Абажур и подставка промерены по непрозрачным пикселям `lamp.PNG`, перекладина
- * окна по `window_frame.PNG`. Пятно лунного света на полу замера не имеет:
- * его нет в экспортах, и оно положено так, чтобы питомец в зале стоял в нём.
+ * Где абажур, круг света у подставки и окно — у каждого интерьера своё, это
+ * в [RoomInterior]. Здесь то, что от обстановки не зависит. Пятно лунного света
+ * на полу замера не имеет: его нет в экспортах, и оно положено так, чтобы
+ * питомец в зале стоял в нём.
  */
 private object Lighting {
-    /** Середина шара-«Сатурна» без кольца. */
-    const val SHADE_X = 0.152f
-    const val SHADE_Y = 0.092f
-
     /**
      * Докуда достаёт свет торшера, доля ширины холста.
      *
@@ -176,14 +173,10 @@ private object Lighting {
     const val CEILING_REACH = 1.2f
 
     /** Круг света у подставки, сплющенный перспективой пола. От него же падают тени торшера. */
-    const val POOL_X = 0.160f
-    const val POOL_Y = 0.500f
     const val POOL_RADIUS = 0.24f
     const val POOL_SQUASH = 0.22f
 
     /** Свет из окна растекается по стене чуть ниже проёма. */
-    const val WINDOW_GLOW_X = 0.654f
-    const val WINDOW_GLOW_Y = 0.26f
     const val WINDOW_REACH = 0.50f
 
     /**
@@ -195,20 +188,10 @@ private object Lighting {
     const val BEAM_REACH = 0.45f
 
     /**
-     * Откуда считаются тени от луны: основание окна у стены. Тень от него идёт
-     * туда же, куда съезжает пятно на полу, — к зрителю и влево.
-     */
-    const val MOON_FROM_X = 0.648f
-    const val MOON_FROM_Y = 0.441f
-
-    /** Вертикальная перекладина рамы: она делит пятно на полу надвое. */
-    const val MULLION_LEFT = 0.6375f
-    const val MULLION_RIGHT = 0.6861f
-
-    /**
      * Пятно на полу: от ближнего к стене края до дальнего. Ступни питомца
      * в зале на 0.644 — пятно лежит и позади, и впереди них, иначе тени
-     * было бы не на чем лечь.
+     * было бы не на чем лечь. Где пол начинается ниже 0.50 (плинтус),
+     * ближний край — по шву: на плинтусе пятну не место.
      */
     const val PATCH_NEAR = 0.50f
     const val PATCH_FAR = 0.84f
@@ -235,10 +218,10 @@ private object Lighting {
     val MoonRay = Point3(x = -0.168f, y = -1f, z = -1.55f)
 }
 
-/** Шар торшера в объёме: над серединой подставки, на высоте шара на холсте. */
-private val LampPoint = RoomSpace.lift(
-    Offset(Lighting.POOL_X, Lighting.SHADE_Y),
-    height = (Lighting.POOL_Y - Lighting.SHADE_Y) / RoomSpace.scaleAt(Lighting.POOL_Y),
+/** Абажур в объёме: над кругом света на полу, на высоте абажура на холсте. */
+private fun LampSkin.point(): Point3 = RoomSpace.lift(
+    Offset(pool.x, shade.y),
+    height = (pool.y - shade.y) / RoomSpace.scaleAt(pool.y),
 )
 
 /** Размытие тени мебели, доля высоты холста. У мебели край тени резче, чем у питомца: она ниже. */
@@ -332,8 +315,12 @@ internal class RoomLighting(
      * ни круга на полу у подставки, ни теней от него.
      */
     val ceiling: Boolean = false,
+    /** Где торшер, окно и шов пола: у каждого интерьера свои. */
+    val interior: RoomInterior = Interiors.Default,
 ) {
     val occluders = mutableStateListOf<Occluder>()
+
+    private val lampPoint = interior.lamp.point()
 
     val lampLevel: Float get() = lamp.value * breath.value
 
@@ -378,17 +365,17 @@ internal class RoomLighting(
         } else {
             add(
                 Glow(
-                    LightKind.LAMP, Lighting.SHADE_X, Lighting.SHADE_Y, LampWarm,
+                    LightKind.LAMP, interior.lamp.shade.x, interior.lamp.shade.y, LampWarm,
                     reach = Lighting.LAMP_REACH, core = 0.3f, strength = lampLevel,
-                    shadow = ShadowSource(Lighting.POOL_X, Lighting.POOL_Y, length = 0.75f),
-                    caster = Caster.Point(LampPoint),
+                    shadow = ShadowSource(interior.lamp.pool.x, interior.lamp.pool.y, length = 0.75f),
+                    caster = Caster.Point(lampPoint),
                 ),
             )
         }
         if (window) {
             add(
                 Glow(
-                    LightKind.WINDOW, Lighting.WINDOW_GLOW_X, Lighting.WINDOW_GLOW_Y, WindowCool,
+                    LightKind.WINDOW, interior.window.glow.x, interior.window.glow.y, WindowCool,
                     reach = Lighting.WINDOW_REACH, core = 0.4f, strength = 1f,
                 ),
             )
@@ -396,7 +383,9 @@ internal class RoomLighting(
                 Glow(
                     LightKind.MOON, Lighting.BEAM_X, Lighting.BEAM_Y, MoonBeam,
                     reach = Lighting.BEAM_REACH, core = 0.5f, strength = 0.8f,
-                    shadow = ShadowSource(Lighting.MOON_FROM_X, Lighting.MOON_FROM_Y, length = 0.5f),
+                    // Тени от луны — от основания окна у стены: туда же, куда
+                    // съезжает пятно на полу, к зрителю и влево.
+                    shadow = ShadowSource(interior.window.moonFromX, interior.wall.floorTop, length = 0.5f),
                     caster = Caster.Parallel(Lighting.MoonRay),
                 ),
             )
@@ -408,7 +397,7 @@ internal class RoomLighting(
                     reach = Lighting.UFO_REACH, core = 0.35f, strength = presence,
                     // НЛО за стеной, свет приходит через окно, поэтому и тень
                     // считается от стены под ним, а не от неба.
-                    shadow = ShadowSource(centre.x, Room.FLOOR_TOP, length = 0.55f),
+                    shadow = ShadowSource(centre.x, interior.wall.floorTop, length = 0.55f),
                     caster = Caster.Point(RoomSpace.behind(centre, Lighting.UFO_DEPTH)),
                 ),
             )
@@ -422,6 +411,7 @@ internal fun rememberRoomLighting(
     ufo: () -> Pair<Offset, Float>?,
     window: Boolean = true,
     ceiling: Boolean = false,
+    interior: RoomInterior = Interiors.Default,
 ): RoomLighting {
     val lamp = animateFloatAsState(
         targetValue = if (lampOn) 1f else 0f,
@@ -440,7 +430,7 @@ internal fun rememberRoomLighting(
     // Без анимаций дыхание застыло бы на пригашенной лампе — свет ровный.
     val steady = remember { mutableFloatStateOf(1f) }
     val light = if (LocalAnimations.current) breath else steady
-    return remember(lamp, light, window, ceiling) { RoomLighting(lamp, light, ufo, window, ceiling) }
+    return remember(lamp, light, window, ceiling, interior) { RoomLighting(lamp, light, ufo, window, ceiling, interior) }
 }
 
 /**
@@ -463,7 +453,8 @@ internal fun Modifier.roomLight(lighting: RoomLighting): Modifier = drawWithCach
     // из него и не трогают свет остальных. Торшер заслонён — луна светит.
     val casters = List(MAX_SHADOWS) { obtainGraphicsLayer().apply { blendMode = BlendMode.Plus } }
 
-    val shade = Offset(w * Lighting.SHADE_X, h * Lighting.SHADE_Y)
+    val lamp = lighting.interior.lamp
+    val shade = Offset(w * lamp.shade.x, h * lamp.shade.y)
     val bloom = Brush.radialGradient(
         0f to LampBloom.copy(alpha = 0.55f),
         1f to Color.Transparent,
@@ -471,7 +462,7 @@ internal fun Modifier.roomLight(lighting: RoomLighting): Modifier = drawWithCach
         radius = w * Lighting.BLOOM_RADIUS,
     )
 
-    val pool = Offset(w * Lighting.POOL_X, h * Lighting.POOL_Y)
+    val pool = Offset(w * lamp.pool.x, h * lamp.pool.y)
     val poolGlow = Brush.radialGradient(
         0f to LampPool,
         1f to Color.Transparent,
@@ -479,14 +470,14 @@ internal fun Modifier.roomLight(lighting: RoomLighting): Modifier = drawWithCach
         radius = w * Lighting.POOL_RADIUS,
     )
 
-    val patch = moonPatch(w, h)
+    val patch = moonPatch(w, h, lighting.interior)
     val patchBrush = Brush.verticalGradient(
         0f to MoonPatch,
         0.7f to MoonPatch.copy(alpha = 0.6f),
         // Дальний край растворяется: резкая граница посреди пола читалась
         // как ковёр, а не как свет.
         1f to Color.Transparent,
-        startY = h * Lighting.PATCH_NEAR,
+        startY = h * patchNear(lighting.interior),
         endY = h * Lighting.PATCH_FAR,
     )
 
@@ -812,31 +803,36 @@ private fun GraphicsLayer.stretch() {
     scaleY = LIGHT_SCALE
 }
 
+/** Ближний к стене край пятна на полу: не выше шва — на плинтус оно не ложится. */
+private fun patchNear(interior: RoomInterior) = maxOf(Lighting.PATCH_NEAR, interior.wall.floorTop)
+
 /**
- * Лунный свет на полу: проекция двух стёкол окна.
+ * Лунный свет на полу: проекция стёкол окна — двух по сторонам перекладины
+ * или одного, если перекладины нет.
  *
- * Края пятна идут вдоль досок, то есть к точке схода, иначе пятно лежало бы
- * не на полу, а висело перед ним плоской наклейкой.
+ * Края пятна идут вдоль досок, то есть к точке схода, иначе пятно лежало
+ * бы не на полу, а висело перед ним плоской наклейкой.
  */
-private fun moonPatch(w: Float, h: Float): Path {
-    val hole = Room.WindowHole
+private fun moonPatch(w: Float, h: Float, interior: RoomInterior): Path {
+    val window = interior.window
+    val floorTop = interior.wall.floorTop
 
     // Где окажется точка с этой долей ширины у стены, если отойти от стены вглубь
     // до строки y: доски расходятся от оси пропорционально расстоянию до схода.
     fun x(atWall: Float, y: Float): Float {
-        val spread = (y - RoomSpace.VANISH_Y) / (Room.FLOOR_TOP - RoomSpace.VANISH_Y)
+        val spread = (y - RoomSpace.VANISH_Y) / (floorTop - RoomSpace.VANISH_Y)
         val drift = Lighting.PATCH_DRIFT *
             (y - Lighting.PATCH_NEAR) / (Lighting.PATCH_FAR - Lighting.PATCH_NEAR)
         return Room.ROOM_AXIS_X + (atWall - Room.ROOM_AXIS_X) * spread - drift
     }
 
-    val near = Lighting.PATCH_NEAR
+    val near = patchNear(interior)
     val far = Lighting.PATCH_FAR
+    val panes = window.mullion?.let {
+        listOf(window.glassLeft to it.start, it.endInclusive to window.glassRight)
+    } ?: listOf(window.glassLeft to window.glassRight)
     return Path().apply {
-        for ((left, right) in listOf(
-            hole.left to Lighting.MULLION_LEFT,
-            Lighting.MULLION_RIGHT to hole.right,
-        )) {
+        for ((left, right) in panes) {
             moveTo(w * x(left, near), h * near)
             lineTo(w * x(right, near), h * near)
             lineTo(w * x(right, far), h * far)

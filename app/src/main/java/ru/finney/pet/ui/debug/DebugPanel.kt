@@ -27,6 +27,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import ru.finney.pet.domain.model.PeriodPhase
 import ru.finney.pet.domain.model.PetStats
 import ru.finney.pet.ui.components.FinneyPanel
+import ru.finney.pet.ui.room.InteriorPreview
+import ru.finney.pet.ui.room.Interiors
+import ru.finney.pet.ui.room.RoomInterior
 import ru.finney.pet.ui.theme.FinneyInk
 import ru.finney.pet.ui.theme.FinneyTheme
 
@@ -70,6 +73,8 @@ fun DebugPanel(
             onOpenTasks = onOpenTasks,
             previewStage = previewStage,
             onPreviewStage = onPreviewStage,
+            interior = InteriorPreview.current,
+            onInterior = { InteriorPreview.current = it },
             onDismiss = onDismiss,
             modifier = modifier,
         )
@@ -88,6 +93,8 @@ private fun DebugContent(
     onOpenTasks: () -> Unit = {},
     previewStage: Int? = null,
     onPreviewStage: (Int?) -> Unit = {},
+    interior: RoomInterior = Interiors.Default,
+    onInterior: (RoomInterior) -> Unit = {},
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -144,6 +151,10 @@ private fun DebugContent(
                 "4" to { onPreviewStage(4) },
                 "По уровню" to { onPreviewStage(null) },
             )
+
+            // Тоже только вид и до перезапуска: купить интерьер в игре пока нельзя.
+            Line("Комната: ${interior.label}")
+            Buttons(*Interiors.all.map { it.label to { onInterior(it) } }.toTypedArray())
 
             Buttons(
                 if (confirmWipe) {
