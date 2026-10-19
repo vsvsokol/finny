@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.Canvas
@@ -26,12 +27,23 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import ru.finney.pet.R
 import ru.finney.pet.appContainer
+import ru.finney.pet.domain.game.Session
+import ru.finney.pet.domain.model.GameContent
 import ru.finney.pet.domain.model.GlossaryTerm
+import ru.finney.pet.domain.model.TaskAttempt
+import ru.finney.pet.domain.model.TaskOutcome
+import ru.finney.pet.ui.components.CheckBadge
 import ru.finney.pet.ui.components.Coin
 import ru.finney.pet.ui.components.FinneyCard
 import ru.finney.pet.ui.components.FinneyIcon
@@ -42,13 +54,40 @@ import ru.finney.pet.ui.components.OutlinedText
 import ru.finney.pet.ui.components.PlanDonut
 import ru.finney.pet.ui.components.JarGlass
 import ru.finney.pet.ui.components.SavingsIcon
+import ru.finney.pet.ui.theme.FinneyGreen
 import ru.finney.pet.ui.theme.FinneyInk
 
+/**
+ * Слово справочника для ребёнка. [games] — названия игр, где оно встречается;
+ * [learned] — хоть одна из них пройдена, слово в «Моих знаниях».
+ */
+data class KnowledgeCard(val term: GlossaryTerm, val games: List<String>, val learned: Boolean)
+
+/**
+ * Карточки в порядке glossary.json. Что ребёнок знает, видно по успешным попыткам —
+ * отдельно это не хранится (P1.3 в docs/stage-2-plan.md).
+ */
+fun knowledgeCards(content: GameContent, attempts: List<TaskAttempt>): List<KnowledgeCard> {
+    val passed = attempts
+        .filter { it.outcome == TaskOutcome.SUCCESS }
+        .mapNotNull { content.task(it.taskId)?.seriesId }
+        .toSet()
+    val titles = content.taskSeries.associate { it.first().seriesId to it.first().title }
+    return content.glossary.map { term ->
+        KnowledgeCard(term, term.games.mapNotNull(titles::get), term.games.any { it in passed })
+    }
+}
+
 /** Термины из glossary.json — учебный контент, не код (ТЗ п. 2.5.11, 3.2). */
-class GlossaryViewModel(val terms: List<GlossaryTerm>) : ViewModel() {
+class GlossaryViewModel(session: Session, content: GameContent) : ViewModel() {
+    /** null — профиль ещё читается. Без профиля (справочник из настроек) — ничего не узнано. */
+    val cards: StateFlow<List<KnowledgeCard>?> = session.activeGame
+        .map { knowledgeCards(content, it?.state?.attempts.orEmpty()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     companion object {
         val Factory = viewModelFactory {
-            initializer { GlossaryViewModel(appContainer().content.glossary) }
+            initializer { appContainer().let { GlossaryViewModel(it.session, it.content) } }
         }
     }
 }
@@ -82,14 +121,45 @@ fun GlossaryScreen(
             style = MaterialTheme.typography.bodyLarge,
             color = FinneyInk,
         )
-        viewModel.terms.forEach { term -> TermCard(term) }
+        val cards by viewModel.cards.collectAsStateWithLifecycle()
+        cards?.let { GlossaryCards(it) }
     }
 }
 
-/** Карточка термина: рисунок слева, слово и объяснение справа. Термин без рисунка — только слова. */
+/**
+ * Сверху «Мои знания» — слова из пройденных игр, ниже весь остальной справочник.
+ * Неузнанные слова не прячем: справочник открыт целиком, а подпись говорит, где слово узнать.
+ */
 @Composable
-private fun TermCard(term: GlossaryTerm) {
-    FinneyCard(modifier = Modifier.semantics(mergeDescendants = true) {}) {
+private fun GlossaryCards(cards: List<KnowledgeCard>) {
+    val (learned, rest) = cards.partition { it.learned }
+    val learnable = cards.count { it.games.isNotEmpty() }
+    if (learnable > 0) {
+        OutlinedText("Мои знания: ${learned.size} из $learnable", style = MaterialTheme.typography.titleLarge)
+        if (learned.isEmpty()) {
+            Text(
+                text = "Пройди мини-игру, и слово из неё появится здесь.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = FinneyInk,
+            )
+        }
+        learned.forEach { TermCard(it) }
+        if (rest.isNotEmpty()) OutlinedText("Все слова", style = MaterialTheme.typography.titleLarge)
+    }
+    rest.forEach { TermCard(it) }
+}
+
+/**
+ * Карточка термина: рисунок слева, слово и объяснение справа. Термин без рисунка — только слова.
+ * Узнанное слово — зелёное с галочкой, как пройденная игра в «Итогах».
+ */
+@Composable
+private fun TermCard(card: KnowledgeCard) {
+    val term = card.term
+    FinneyCard(
+        modifier = Modifier.semantics(mergeDescendants = true) {},
+        accent = if (card.learned) FinneyGreen else null,
+    ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -104,8 +174,21 @@ private fun TermCard(term: GlossaryTerm) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(term.term, style = MaterialTheme.typography.titleMedium, color = FinneyInk)
                 Text(term.text, style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
+                gamesLine(card)?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = FinneyInk) }
             }
+            if (card.learned) CheckBadge(size = 28.dp)
         }
+    }
+}
+
+/** Где слово узнают: «Слово из игры «Касса Финни»» или «Пройди игру «Касса Финни», и слово станет твоим». */
+internal fun gamesLine(card: KnowledgeCard): String? {
+    if (card.games.isEmpty()) return null
+    val titles = card.games.map { "«$it»" }
+    return if (card.learned) {
+        (if (titles.size == 1) "Слово из игры " else "Слово из игр ") + titles.joinToString(" и ")
+    } else {
+        "Пройди игру ${titles.joinToString(" или ")}, и слово станет твоим"
     }
 }
 

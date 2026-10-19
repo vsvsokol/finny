@@ -94,8 +94,12 @@ data class Glossary(
     val terms: List<GlossaryTerm>,
 )
 
+/**
+ * [games] — игры (`series` из tasks.json), в которых встречается слово. Пройдена хоть одна —
+ * слово попадает в «Мои знания». Пусто — слово только в справочнике.
+ */
 @Serializable
-data class GlossaryTerm(val id: String, val term: String, val text: String)
+data class GlossaryTerm(val id: String, val term: String, val text: String, val games: List<String> = emptyList())
 
 /** Весь учебный контент из assets/content. Загружается и проверяется пакетом `content`. */
 data class GameContent(
