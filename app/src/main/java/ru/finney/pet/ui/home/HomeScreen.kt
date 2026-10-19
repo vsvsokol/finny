@@ -1,6 +1,8 @@
 package ru.finney.pet.ui.home
 
 import ru.finney.pet.R
+import androidx.compose.foundation.layout.heightIn
+import ru.finney.pet.ui.progress.NextProgress
 import androidx.annotation.DrawableRes
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.layout.ContentScale
@@ -259,6 +261,7 @@ fun HomeScreen(
             onOpenGlossary = onOpenGlossary,
             onClosePeriod = viewModel::closePeriod,
             onBuy = viewModel::buy,
+            onMovePlan = viewModel::moveToNeeds,
             onWash = viewModel::wash,
             onSleep = viewModel::sleep,
             onWake = viewModel::wake,
@@ -352,6 +355,7 @@ internal fun HomeContent(
     rejectShown: Boolean = false,
     actionLayout: HomeActionLayout = HomeActionLayout.SPLIT,
     shopContent: @Composable (Int, () -> Unit) -> Unit = { balance, click -> HomeShopButton(balance, click) },
+    onMovePlan: (String) -> Unit = {},
 ) {
     // Питомец спит — это ночь: он в капсуле, свет выключен, игра на паузе
     // до утра. Глаза закрываются, когда он уже внутри, и открываются,
@@ -916,6 +920,22 @@ internal fun HomeContent(
             }
         }
 
+        if (state.title != null || state.upcoming != null) {
+            Column(
+                Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp))
+                    .background(FinneySand.copy(alpha = 0.95f))
+                    .clickable(onClickLabel = "Открытия уровня", onClick = { levelOpen = true })
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            ) {
+                state.title?.let { Text("Звание: $it", style = MaterialTheme.typography.bodyLarge, color = FinneyInk) }
+                state.upcoming?.let { next ->
+                    val whenLevel = if (next.level == state.level + 1) "На следующем уровне" else "На уровне ${next.level}"
+                    Text("$whenLevel — ${next.changes.first()}", style = MaterialTheme.typography.bodyLarge,
+                        color = FinneyInk, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+
         // Кольца освобождают комнату, а сумма и активная игра остаются видны по ТЗ 2.5.3.
         Box(
             modifier = Modifier.fillMaxWidth().weight(1f),
@@ -1301,6 +1321,9 @@ internal fun HomeContent(
                     },
                     onPick = { picked = it },
                     guide = state.level == 1,
+                    upcoming = if (target == CareTarget.FOOD) state.upcomingFood else null,
+                    planMove = picked?.let { state.planMoves[it] },
+                    onMovePlan = { picked?.let(onMovePlan) },
                     confirmLabel = when (target) {
                         CareTarget.FOOD -> "Купить и покормить"
                         CareTarget.BATH -> "Купить"
@@ -1428,6 +1451,7 @@ internal fun HomeContent(
             ) {
                 LevelPanel(
                     level = state.level,
+                    upcoming = state.upcoming,
                     check = state.check,
                     levelGame = state.levelGame,
                     planGap = state.planGap,
@@ -1633,6 +1657,7 @@ private fun LevelPanel(
     onOpenProgress: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    upcoming: NextProgress? = null,
 ) {
     var confirmRestart by rememberSaveable { mutableStateOf(false) }
     var careOpen by rememberSaveable { mutableStateOf(false) }
@@ -1672,6 +1697,10 @@ private fun LevelPanel(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            upcoming?.let { next ->
+                Text("На уровне ${next.level}:", style = MaterialTheme.typography.titleMedium, color = FinneyInk)
+                next.changes.forEach { Text(it, style = MaterialTheme.typography.bodyLarge, color = FinneyInk) }
+            }
             if (!check.planConfirmed) {
                 Text(
                     "Уровень начинается с плана: реши, сколько на нужное, сколько на «хочется» и сколько отложить.",

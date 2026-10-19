@@ -135,6 +135,9 @@ fun CarePanel(
     groupBanner: (@Composable (Category) -> Unit)? = null,
     tilePicture: Dp = TilePicture,
     guide: Boolean = false,
+    upcoming: ShopItem? = null,
+    planMove: Int? = null,
+    onMovePlan: () -> Unit = {},
 ) {
     val selected = options.firstOrNull { it.isSelected }
     // Обучение: рука показывает сначала товар, потом «Купить». Плейтест 29.09 — не
@@ -196,6 +199,7 @@ fun CarePanel(
             }
         }
 
+        upcoming?.let { UpcomingItem(it) }
         if (!withConfirm) return@FinneyPanel
         Spacer(Modifier.padding(top = 4.dp))
 
@@ -213,6 +217,11 @@ fun CarePanel(
         // внутри неё (плейтест: кнопка должна говорить, что сделает). Пока ничего
         // не выбрано, подсказка стоит над кнопкой, а сама кнопка не нажимается.
         if (selected == null) PickHint()
+        planMove?.let { amount ->
+            FinneyButton(text = "Возьми из радостей: $amount", onClick = onMovePlan)
+            Text("Переложи план в нужное. Покупку подтверди отдельно.",
+                style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
+        }
         // Купить можно только выбранное и только когда хватает денег. У строки
         // с нехваткой уже написано, сколько не достаёт и что делать, — кнопка
         // молча неактивной не остаётся.
@@ -223,6 +232,17 @@ fun CarePanel(
             enabled = canBuy,
             modifier = Modifier.pointHere(guide && canBuy),
         )
+    }
+}
+
+/** Один тизер без действия покупки: доступ откроется на указанном уровне. */
+@Composable
+internal fun UpcomingItem(item: ShopItem) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        ItemPicture(item.id, itemFallback(item.id), 48.dp)
+        Text("Скоро: ${item.label} — на уровне ${item.unlockLevel}",
+            style = MaterialTheme.typography.bodyLarge, color = FinneyInk, modifier = Modifier.weight(1f))
     }
 }
 

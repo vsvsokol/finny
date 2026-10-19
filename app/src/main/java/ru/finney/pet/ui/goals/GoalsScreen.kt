@@ -332,6 +332,10 @@ private fun GoalList(state: GoalsUiState.Ready, onSelect: (String) -> Unit) {
         state.goals.forEach { row ->
             GoalCard(row = row, onSelect = { onSelect(row.goal.id) })
         }
+        state.upcoming?.let { goal ->
+            Text("Скоро: ${goal.label} — на уровне ${goal.unlockLevel}",
+                style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
+        }
     }
 }
 

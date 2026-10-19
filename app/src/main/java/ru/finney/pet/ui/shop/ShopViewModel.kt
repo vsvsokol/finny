@@ -46,6 +46,8 @@ sealed interface ShopUiState {
         val wantsLeft: Int?,
         val rejection: Rejection?,
         val feedback: ActionFeedback?,
+        val upcoming: ShopItem? = null,
+        val planMoves: Map<String, Int> = emptyMap(),
     ) : ShopUiState
 }
 
@@ -78,6 +80,18 @@ class ShopViewModel(
     fun select(itemId: String) = selection.update { ShopSelection(selectedId = itemId) }
 
     fun dismissFeedback() = selection.update { it.copy(feedback = null, rejection = null) }
+
+    /** Переносит только план; покупку ребёнок подтверждает отдельно. Сумма проверяется заново. */
+    fun moveToNeeds(itemId: String) {
+        viewModelScope.launch {
+            when (val result = session.execute { state ->
+                wantsToNeeds(state, itemId)?.let { moveWantsToNeeds(state, it) } ?: GameResult.Ok(state)
+            }) {
+                is GameResult.Ok -> selection.update { it.copy(rejection = null, feedback = null) }
+                is GameResult.Rejected -> selection.update { it.copy(rejection = result.reason) }
+            }
+        }
+    }
 
     fun buy(itemId: String) {
         viewModelScope.launch {
@@ -124,7 +138,7 @@ class ShopViewModel(
         val state = saved.state
         val report = game.planReport(state)
         fun previews(fits: (ShopItem) -> Boolean) = content.forSale
-            .filter { fits(it) && it.isOnSale(state) }
+            .filter { fits(it) && it.isOnSale(state) && game.isUnlocked(state, it) }
             .mapNotNull { game.previewPurchase(state, it.id) }
         return ShopUiState.Ready(
             balance = state.balance,
@@ -137,6 +151,12 @@ class ShopViewModel(
             wantsLeft = report?.let { (it.plan.wants - it.facts.wants).coerceAtLeast(0) },
             rejection = selection.rejection,
             feedback = selection.feedback,
+            upcoming = content.forSale.filter { it.isOnSale(state) && !game.isUnlocked(state, it) }
+                .minByOrNull { it.unlockLevel },
+            planMoves = if (state.currentPeriod.phase != PeriodPhase.ACTIVE) emptyMap() else content.forSale
+                .filter { game.isUnlocked(state, it) &&
+                    (state.sleepingSince == null || (it.effect.satiety == 0 && it.effect.hygiene == 0)) }
+                .mapNotNull { item -> game.wantsToNeeds(state, item.id)?.let { item.id to it } }.toMap(),
         )
     }
 
