@@ -43,6 +43,8 @@ internal fun BoxScope.HomeSideActions(
                     if (state.reserveMode) "Режим запаса" else "Цель ещё не выбрана",
                 progress = if (goal != null) goal.saved.toFloat() / goal.goal.price.coerceAtLeast(1) else 0f,
                 progressColor = FinneyGreen, goalArt = goal?.goal?.reward?.let(::accessoryArt)?.res,
+                // Без цели копить некуда — «!» зовёт её выбрать.
+                warning = goal == null && !state.reserveMode,
                 ready = ready, enabled = enabled,
                 ringModifier = Modifier.hintTarget(hintTargets, NextStep.SAVE))
             HomeMoneyBadge(state.totalSavings, Modifier.padding(top = 3.dp)

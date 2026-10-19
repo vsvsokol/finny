@@ -56,6 +56,19 @@ data class ShopItem(
     val slot: AccessorySlot = AccessorySlot.HEAD,
     /** С какого уровня продаётся. Купленное раньше остаётся. docs/economy.md, раздел 8. */
     val unlockLevel: Int = 1,
+    /**
+     * Расходник с полочки (мыло): на сколько раз хватает одной покупки. Покупка кладёт запас
+     * и шкал не меняет, а [effect] прибавляется за каждый раз — см. [ru.finney.pet.domain.game.Game.wash].
+     * null — товар действует сразу при покупке, как еда.
+     */
+    val uses: Int? = null,
+    /**
+     * Полотенце, щётка, паста: свой шаг мытья — вытереть, почистить зубы — со своей прибавкой
+     * чистоты. Не мыло: намыливают только мылом ([uses] без этого признака).
+     */
+    val bathExtra: Boolean = false,
+    /** Тратится только в паре с этим предметом: щётка без пасты зубы не чистит, и наоборот. */
+    val pairWith: String? = null,
 )
 
 @Serializable
@@ -81,8 +94,12 @@ data class Glossary(
     val terms: List<GlossaryTerm>,
 )
 
+/**
+ * [games] — игры (`series` из tasks.json), в которых встречается слово. Пройдена хоть одна —
+ * слово попадает в «Мои знания». Пусто — слово только в справочнике.
+ */
 @Serializable
-data class GlossaryTerm(val id: String, val term: String, val text: String)
+data class GlossaryTerm(val id: String, val term: String, val text: String, val games: List<String> = emptyList())
 
 /** Весь учебный контент из assets/content. Загружается и проверяется пакетом `content`. */
 data class GameContent(

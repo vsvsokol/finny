@@ -50,8 +50,16 @@ object ContentValidator {
         }
         content.shop.filter { it.price <= 0 }.forEach { add("shop.json: ${it.id} — цена должна быть > 0") }
         val needs = content.shop.filter { it.category == Category.NEEDS }
-        if (needs.none { it.effect.satiety > 0 }) add("shop.json: нет обязательного товара, поднимающего сытость")
-        if (needs.none { it.effect.hygiene > 0 }) add("shop.json: нет обязательного товара, поднимающего чистоту")
+        if (needs.none { it.effect.satiety > 0 && it.unlockLevel == 1 }) add("shop.json: нет обязательного товара, поднимающего сытость")
+        // Чистота — только мылом с полочки: мытьё тратит запас, а не покупает (docs/bath-plan.md).
+        if (needs.none { it.effect.hygiene > 0 && it.uses != null && !it.bathExtra && it.unlockLevel == 1 }) {
+            add("shop.json: нет мыла с первого уровня — обязательного товара с чистотой и uses")
+        }
+        content.shop.filter { (it.uses ?: 1) <= 0 }.forEach { add("shop.json: ${it.id} — uses должен быть > 0") }
+        content.shop.filter { it.bathExtra && it.uses == null }.forEach { add("shop.json: ${it.id} — bathExtra только у предмета с uses") }
+        content.shop.filter { it.pairWith != null && content.item(it.pairWith)?.bathExtra != true }.forEach {
+            add("shop.json: ${it.id} — pairWith должен указывать на предмет ванны с bathExtra")
+        }
 
         duplicates(content.goals.map { it.id }).forEach { add("goals.json: повторяется id $it") }
 
@@ -61,7 +69,13 @@ object ContentValidator {
         if (e.stageTitles.any { it.isBlank() }) add("economy.json: stageTitles — пустое звание")
         content.shop.filter { it.unlockLevel !in 1..e.maxLevel }.forEach { add("shop.json: ${it.id} — unlockLevel должен быть от 1 до ${e.maxLevel}") }
         content.goals.filter { it.unlockLevel !in 1..e.maxLevel }.forEach { add("goals.json: ${it.id} — unlockLevel должен быть от 1 до ${e.maxLevel}") }
-        needs.filter { it.unlockLevel != 1 }.forEach { add("shop.json: ${it.id} — нужное открыто всегда, unlockLevel только 1") }
+        // Еда открыта всегда: без неё питомцу плохо с первой минуты. Предметы ванны с запасом
+        // (uses) — мыло получше, щётка, паста — могут открываться позже: отмыться можно и обычным
+        // мылом, оно с первого уровня (проверка выше). Пару открывают вместе: щётка без пасты бесполезна.
+        needs.filter { it.uses == null && it.unlockLevel != 1 }.forEach { add("shop.json: ${it.id} — нужное без uses (еда) открыто всегда, unlockLevel только 1") }
+        content.shop.filter { item -> item.pairWith?.let(content::item)?.let { it.unlockLevel != item.unlockLevel } == true }.forEach {
+            add("shop.json: ${it.id} — открывается вместе с парой ${it.pairWith}, unlockLevel должен совпадать")
+        }
         if (content.forSale.none { it.category == Category.WANTS && it.unlockLevel == 1 }) add("shop.json: на уровне 1 нечего купить из «хочется» — план не составить")
         if (content.goals.none { it.unlockLevel == 1 }) add("goals.json: на уровне 1 нет цели — копилку в плане не заполнить")
         content.goals.filter { it.price <= 0 }.forEach { add("goals.json: ${it.id} — цена должна быть > 0") }
@@ -69,6 +83,10 @@ object ContentValidator {
         duplicates(content.glossary.map { it.id }).forEach { add("glossary.json: повторяется id $it") }
         content.glossary.filter { it.term.isBlank() || it.text.isBlank() }.forEach {
             add("glossary.json: ${it.id} — пустой термин или объяснение")
+        }
+        val series = content.tasks.map { it.seriesId }.toSet()
+        content.glossary.forEach { term ->
+            term.games.filter { it !in series }.forEach { add("glossary.json: ${term.id} — нет игры $it") }
         }
 
         duplicates(content.tasks.map { it.id }).forEach { add("tasks.json: повторяется id $it") }

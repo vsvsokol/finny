@@ -63,7 +63,7 @@ private val JarIcon = 48.dp
 fun PlanJars(plan: Plan, facts: PeriodFacts, modifier: Modifier = Modifier) {
     Row(modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         val jar = Modifier.weight(1f)
-        PlanJar(categoryIcon(Category.NEEDS), "Нужное", "еда и мытьё", plan.needs, facts.needs, saving = false, jar)
+        PlanJar(categoryIcon(Category.NEEDS), "Нужное", "еда и ванна", plan.needs, facts.needs, saving = false, jar)
         PlanJar(categoryIcon(Category.WANTS), "Желаемое", "игрушки и сладости", plan.wants, facts.wants, saving = false, jar)
         PlanJar(SavingsIcon, "Копилка", "на цель", plan.savings, facts.savings, saving = true, jar)
     }

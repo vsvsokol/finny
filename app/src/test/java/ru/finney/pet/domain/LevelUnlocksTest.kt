@@ -7,13 +7,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import ru.finney.pet.content.ContentValidator
 import ru.finney.pet.domain.game.Game
+import ru.finney.pet.domain.game.GameResult
 import ru.finney.pet.domain.game.Rejection
+import ru.finney.pet.domain.model.Category
 import ru.finney.pet.domain.model.GameState
 import ru.finney.pet.domain.model.GoalSliderTask
 import ru.finney.pet.domain.model.Period
 import ru.finney.pet.domain.model.PeriodFacts
 import ru.finney.pet.domain.model.PeriodPhase
 import ru.finney.pet.domain.model.PeriodResult
+import ru.finney.pet.domain.model.ShopItem
+import ru.finney.pet.domain.model.StatEffect
 import ru.finney.pet.domain.model.TaskTheme
 
 /** Новый уровень открывает новое: игры, вещи, цели, звание. docs/economy.md, раздел 8. */
@@ -121,9 +125,39 @@ class LevelUnlocksTest {
             economy = content.economy.copy(stageTitles = listOf("Новичок")),
         )
         val problems = ContentValidator.validate(locked)
-        assertTrue(problems.joinToString(), problems.any { "apple — нужное открыто всегда" in it })
+        assertTrue(problems.joinToString(), problems.any { "apple — нужное без uses (еда) открыто всегда" in it })
+        assertTrue(problems.joinToString(), problems.any { "нет мыла с первого уровня" in it })
         assertTrue(problems.joinToString(), problems.any { "на уровне 1 нет цели" in it })
         assertTrue(problems.joinToString(), problems.any { "stageTitles — нужно 3" in it })
         assertTrue(problems.joinToString(), problems.any { "нечего купить из «хочется»" in it })
+    }
+
+    /** Ванна по уровням: мыло с начала, щётка и паста — вместе позже, мыло получше — ещё позже. */
+    private val brush = ShopItem("brush", "Щётка", 12, Category.NEEDS, effect = StatEffect(hygiene = 5), uses = 8, bathExtra = true, pairWith = "paste")
+    private val paste = ShopItem("paste", "Паста", 8, Category.NEEDS, effect = StatEffect(hygiene = 10), uses = 4, bathExtra = true, pairWith = "brush")
+    private val liquid = ShopItem("liquid", "Жидкое мыло", 24, Category.NEEDS, effect = StatEffect(hygiene = 50), uses = 8)
+
+    private fun withBath(vararg items: ShopItem) = content.copy(shop = content.shop + items)
+
+    @Test
+    fun `валидатор — предметы ванны с запасом открываются позже, еда и мыло — сразу`() {
+        val levels = withBath(brush.copy(unlockLevel = 2), paste.copy(unlockLevel = 2), liquid.copy(unlockLevel = 3))
+        assertEquals(emptyList<String>(), ContentValidator.validate(levels))
+
+        val apart = ContentValidator.validate(withBath(brush.copy(unlockLevel = 2), paste.copy(unlockLevel = 3)))
+        assertTrue(apart.joinToString(), apart.any { "brush — открывается вместе с парой paste" in it })
+
+        val soapLater = ContentValidator.validate(content.copy(shop = content.shop.map { if (it.uses != null) it.copy(unlockLevel = 2) else it }))
+        assertTrue(soapLater.joinToString(), soapLater.any { "нет мыла с первого уровня" in it })
+    }
+
+    @Test
+    fun `щётка второго уровня на первом не продаётся, на втором открывается вместе с пастой`() {
+        val bath = Game(withBath(brush.copy(unlockLevel = 2), paste.copy(unlockLevel = 2))) { 0L }
+        val active = bath.confirmPlan(bath.newGame(), needs = 20, wants = 10, savings = 0).state()
+
+        assertEquals(Rejection.Locked(2), bath.buy(active, "brush").reason())
+        assertTrue(bath.unlocksAt(2).items.map { it.id }.containsAll(listOf("brush", "paste")))
+        assertTrue("в демо открыто всё", bath.buy(active.copy(isDemo = true), "brush") is GameResult.Ok)
     }
 }
