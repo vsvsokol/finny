@@ -383,7 +383,7 @@ private fun CareRow(option: CareOption, onPick: () -> Unit, modifier: Modifier =
  * нехватки те же — заливка, «✓» и слова, не только цвет (ТЗ п. 3.6).
  */
 @Composable
-private fun CareTile(option: CareOption, picture: Dp, short: Boolean, onPick: () -> Unit, modifier: Modifier = Modifier) {
+internal fun CareTile(option: CareOption, picture: Dp, short: Boolean, onPick: () -> Unit, modifier: Modifier = Modifier) {
     val preview = option.preview
     val notEnough = preview.shortage > 0
     val needed = option.item.category == Category.NEEDS

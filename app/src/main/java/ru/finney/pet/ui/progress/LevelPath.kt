@@ -1,12 +1,12 @@
 package ru.finney.pet.ui.progress
 
+import ru.finney.pet.ui.goals.rewardArt
 import ru.finney.pet.domain.game.Game
 import ru.finney.pet.domain.game.GoalProgress
 import ru.finney.pet.domain.model.GameContent
 import ru.finney.pet.domain.model.GameState
 import ru.finney.pet.domain.progress.LevelUnlocks
 import ru.finney.pet.ui.components.FinneyIcons
-import ru.finney.pet.ui.pet.accessoryArt
 import ru.finney.pet.ui.room.itemArt
 
 enum class NodeStatus { DONE, CURRENT, FUTURE }
@@ -85,7 +85,7 @@ internal fun levelNodes(game: Game, content: GameContent, state: GameState): Lis
             failedTries = periods.count { game.isPassed(it) == false },
             unlocks = unlockLines(unlocks, future = level > current, isDemo = state.isDemo),
             chips = unlockChips(unlocks),
-            goalArt = unlocks.goals.mapNotNull { goal -> goal.reward?.let(::accessoryArt)?.res },
+            goalArt = unlocks.goals.mapNotNull { goal -> goal.rewardArt },
         )
     }
 }
@@ -113,7 +113,7 @@ internal fun unlockChips(unlocks: LevelUnlocks): List<UnlockChip> = buildList {
     unlocks.games.forEach { add(UnlockChip("«${it.title}»", icon = FinneyIcons.Star)) }
     unlocks.harderGames.forEach { add(UnlockChip("«${it.title}» сложнее", icon = FinneyIcons.Star)) }
     unlocks.items.forEach { add(UnlockChip(it.label, art = itemArt(it.id), icon = FinneyIcons.Cart)) }
-    unlocks.goals.forEach { add(UnlockChip("Цель: ${it.label}", art = it.reward?.let(::accessoryArt)?.res, icon = FinneyIcons.Piggy)) }
+    unlocks.goals.forEach { add(UnlockChip("Цель: ${it.label}", art = it.rewardArt, icon = FinneyIcons.Piggy)) }
     unlocks.title?.let { add(UnlockChip("Звание: $it")) }
 }
 

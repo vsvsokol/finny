@@ -247,7 +247,7 @@ fun RoomScene(
     onToyDrop: (toyId: String) -> Unit = {},
     toyNudge: (toyId: String) -> Offset = { Offset.Zero },
     onToyPlaced: (toyId: String, bounds: Rect) -> Unit = { _, _ -> },
-    interior: RoomInterior = InteriorPreview.current,
+    interior: RoomInterior = Interiors.Default,
     focus: RelRect? = null,
     focusPet: Boolean = false,
     focusBottom: Dp = 0.dp,

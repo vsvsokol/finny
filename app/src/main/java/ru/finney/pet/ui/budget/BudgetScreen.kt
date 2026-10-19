@@ -1,5 +1,6 @@
 package ru.finney.pet.ui.budget
 
+import ru.finney.pet.ui.goals.rewardArt
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -286,7 +287,7 @@ internal fun PlanningContent(
             AmountRow(
                 icon = SavingsIcon,
                 label = "Копилка",
-                pictures = listOfNotNull(target.goalReward?.let(::itemArt)),
+                pictures = listOfNotNull(target.goalReward?.let { itemArt(it) ?: rewardArt(it) }),
                 value = target.savings,
                 onChange = { if (interactive) onSavingsChange(it) },
                 canAdd = target.remainder >= STEP,
@@ -465,8 +466,8 @@ private fun GoalChoice(goal: Goal, onClick: () -> Unit, modifier: Modifier = Mod
             .semantics(mergeDescendants = true) { contentDescription = "${goal.label}, цена ${goal.price}" }
             .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
-        goal.reward?.let(::accessoryArt)?.let {
-            Image(painter = painterResource(it.res), contentDescription = null, modifier = Modifier.size(56.dp))
+        goal.rewardArt?.let {
+            Image(painter = painterResource(it), contentDescription = null, modifier = Modifier.size(56.dp))
         }
         Text(goal.label, style = MaterialTheme.typography.titleMedium, color = FinneyInk, modifier = Modifier.weight(1f))
         CoinAmount(amount = goal.price, coinSize = 26.dp)

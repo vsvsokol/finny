@@ -1,5 +1,8 @@
 package ru.finney.pet.ui
 
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.getOrNull
 import android.graphics.Bitmap
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
@@ -123,10 +126,12 @@ class ProgressionScreenTest {
             null, emptyList(), emptyList(), title = "Новичок",
             upcoming = NextProgress(2, 1, listOf("Откроется мини-игра «Касса Финни»", "Новое звание: Планировщик")))
         show { HomeContent(home, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}) }
-        compose.onNodeWithText("Звание: Новичок").assertIsDisplayed()
-        compose.onNodeWithText("На следующем уровне — Откроется мини-игра «Касса Финни»").assertIsDisplayed()
+        // Полосы со званием на главном нет (20.10: сдвигала кнопки) — открытия в панели уровня.
+        compose.onNodeWithText("Звание: Новичок").assertDoesNotExist()
         shot("home-font130")
-        compose.onNodeWithText("Звание: Новичок").performClick()
+        compose.onNode(SemanticsMatcher("клик «Что нужно для уровня»") {
+            it.config.getOrNull(SemanticsActions.OnClick)?.label == "Что нужно для уровня"
+        }).performClick()
         compose.onNodeWithText("Новое звание: Планировщик").assertIsDisplayed()
         shot("home-level-font130")
     }

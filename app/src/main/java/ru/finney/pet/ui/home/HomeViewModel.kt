@@ -38,6 +38,9 @@ import ru.finney.pet.domain.model.GameState
 import ru.finney.pet.domain.model.PeriodPhase
 import ru.finney.pet.domain.model.PetAppearance
 import ru.finney.pet.domain.model.PetStats
+import ru.finney.pet.domain.model.RoomChoice
+import ru.finney.pet.domain.model.RoomPart
+import ru.finney.pet.domain.model.RoomThemes
 import ru.finney.pet.domain.model.SavedGame
 import ru.finney.pet.domain.model.ShopItem
 import ru.finney.pet.domain.model.ItemArt
@@ -154,6 +157,10 @@ sealed interface HomeUiState {
         val sleepCardsPerSleep: Int = 5,
         /** Что надето сейчас — id аксессуара из магазина. */
         val worn: List<String> = emptyList(),
+        /** Комната из сохранения: из какой темы стена, окно и торшер. */
+        val room: RoomChoice = RoomChoice(),
+        /** Полученные темы комнаты; остальные в выборе — с замком, их копят в копилке. */
+        val ownedRooms: Set<String> = setOf(RoomThemes.BASE),
         /** Все шляпы и очки из магазина — и свои, и те, что ещё не получены. */
         val outfit: List<Outfit> = emptyList(),
         /** Питомец спит; null — не спит. */
@@ -351,6 +358,13 @@ class HomeViewModel(
         }
     }
 
+    /** Поставить тему [themeId] в часть [part] комнаты; null — всю комнату. */
+    fun setRoom(themeId: String, part: RoomPart?) {
+        viewModelScope.launch {
+            (session.execute { setRoom(it, themeId, part) } as? GameResult.Rejected)?.let { _events.send(HomeEvent.Rejected(it.reason)) }
+        }
+    }
+
     fun takeOff(itemId: String) {
         viewModelScope.launch { session.execute { takeOff(it, itemId) } }
     }
@@ -466,6 +480,8 @@ class HomeViewModel(
             wantsLeft = game.planReport(state)?.let { (it.plan.wants - it.facts.wants).coerceAtLeast(0) },
             fromWants = content.shop.mapNotNull { item -> game.wantsToNeeds(state, item.id)?.let { item.id to it } }.toMap(),
             worn = state.worn,
+            room = state.room,
+            ownedRooms = game.rooms(state).toSet(),
             outfit = game.wardrobe(state).map { it.id }.toSet().let { owned ->
                 content.shop.filter { it.kind == ItemKind.ACCESSORY }.map { Outfit(it.id, it.label, it.id in owned) }
             },

@@ -148,7 +148,8 @@ data class PetLook(
  * @param onPick ребёнок выбрал для части комнаты вещь из темы.
  * @param onTakeAll поставить из темы всё: после выбора одной вещи панель предлагает
  *   взять остальные из той же темы — «Вся комната — «Цирк»?».
- * @param onLocked нажали вещь, которой ещё нет: её получают за цель в копилке.
+ * @param ownedRooms полученные темы ([RoomInterior.id]); остальные — с замком, как вещи.
+ * @param onLocked нажали вещь или тему, которой ещё нет: их получают за цель в копилке.
  */
 @Composable
 fun InteriorPicker(
@@ -164,6 +165,7 @@ fun InteriorPicker(
     onLocked: () -> Unit,
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
+    ownedRooms: Set<String> = Interiors.all.map { it.id }.toSet(),
 ) {
     val sounds = LocalSounds.current
     val animations = LocalAnimations.current
@@ -287,20 +289,24 @@ fun InteriorPicker(
                             val part = tab.room!!
                             items(Interiors.all, key = { it.id }) { theme ->
                                 val chosen = interior.themeOf(part) == theme
+                                val owned = theme.id in ownedRooms
                                 PickCard(
                                     description = "${part.label}: ${theme.label}",
                                     label = theme.label,
+                                    state = if (owned) null else "ещё нет",
                                     selected = chosen,
+                                    locked = !owned,
                                     animate = animations,
                                     onClick = {
                                         if (chosen) return@PickCard
                                         sounds.play(Sfx.Tap)
+                                        if (!owned) return@PickCard onLocked()
                                         onPick(part, theme)
                                         val rest = InteriorPart.entries.filter { it != part }
                                         offer = theme.takeIf { rest.any { p -> interior.themeOf(p) != theme } }
                                     },
                                 ) {
-                                    PartThumb(theme, part, Modifier.padding(top = 6.dp).size(74.dp, 80.dp))
+                                    PartThumb(theme, part, Modifier.padding(top = 6.dp).size(74.dp, 80.dp).alpha(if (owned) 1f else 0.45f))
                                 }
                             }
                         }

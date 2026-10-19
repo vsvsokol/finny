@@ -1,5 +1,6 @@
 package ru.finney.pet.ui.debug
 
+import ru.finney.pet.domain.model.Plan
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -23,6 +24,7 @@ import ru.finney.pet.domain.model.ItemUse
 import ru.finney.pet.domain.model.LedgerEntry
 import ru.finney.pet.domain.model.PeriodPhase
 import ru.finney.pet.domain.model.PetStats
+import ru.finney.pet.domain.model.RoomChoice
 import ru.finney.pet.domain.pet.PetRules
 
 data class DebugUiState(
@@ -32,6 +34,8 @@ data class DebugUiState(
     val phase: PeriodPhase,
     /** Питомец спит — можно досыпать сразу, не ждать час. */
     val sleeping: Boolean = false,
+    val room: RoomChoice = RoomChoice(),
+    val level: Int = 1,
 )
 
 enum class DebugStat(val label: String) {
@@ -62,13 +66,13 @@ sealed interface DebugEvent {
  * План и закрытие периода, наоборот, идут через настоящие команды — снижение
  * шкал за период должно быть ровно таким, как в игре.
  */
-class DebugViewModel(private val session: Session) : ViewModel() {
+class DebugViewModel(private val session: Session, private val game: Game) : ViewModel() {
 
     val uiState: StateFlow<DebugUiState?> = session.activeGame
         .filterNotNull()
         .map { saved ->
             val state = saved.state
-            DebugUiState(state.pet, state.balance, state.currentPeriod.number, state.currentPeriod.phase, state.sleepingSince != null)
+            DebugUiState(state.pet, state.balance, state.currentPeriod.number, state.currentPeriod.phase, state.sleepingSince != null, state.room, game.level(state))
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
@@ -107,6 +111,9 @@ class DebugViewModel(private val session: Session) : ViewModel() {
      * Досыпать сразу: питомец будто лёг давным-давно. Хранилище разбудит его
      * перед следующей командой, главный экран — сразу, со «Выспался!».
      */
+    /** Тема на всю комнату — мимо проверки «получено ли»: посмотреть любую, не копя. */
+    fun setRoom(themeId: String) = patch { it.copy(room = RoomChoice.whole(themeId)) }
+
     fun finishSleep() = patch { state -> if (state.sleepingSince == null) state else state.copy(sleepingSince = 0L) }
 
     /**
@@ -122,16 +129,56 @@ class DebugViewModel(private val session: Session) : ViewModel() {
         GameResult.Ok(state.copy(uses = state.uses + used))
     }
 
-    /** Пустой план — чтобы сразу можно было покупать, не заходя в экран плана. */
-    fun skipPlan() = command { confirmPlan(it, needs = 0, wants = 0, savings = 0) }
+    /**
+     * Пустой план — чтобы сразу можно было покупать, не заходя в экран плана. Мимо
+     * `confirmPlan`: ядро требует три направления (ТЗ п. 2.5.5) и пустой план отклоняет.
+     */
+    fun skipPlan() = patch(::withEmptyPlan)
 
     fun closePeriod() = command { closePeriod(it) }
+
+    /**
+     * Перескочить [times] уровней: пустой план (мимо проверки направлений), закрытие периода настоящей командой (доход,
+     * снижение шкал, новая игра уровня — как в игре), и закрытый период помечается пройденным.
+     * Сон снимается: спящему закрыть период нельзя.
+     */
+    fun levelUp(times: Int) = command { start ->
+        var state = start.copy(sleepingSince = null)
+        repeat(times) {
+            state = withEmptyPlan(state)
+            val closedNumber = state.currentPeriod.number
+            state = when (val closed = closePeriod(state)) {
+                is GameResult.Ok -> closed.state
+                is GameResult.Rejected -> return@command closed
+            }
+            state = state.copy(periods = state.periods.map { period ->
+                if (period.number == closedNumber) period.copy(result = period.result?.copy(passed = true)) else period
+            })
+        }
+        GameResult.Ok(state)
+    }
+
+    /** На уровень назад: последний пройденный период считается непройденным. */
+    fun levelDown() = patch { state ->
+        val last = state.periods.lastOrNull { game.levelAfter(state, it.number) > game.levelAfter(state, it.number - 1) }
+            ?: return@patch state
+        state.copy(periods = state.periods.map { period ->
+            if (period.number == last.number) period.copy(result = period.result?.copy(passed = false)) else period
+        })
+    }
 
     fun wipeAll() {
         viewModelScope.launch {
             session.deleteAll()
             _events.send(DebugEvent.Wiped)
         }
+    }
+
+    private fun withEmptyPlan(state: GameState): GameState {
+        val period = state.currentPeriod
+        if (period.phase != PeriodPhase.PLANNING) return state
+        val active = period.copy(phase = PeriodPhase.ACTIVE, plan = Plan(budget = state.balance, needs = 0, wants = 0, savings = 0))
+        return state.copy(periods = state.periods.map { if (it.number == period.number) active else it })
     }
 
     private fun patch(change: (GameState) -> GameState) = command { GameResult.Ok(change(it)) }
@@ -145,7 +192,7 @@ class DebugViewModel(private val session: Session) : ViewModel() {
 
     companion object {
         val Factory = viewModelFactory {
-            initializer { DebugViewModel(appContainer().session) }
+            initializer { appContainer().let { DebugViewModel(it.session, it.game) } }
         }
     }
 }

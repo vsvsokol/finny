@@ -1,5 +1,6 @@
 package ru.finney.pet.ui.goals
 
+import ru.finney.pet.domain.model.PetAppearance
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -79,6 +80,9 @@ sealed interface GoalsUiState {
         val reserveMode: Boolean = false,
         val reserveSaved: Int = 0,
         val upcoming: Goal? = null,
+        /** Облик питомца — примерить награду: Финни в этой шляпе, а не шляпа отдельно. */
+        val appearance: PetAppearance? = null,
+        val stage: Int = 1,
     ) : GoalsUiState
 }
 
@@ -223,6 +227,8 @@ class GoalsViewModel(
             guide = game.level(state) <= GUIDED_LEVELS && planSavingsLeft > 0,
             reserveMode = reserveMode,
             reserveSaved = if (reserveMode) game.savingsBalance(state) else 0,
+            appearance = saved.profile.appearance,
+            stage = game.stage(state),
         )
     }
 

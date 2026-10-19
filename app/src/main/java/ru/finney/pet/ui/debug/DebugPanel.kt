@@ -27,7 +27,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import ru.finney.pet.domain.model.PeriodPhase
 import ru.finney.pet.domain.model.PetStats
 import ru.finney.pet.ui.components.FinneyPanel
-import ru.finney.pet.ui.room.InteriorPreview
+import ru.finney.pet.ui.room.toInterior
 import ru.finney.pet.ui.room.Interiors
 import ru.finney.pet.ui.room.RoomInterior
 import ru.finney.pet.ui.theme.FinneyInk
@@ -68,14 +68,16 @@ fun DebugPanel(
             onSetStat = viewModel::setStat,
             onSkipPlan = viewModel::skipPlan,
             onClosePeriod = viewModel::closePeriod,
+            onLevelUp = viewModel::levelUp,
+            onLevelDown = viewModel::levelDown,
             onFinishSleep = viewModel::finishSleep,
             onEmptyBath = viewModel::emptyBath,
             onWipe = viewModel::wipeAll,
             onOpenTasks = onOpenTasks,
             previewStage = previewStage,
             onPreviewStage = onPreviewStage,
-            interior = InteriorPreview.current,
-            onInterior = { InteriorPreview.current = it },
+            interior = it.room.toInterior(),
+            onInterior = { theme -> viewModel.setRoom(theme.id) },
             onDismiss = onDismiss,
             modifier = modifier,
         )
@@ -89,6 +91,8 @@ private fun DebugContent(
     onSetStat: (DebugStat, Int) -> Unit,
     onSkipPlan: () -> Unit,
     onClosePeriod: () -> Unit,
+    onLevelUp: (Int) -> Unit = {},
+    onLevelDown: () -> Unit = {},
     onWipe: () -> Unit,
     onFinishSleep: () -> Unit = {},
     onEmptyBath: () -> Unit = {},
@@ -110,6 +114,15 @@ private fun DebugContent(
             modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            // Первым: по уровням ходят чаще всего — проверить открытия, цели, звания.
+            // Период закрывается настоящей командой и засчитывается пройденным.
+            Line("Уровень: ${state.level}")
+            Buttons(
+                "−1" to onLevelDown,
+                "+1" to { onLevelUp(1) },
+                "+5" to { onLevelUp(5) },
+            )
+
             Line("Деньги: ${state.balance}")
             Buttons(
                 "−50" to { onAddMoney(-50) },
@@ -157,7 +170,7 @@ private fun DebugContent(
                 "По уровню" to { onPreviewStage(null) },
             )
 
-            // Тоже только вид и до перезапуска: купить интерьер в игре пока нельзя.
+            // Ставится в сохранение мимо копилки: любую тему видно сразу.
             Line("Комната: ${interior.label}")
             Buttons(*Interiors.all.map { it.label to { onInterior(it) } }.toTypedArray())
 

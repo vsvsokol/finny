@@ -99,8 +99,8 @@ fun rejectionMessage(rejection: Rejection): RejectionMessage = when (rejection) 
         "Уложи спать, когда шкала сна станет меньше.",
     )
     is Rejection.NotOwned -> RejectionMessage(
-        "Этой вещи у тебя пока нет.",
-        "Её можно купить в магазине.",
+        "Этого у тебя пока нет.",
+        "Это получают за цель: накопи в копилке.",
     )
     is Rejection.BonusLimitExceeded -> RejectionMessage(
         "На этом уровне можно добавить ещё ${rejection.left}.",

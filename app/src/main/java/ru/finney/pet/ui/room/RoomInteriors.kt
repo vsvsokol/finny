@@ -1,11 +1,10 @@
 package ru.finney.pet.ui.room
 
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import ru.finney.pet.R
+import ru.finney.pet.domain.model.RoomChoice
+import ru.finney.pet.domain.model.RoomPart
 import ru.finney.pet.ui.sound.Sfx
 
 // Интерьер комнаты: задник, окно и торшер. Меняются по отдельности, поэтому у
@@ -297,12 +296,20 @@ fun RoomInterior.focusOf(part: InteriorPart): RelRect = when (part) {
     InteriorPart.LAMP -> lamp.layer.rect
 }
 
+/** Тема по id из ядра ([RoomThemes]); незнакомый id — базовая, комната не пропадает. */
+fun Interiors.byId(id: String): RoomInterior = all.firstOrNull { it.id == id } ?: Default
+
 /**
- * Выбранный интерьер — пока только на экране и до перезапуска: в игре интерьер
- * не покупается и не хранится. Когда в Game появятся слоты обстановки, интерьер
- * будет приходить из состояния игры, а это уйдёт. Пишут сюда выбор комнаты
- * на главной ([InteriorPicker]) и отладка.
+ * Комната из сохранения: каждая часть — из своей темы. Выбор хранит ядро
+ * (`GameState.room`), здесь только рисунки к нему.
  */
-object InteriorPreview {
-    var current by mutableStateOf(Interiors.Default)
+fun RoomChoice.toInterior(): RoomInterior = Interiors.byId(wall)
+    .withPart(InteriorPart.WINDOW, Interiors.byId(window))
+    .withPart(InteriorPart.LAMP, Interiors.byId(lamp))
+
+/** Та же часть комнаты в ядре: вкладки выбора и [RoomPart] совпадают по смыслу. */
+val InteriorPart.core: RoomPart get() = when (this) {
+    InteriorPart.WALL -> RoomPart.WALL
+    InteriorPart.WINDOW -> RoomPart.WINDOW
+    InteriorPart.LAMP -> RoomPart.LAMP
 }

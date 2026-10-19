@@ -60,7 +60,6 @@ import ru.finney.pet.ui.components.FinneyIcons
 import ru.finney.pet.ui.components.FinneyPanel
 import ru.finney.pet.ui.components.OutlinedText
 import ru.finney.pet.ui.motion.LocalAnimations
-import ru.finney.pet.ui.pet.accessoryArt
 import ru.finney.pet.ui.room.ItemPicture
 import ru.finney.pet.ui.room.itemFallback
 import ru.finney.pet.ui.sound.LocalSounds
@@ -247,9 +246,9 @@ internal fun GoalDoneDialog(feedback: ActionFeedback, onDismiss: () -> Unit) {
         FinneyPanel(title = "Ура!") {
             val center = Modifier.align(Alignment.CenterHorizontally)
             feedback.itemId?.let { id ->
-                val art = accessoryArt(id)
+                val art = rewardArt(id)
                 if (art != null) {
-                    Image(painterResource(art.res), contentDescription = null, modifier = center.size(140.dp))
+                    Image(painterResource(art), contentDescription = null, modifier = center.size(140.dp))
                 } else {
                     ItemPicture(id, itemFallback(id), size = 140.dp, modifier = center)
                 }

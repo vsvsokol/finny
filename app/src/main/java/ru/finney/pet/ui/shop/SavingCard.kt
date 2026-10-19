@@ -16,8 +16,10 @@ import androidx.compose.ui.unit.dp
 import ru.finney.pet.ui.components.FinneyCard
 import ru.finney.pet.ui.components.FinneyIcon
 import ru.finney.pet.ui.components.SavingsIcon
-import ru.finney.pet.ui.room.ItemPicture
-import ru.finney.pet.ui.room.itemFallback
+import ru.finney.pet.ui.goals.rewardArt
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.res.painterResource
 import ru.finney.pet.ui.tasks.games.Meter
 import ru.finney.pet.ui.theme.FinneyInk
 
@@ -35,8 +37,8 @@ internal fun SavingCard(tile: SavingTile, onOpen: (() -> Unit)?) {
             .semantics(mergeDescendants = true) {},
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            val reward = goal.reward
-            if (reward != null) ItemPicture(reward, itemFallback(reward), size = 48.dp)
+            val art = goal.rewardArt
+            if (art != null) Image(painterResource(art), contentDescription = null, modifier = Modifier.size(48.dp))
             else FinneyIcon(SavingsIcon, size = 40.dp)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 // Название в именительном: «Копишь на Ковбойская шляпа» склонять нечем.

@@ -162,7 +162,6 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import ru.finney.pet.ui.pet.skin
-import ru.finney.pet.ui.pet.accessoryArt
 import ru.finney.pet.ui.room.FeedingGame
 import ru.finney.pet.ui.room.CareBlock
 import ru.finney.pet.ui.room.CareOption
@@ -178,7 +177,9 @@ import ru.finney.pet.ui.room.InteriorPart
 import ru.finney.pet.ui.room.EditTab
 import ru.finney.pet.ui.room.InteriorPicker
 import ru.finney.pet.ui.room.InteriorPickerHeight
-import ru.finney.pet.ui.room.InteriorPreview
+import ru.finney.pet.ui.room.toInterior
+import ru.finney.pet.ui.room.core
+import ru.finney.pet.domain.model.RoomPart
 import ru.finney.pet.ui.room.PetLook
 import ru.finney.pet.ui.room.TAKE_ALL_STEP_MS
 import ru.finney.pet.ui.room.focusOf
@@ -270,6 +271,7 @@ fun HomeScreen(
             onWear = viewModel::wear,
             onTakeOff = viewModel::takeOff,
             onColour = viewModel::setBodyColor,
+            onSetRoom = viewModel::setRoom,
             onClaimGoal = viewModel::completeGoal,
             purchased = purchased,
             onHidePurchased = { purchased = null },
@@ -352,6 +354,7 @@ internal fun HomeContent(
     onWear: (itemId: String) -> Unit = {},
     onTakeOff: (itemId: String) -> Unit = {},
     onColour: (BodyColor) -> Unit = {},
+    onSetRoom: (themeId: String, part: RoomPart?) -> Unit = { _, _ -> },
     onOpenGlossary: () -> Unit = {},
     onClaimGoal: () -> Unit = {},
     purchased: ActionFeedback? = null,
@@ -463,6 +466,10 @@ internal fun HomeContent(
     var roomEdit by rememberSaveable { mutableStateOf<EditTab?>(null) }
     val editing = roomEdit != null
     val editScope = rememberCoroutineScope()
+    // Комната — из сохранения (ядро помнит её после перезапуска). «Вся комната» ставит
+    // части по очереди и сверяется со свежей комнатой, а не с той, что была при нажатии.
+    val interior = remember(state.room) { state.room.toInterior() }
+    val currentInterior by rememberUpdatedState(interior)
 
     // «Назад» закрывает открытую панель, а не приложение: плейтест 29.09 — из
     // панели непройденного уровня было не выйти.
@@ -770,7 +777,8 @@ internal fun HomeContent(
             onHop = { if (animations) animation.playJoy() },
             toys = state.toys,
             toysEnabled = !sleeping && playing == null && care == null && !editing,
-            focus = roomEdit?.room?.let { InteriorPreview.current.focusOf(it) },
+            interior = interior,
+            focus = roomEdit?.room?.let { interior.focusOf(it) },
             focusPet = roomEdit?.pet == true,
             focusBottom = pickerCovers,
             onToyDrag = ::onToyDrag,
@@ -925,22 +933,8 @@ internal fun HomeContent(
             }
         }
 
-        if (state.title != null || state.upcoming != null) {
-            Column(
-                Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp))
-                    .background(FinneySand.copy(alpha = 0.95f))
-                    .clickable(onClickLabel = "Открытия уровня", onClick = { levelOpen = true })
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-            ) {
-                state.title?.let { Text("Звание: $it", style = MaterialTheme.typography.bodyLarge, color = FinneyInk) }
-                state.upcoming?.let { next ->
-                    val whenLevel = if (next.level == state.level + 1) "На следующем уровне" else "На уровне ${next.level}"
-                    Text("$whenLevel — ${next.changes.first()}", style = MaterialTheme.typography.bodyLarge,
-                        color = FinneyInk, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                }
-            }
-        }
-
+        // Звание и ближайшее открытие — в панели уровня (нажатие на значок). Полосой здесь
+        // они стояли над кнопками и сдвигали копилку и «Комнату» вниз (20.10).
         // Кольца освобождают комнату, а сумма и активная игра остаются видны по ТЗ 2.5.3.
         Box(
             modifier = Modifier.fillMaxWidth().weight(1f),
@@ -1569,19 +1563,20 @@ internal fun HomeContent(
             var shownTab by remember { mutableStateOf(EditTab.WALL) }
             roomEdit?.let { shownTab = it }
             InteriorPicker(
-                interior = InteriorPreview.current,
+                interior = interior,
+                ownedRooms = state.ownedRooms,
                 look = PetLook(state.appearance.character, state.appearance.bodyColor, state.worn, state.outfit),
                 tab = shownTab,
                 onTab = { roomEdit = it },
-                onPick = { part, theme -> InteriorPreview.current = InteriorPreview.current.withPart(part, theme) },
+                onPick = { part, theme -> onSetRoom(theme.id, part.core) },
                 onTakeAll = { theme ->
                     // Тему целиком — со стены: камера отъезжает, и видно, как меняется всё по очереди.
                     roomEdit = EditTab.WALL
                     editScope.launch {
                         for (part in InteriorPart.entries) {
-                            if (InteriorPreview.current.themeOf(part) == theme) continue
+                            if (currentInterior.themeOf(part) == theme) continue
                             delay(TAKE_ALL_STEP_MS)
-                            InteriorPreview.current = InteriorPreview.current.withPart(part, theme)
+                            onSetRoom(theme.id, part.core)
                         }
                     }
                 },

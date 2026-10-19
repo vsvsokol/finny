@@ -1,5 +1,6 @@
 package ru.finney.pet.ui.home
 
+import ru.finney.pet.ui.goals.rewardArt
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -21,7 +22,6 @@ import androidx.compose.ui.unit.dp
 import ru.finney.pet.domain.game.GoalProgress
 import ru.finney.pet.ui.components.FinneyIcon
 import ru.finney.pet.ui.components.FinneyIcons
-import ru.finney.pet.ui.pet.accessoryArt
 import ru.finney.pet.ui.theme.*
 
 /** На главном видна сама желанная вещь, а не только сумма без назначения. */
@@ -54,9 +54,9 @@ internal fun HomeGoalCard(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Копилка", style = MaterialTheme.typography.bodyMedium, color = FinneyInk,
                     modifier = Modifier.weight(1f))
-                val art = goal.goal.reward?.let(::accessoryArt)
+                val art = goal.goal.rewardArt
                 if (art != null) {
-                    Image(painterResource(art.res), contentDescription = null, modifier = Modifier.size(28.dp))
+                    Image(painterResource(art), contentDescription = null, modifier = Modifier.size(28.dp))
                 }
             }
             Text(if (ready) "Забрать награду" else "Ещё ${goal.remaining}",

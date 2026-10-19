@@ -1,5 +1,6 @@
 package ru.finney.pet.ui.goals
 
+import ru.finney.pet.domain.model.RewardKind
 import ru.finney.pet.domain.game.Game
 import ru.finney.pet.domain.model.GameContent
 import ru.finney.pet.domain.model.GameState
@@ -60,7 +61,11 @@ internal fun goalCompletedFeedback(game: Game, content: GameContent, before: Gam
         title = "${goal?.label ?: "Цель"} — твоя!",
         lines = changesBetween(before, after),
         why = buildList {
-            add(if (goal?.reward != null) "Копил — и получилось! Награда уже на питомце." else "Копил — и получилось!")
+            add(when {
+                goal?.reward == null -> "Копил — и получилось!"
+                goal.rewardKind == RewardKind.ROOM -> "Копил — и получилось! Комната уже в новой теме."
+                else -> "Копил — и получилось! Награда уже на питомце."
+            })
             if (returned > 0) add("Остаток $returned монет вернулся в кошелёк.")
             add(next)
         }.joinToString(" "),

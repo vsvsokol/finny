@@ -71,7 +71,6 @@ import ru.finney.pet.ui.components.FinneyPanel
 import ru.finney.pet.ui.components.FinneyScreen
 import ru.finney.pet.ui.components.MenuBackdrop
 import ru.finney.pet.ui.components.OutlinedText
-import ru.finney.pet.ui.pet.accessoryArt
 import ru.finney.pet.ui.theme.FinneyCream
 import ru.finney.pet.ui.theme.FinneyGreen
 import ru.finney.pet.ui.theme.FinneyInk
@@ -286,9 +285,7 @@ private fun GoalsPageContent(
         } else {
             FinneyCard {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    progress.goal.reward?.let(::accessoryArt)?.let {
-                        Image(painter = painterResource(it.res), contentDescription = null, modifier = Modifier.size(56.dp))
-                    }
+                    RewardPreview(progress.goal, state.appearance, state.stage)
                     Column(Modifier.weight(1f)) {
                         Text(progress.goal.label, style = MaterialTheme.typography.titleLarge, color = FinneyInk)
                         Text(if (progress.remaining > 0) "Осталось ${progress.remaining} монет" else "Накоплено!",
@@ -361,8 +358,8 @@ private fun GoalCard(row: GoalRow, onSelect: () -> Unit) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             // Копят на вещь, которую видно: рисунок награды прямо в карточке цели.
-            row.goal.reward?.let(::accessoryArt)?.let {
-                Image(painter = painterResource(it.res), contentDescription = null, modifier = Modifier.size(56.dp))
+            row.goal.rewardArt?.let {
+                Image(painter = painterResource(it), contentDescription = null, modifier = Modifier.size(56.dp))
             }
             Column(
                 Modifier.weight(1f).semantics(mergeDescendants = true) {

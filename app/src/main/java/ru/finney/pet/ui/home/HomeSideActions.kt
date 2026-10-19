@@ -1,5 +1,6 @@
 package ru.finney.pet.ui.home
 
+import ru.finney.pet.ui.goals.rewardArt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,7 +21,6 @@ import ru.finney.pet.ui.components.HomeMoneyBadge
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import ru.finney.pet.ui.pet.accessoryArt
 import ru.finney.pet.ui.room.RoomEditButton
 import ru.finney.pet.ui.theme.*
 
@@ -45,7 +45,7 @@ internal fun BoxScope.HomeSideActions(
                     if (state.reserveMode) "Режим запаса" else "Цель ещё не выбрана",
                 progress = if (goal != null) goal.saved.toFloat() / goal.goal.price.coerceAtLeast(1) else 0f,
                 // Прогресс копилки — жёлтый, как деньги: зелёный — только итог действия.
-                progressColor = FinneyYellow, goalArt = goal?.goal?.reward?.let(::accessoryArt)?.res,
+                progressColor = FinneyYellow, goalArt = goal?.goal?.rewardArt,
                 // Без цели копить некуда — «!» зовёт её выбрать.
                 warning = goal == null && !state.reserveMode,
                 ready = ready, enabled = enabled,
@@ -69,7 +69,7 @@ internal fun BoxScope.HomeSideActions(
         if (state.levelGames.isNotEmpty() && state.levelGame != null) {
             val passed = state.levelGames.count { it.passed }
             Column(Modifier.widthIn(max = 96.dp)
-                .padding(top = if (layout == HomeActionLayout.SPLIT && goal?.goal?.reward?.let(::accessoryArt) != null) 12.dp else 0.dp)
+                .padding(top = if (layout == HomeActionLayout.SPLIT && goal?.goal?.rewardArt != null) 12.dp else 0.dp)
                 .onGloballyPositioned { onGamesBounds(it.boundsInRoot()) },
                 horizontalAlignment = Alignment.CenterHorizontally) {
                 DesignerHomeButton(R.drawable.home_game_icon, "Игры уровня", onOpenGames,

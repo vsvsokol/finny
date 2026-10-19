@@ -44,7 +44,7 @@ import ru.finney.pet.ui.components.FinneyScreen
 import ru.finney.pet.ui.components.OutlinedText
 import ru.finney.pet.ui.components.FeedbackDialog
 import ru.finney.pet.ui.room.CareOption
-import ru.finney.pet.ui.room.CarePanel
+import ru.finney.pet.ui.room.CareTile
 import ru.finney.pet.ui.room.FromWantsOffer
 import ru.finney.pet.ui.room.ItemPicture
 import ru.finney.pet.ui.room.PickHint
@@ -52,13 +52,21 @@ import ru.finney.pet.ui.room.UpcomingItem
 import ru.finney.pet.ui.components.FinneyPanel
 import ru.finney.pet.ui.room.itemFallback
 import ru.finney.pet.ui.theme.FinneyInk
+import ru.finney.pet.ui.theme.FinneyInkFaded
+import ru.finney.pet.ui.theme.FinneyPeach
+import ru.finney.pet.ui.components.MoodFace
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
 
 /**
  * Магазин: открывается кнопкой с деньгами на главном (так в макете — «при нажатии
  * открывается магазин + история трат»).
  *
- * Две панели — «Нужное» и «Хочется»: ребёнок видит категорию раньше цены.
- * Строки и подтверждение — та же [CarePanel], что у кормления и мытья.
+ * Два отдела — «Нужное» и «Хочется»: ребёнок видит категорию раньше цены.
+ * Плитки — те же [CareTile], что у кормления и мытья.
  */
 @Composable
 fun ShopScreen(
@@ -134,20 +142,23 @@ internal fun ShopContent(
 
         state.saving?.let { SavingCard(it, onOpenGoals) }
 
-        // Пустой раздел (игрушки все куплены или ещё не открыты) уходит целиком.
-        state.shelves.filter { it.previews.isNotEmpty() }.forEach { row ->
-            ShopSection(
-                row = row,
-                planLeft = when (row.shelf) {
-                    ShopShelf.FOOD, ShopShelf.CLEAN -> state.needsLeft
-                    ShopShelf.TREATS -> state.wantsLeft
-                    // Игрушки тратятся из той же части плана, остаток уже в полосе «Радостей».
-                    ShopShelf.TOYS -> null
-                },
-                selectedId = state.selectedId,
-                onSelect = onSelect,
-            )
-        }
+        // Два отдела, а не четыре одинаковые панели (20.10: «Еда» и «Чистота» подряд
+        // сливались в одно полотно). Отдел — категория и остаток по плану, один раз;
+        // внутри полки со своим значком и «доской» под товарами.
+        ShopDepartment(
+            title = "Нужное",
+            banner = { CategoryBanner(Category.NEEDS, "Сначала — нужное", state.needsLeft) },
+            rows = state.shelves.filter { it.shelf == ShopShelf.FOOD || it.shelf == ShopShelf.CLEAN },
+            selectedId = state.selectedId,
+            onSelect = onSelect,
+        )
+        ShopDepartment(
+            title = "Хочется",
+            banner = { CategoryBanner(Category.WANTS, "Потом — то, что хочется", state.wantsLeft) },
+            rows = state.shelves.filter { it.shelf == ShopShelf.TREATS || it.shelf == ShopShelf.TOYS },
+            selectedId = state.selectedId,
+            onSelect = onSelect,
+        )
         state.upcoming?.let { item ->
             FinneyPanel(title = "Скоро") { UpcomingItem(item) }
         }
@@ -156,30 +167,86 @@ internal fun ShopContent(
 }
 
 /**
- * Раздел магазина плитками по три (19.10: по две выходило полотно на несколько
- * экранов). Картинка мельче магазинной по умолчанию, чтобы три плитки влезали в 360 dp.
+ * Отдел магазина: заголовок, полоса категории и полки. Пустая полка (игрушки все
+ * куплены или ещё не открыты) уходит целиком, пустой отдел — тоже.
  */
 @Composable
-private fun ShopSection(
-    row: ShelfRow,
-    planLeft: Int?,
+private fun ShopDepartment(
+    title: String,
+    banner: @Composable () -> Unit,
+    rows: List<ShelfRow>,
     selectedId: String?,
     onSelect: (String) -> Unit,
 ) {
-    CarePanel(
-        title = row.shelf.title,
-        options = row.previews.map { CareOption(it.item, it, isSelected = it.item.id == selectedId) },
-        onPick = onSelect,
-        onConfirm = {},
-        onDismiss = null,
-        allowShortage = true,
-        header = { SectionBanner(row.shelf, planLeft) },
-        withConfirm = false,
-        tiles = true,
-        tilePicture = ShopTilePicture,
-        columns = 3,
+    val filled = rows.filter { it.previews.isNotEmpty() }
+    if (filled.isEmpty()) return
+    FinneyPanel(title = title) {
+        banner()
+        filled.forEach { row ->
+            Column(
+                Modifier.padding(top = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                ShelfLabel(row.shelf)
+                row.previews.chunked(ShelfColumns).forEach { line ->
+                    // Высота ряда — по высокой плитке: у соседки бывает лишняя плашка.
+                    Row(
+                        Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        line.forEach { preview ->
+                            CareTile(
+                                CareOption(preview.item, preview, isSelected = preview.item.id == selectedId),
+                                ShopTilePicture,
+                                short = true,
+                                onPick = { onSelect(preview.item.id) },
+                                modifier = Modifier.weight(1f).fillMaxHeight(),
+                            )
+                        }
+                        repeat(ShelfColumns - line.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+                ShelfPlank()
+            }
+        }
+    }
+}
+
+/**
+ * Подпись полки: значок, название и черта до края. Значок тот же, что у шкалы или
+ * комнаты: вилка — еда, ванна — чистота, лицо — радость, лампа — зал, где живут игрушки.
+ */
+@Composable
+private fun ShelfLabel(shelf: ShopShelf) {
+    Row(
+        Modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        when (shelf) {
+            ShopShelf.FOOD -> FinneyIcon(FinneyIcons.Food, size = 24.dp)
+            ShopShelf.CLEAN -> FinneyIcon(FinneyIcons.Bath, size = 24.dp)
+            ShopShelf.TREATS -> MoodFace(size = 24.dp)
+            ShopShelf.TOYS -> FinneyIcon(FinneyIcons.Lamp, size = 24.dp)
+        }
+        Text(shelf.title, style = MaterialTheme.typography.titleMedium, color = FinneyInk)
+        Box(Modifier.weight(1f).height(StrokeThin).background(FinneyInkFaded, RoundedCornerShape(50)))
+    }
+}
+
+/** «Доска», на которой стоят товары: полка заканчивается видимой чертой, а не пустотой. */
+@Composable
+private fun ShelfPlank() {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(10.dp)
+            .background(FinneyPeach, RoundedCornerShape(50))
+            .border(StrokeThin, FinneyInk, RoundedCornerShape(50)),
     )
 }
+
+private const val ShelfColumns = 3
 
 /**
  * Верхний ряд магазина. Крайние слоты одинаковой ширины (weight 1), как на главном:
@@ -196,15 +263,6 @@ private fun ShopHeader(balance: Int, onBack: () -> Unit) {
             CloseButton(onBack)
         }
     }
-}
-
-/** Полоса раздела: заголовок говорит, что это, полоса — нужное оно или «хочется». */
-@Composable
-private fun SectionBanner(shelf: ShopShelf, planLeft: Int?) = when (shelf) {
-    ShopShelf.FOOD -> CategoryBanner(Category.NEEDS, "Нужное — сначала", planLeft)
-    ShopShelf.CLEAN -> CategoryBanner(Category.NEEDS, "Тоже нужное", planLeft)
-    ShopShelf.TREATS -> CategoryBanner(Category.WANTS, "Хочется — потом", planLeft)
-    ShopShelf.TOYS -> CategoryBanner(Category.WANTS, "Хочется. Игрушка лежит в зале", planLeft)
 }
 
 private val ShopTilePicture = 64.dp
