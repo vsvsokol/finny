@@ -145,6 +145,8 @@ sealed interface HomeUiState {
         val needsLeft: Int? = null,
         /** Сколько по плану осталось на «хочется» — полоса над конфетой на кухне. */
         val wantsLeft: Int? = null,
+        /** Нужное, которое выйдет за план, и сколько для него взять из радостей (Game.wantsToNeeds). */
+        val fromWants: Map<String, Int> = emptyMap(),
         /** Справочник — для карточек во сне (SleepCards.kt). */
         val glossary: List<GlossaryTerm> = emptyList(),
         /** Сколько карточек сна-загадки за один сон — из economy.json. */
@@ -183,7 +185,6 @@ sealed interface HomeUiState {
         val title: String? = null,
         val upcoming: NextProgress? = null,
         val upcomingFood: ShopItem? = null,
-        val planMoves: Map<String, Int> = emptyMap(),
     ) : HomeUiState {
         /** Уровень завершается только после подтверждения плана. */
         val canClosePeriod: Boolean get() = phase == PeriodPhase.ACTIVE
@@ -290,11 +291,14 @@ class HomeViewModel(
         }
     }
 
-    /** Купить предмет ухода. Состояние обновится само — оно читается из сохранённой игры. */
-    fun buy(itemId: String) {
+    /**
+     * Купить предмет ухода. Состояние обновится само — оно читается из сохранённой игры.
+     * [fromWants] — сначала взять из радостей столько, чтобы покупка не вышла за план.
+     */
+    fun buy(itemId: String, fromWants: Boolean = false) {
         viewModelScope.launch {
             val before = session.activeGame.first()?.state
-            when (val result = session.execute { buy(it, itemId) }) {
+            when (val result = session.execute { if (fromWants) buyFromWants(it, itemId) else buy(it, itemId) }) {
                 is GameResult.Ok -> {
                     val item = content.item(itemId)
                     if (before != null && item != null) {
@@ -319,17 +323,6 @@ class HomeViewModel(
                         )
                     }
                 }
-                is GameResult.Rejected -> _events.send(HomeEvent.Rejected(result.reason))
-            }
-        }
-    }
-
-    fun moveToNeeds(itemId: String) {
-        viewModelScope.launch {
-            when (val result = session.execute { state ->
-                wantsToNeeds(state, itemId)?.let { moveWantsToNeeds(state, it) } ?: GameResult.Ok(state)
-            }) {
-                is GameResult.Ok -> Unit
                 is GameResult.Rejected -> _events.send(HomeEvent.Rejected(result.reason))
             }
         }
@@ -431,10 +424,6 @@ class HomeViewModel(
             upcoming = homeUnlocks(game, content, state),
             upcomingFood = content.forSale.filter { it.effect.satiety > 0 && !game.isUnlocked(state, it) }
                 .minByOrNull { it.unlockLevel },
-            planMoves = if (state.currentPeriod.phase != PeriodPhase.ACTIVE || state.sleepingSince != null) emptyMap()
-                else content.forSale.filter { game.isUnlocked(state, it) }.mapNotNull { item ->
-                    game.wantsToNeeds(state, item.id)?.let { item.id to it }
-                }.toMap(),
             check = check,
             stage = game.stage(state),
             balance = state.balance,
@@ -459,6 +448,7 @@ class HomeViewModel(
             sleepCardsPerSleep = content.economy.sleepCards.maxPerSleep,
             needsLeft = game.planReport(state)?.let { (it.plan.needs - it.facts.needs).coerceAtLeast(0) },
             wantsLeft = game.planReport(state)?.let { (it.plan.wants - it.facts.wants).coerceAtLeast(0) },
+            fromWants = content.shop.mapNotNull { item -> game.wantsToNeeds(state, item.id)?.let { item.id to it } }.toMap(),
             worn = state.worn,
             outfit = game.wardrobe(state).map { it.id }.toSet().let { owned ->
                 content.shop.filter { it.kind == ItemKind.ACCESSORY }.map { Outfit(it.id, it.label, it.id in owned) }
@@ -565,7 +555,13 @@ class HomeViewModel(
         return BathShelf(
             items = (game.soaps + game.bathExtras).mapNotNull { item ->
                 game.previewPurchase(state, item.id)?.let {
-                    ShelfItem(it, left = game.stock(state, item.id), uses = item.uses ?: 1, step = item.bathStep())
+                    ShelfItem(
+                        it,
+                        left = game.stock(state, item.id),
+                        uses = item.uses ?: 1,
+                        step = item.bathStep(),
+                        lockedUntil = item.unlockLevel.takeUnless { game.isUnlocked(state, item) },
+                    )
                 }
             },
             hygiene = hygiene,

@@ -22,7 +22,6 @@ import ru.finney.pet.domain.game.GameStore
 import ru.finney.pet.domain.game.ProfileResult
 import ru.finney.pet.domain.game.TaskResult
 import ru.finney.pet.domain.model.BodyColor
-import ru.finney.pet.domain.model.EntryType
 import ru.finney.pet.domain.model.EyesVariant
 import ru.finney.pet.domain.model.GameState
 import ru.finney.pet.domain.model.PetAppearance
@@ -156,7 +155,8 @@ class RoomGameStorageTest {
         assertEquals(1, game.stock(state, "food_apple"))
         assertEquals(1, game.stock(state, "care_soap"))
         assertEquals(listOf("food_apple" to 1, "care_soap" to 1), state.uses.map { it.itemId to it.portions })
-        assertTrue(state.ledger.none { it.type == EntryType.WASH })
+        // В журнале денег с предметом — только три покупки: ни еда, ни мытьё туда не пишут.
+        assertEquals(3, state.ledger.count { it.itemId != null })
     }
 
     @Test

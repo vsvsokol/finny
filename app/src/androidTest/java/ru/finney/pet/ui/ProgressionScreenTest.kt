@@ -73,18 +73,18 @@ class ProgressionScreenTest {
         val item = content.forSale.first { it.category == Category.NEEDS }
         val preview = game.previewPurchase(state, item.id)!!
         val upcoming = content.forSale.first { it.unlockLevel > 1 }
-        var moved = ""
+        var fromWants = ""
         var bought = ""
         show {
             ShopContent(ShopUiState.Ready(50, true, listOf(preview), emptyList(), emptyList(), item.id,
                 0, 30, null, null, upcoming, mapOf(item.id to 10)), {}, { bought = it }, {}, {}, {}, {},
-                onMovePlan = { moved = it })
+                onBuyFromWants = { fromWants = it })
         }
-        compose.onNodeWithText("Возьми из радостей: 10").assertIsDisplayed().performClick()
-        compose.runOnIdle { assertEquals(item.id, moved); assertEquals("", bought) }
+        compose.onNodeWithText("Взять и купить").assertIsDisplayed().performClick()
+        compose.runOnIdle { assertEquals(item.id, fromWants); assertEquals("", bought) }
         compose.onNodeWithText("Скоро: ${upcoming.label} — на уровне ${upcoming.unlockLevel}").performScrollTo().assertIsDisplayed()
         shot("shop-font130")
-        compose.onNodeWithText("Купить и использовать").performClick()
+        compose.onNodeWithText("Купить сверх плана").performClick()
         compose.runOnIdle { assertEquals(item.id, bought) }
     }
 

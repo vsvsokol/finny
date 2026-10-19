@@ -5,6 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import ru.finney.pet.domain.game.GameResult
 import ru.finney.pet.domain.game.Rejection
 import ru.finney.pet.domain.model.Plan
 
@@ -37,6 +38,29 @@ class PlanMoveTest {
         assertTrue(game.planReport(bought)!!.onTrack)
         // Ещё одно яблоко снова сверх плана — кнопка на оставшиеся 10 «хочется».
         assertEquals(10, game.wantsToNeeds(bought, "apple"))
+    }
+
+    @Test
+    fun `перенос и покупка одной командой — план выполнен`() {
+        val bought = game.buyFromWants(fed, "apple").state()
+
+        assertEquals(Plan(budget = 50, needs = 30, wants = 10, savings = 10), bought.currentPeriod.plan)
+        assertTrue(game.planReport(bought)!!.onTrack)
+    }
+
+    @Test
+    fun `покупка отказала — план не сдвинулся`() {
+        val result = game.buyFromWants(fed, "apple") { GameResult.Rejected(Rejection.Asleep) }
+
+        assertEquals(Rejection.Asleep, result.reason())
+    }
+
+    @Test
+    fun `переносить нечего — обычная покупка`() {
+        val bought = game.buyFromWants(fed, "candy").state()
+
+        assertEquals(fed.currentPeriod.plan, bought.currentPeriod.plan)
+        assertEquals(game.buy(fed, "candy").state().balance, bought.balance)
     }
 
     @Test

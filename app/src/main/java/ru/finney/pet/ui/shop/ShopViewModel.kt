@@ -47,7 +47,8 @@ sealed interface ShopUiState {
         val rejection: Rejection?,
         val feedback: ActionFeedback?,
         val upcoming: ShopItem? = null,
-        val planMoves: Map<String, Int> = emptyMap(),
+        /** Нужное, которое выйдет за план, и сколько для него взять из радостей (Game.wantsToNeeds). */
+        val fromWants: Map<String, Int> = emptyMap(),
     ) : ShopUiState
 }
 
@@ -81,22 +82,11 @@ class ShopViewModel(
 
     fun dismissFeedback() = selection.update { it.copy(feedback = null, rejection = null) }
 
-    /** Переносит только план; покупку ребёнок подтверждает отдельно. Сумма проверяется заново. */
-    fun moveToNeeds(itemId: String) {
-        viewModelScope.launch {
-            when (val result = session.execute { state ->
-                wantsToNeeds(state, itemId)?.let { moveWantsToNeeds(state, it) } ?: GameResult.Ok(state)
-            }) {
-                is GameResult.Ok -> selection.update { it.copy(rejection = null, feedback = null) }
-                is GameResult.Rejected -> selection.update { it.copy(rejection = result.reason) }
-            }
-        }
-    }
-
-    fun buy(itemId: String) {
+    /** [fromWants] — сначала взять из радостей столько, чтобы покупка не вышла за план. */
+    fun buy(itemId: String, fromWants: Boolean = false) {
         viewModelScope.launch {
             val before = session.activeGame.first()?.state ?: return@launch
-            when (val result = session.execute { buy(it, itemId) }) {
+            when (val result = session.execute { if (fromWants) buyFromWants(it, itemId) else buy(it, itemId) }) {
                 is GameResult.Ok -> selection.value = ShopSelection(
                     feedback = feedback(itemId, before, result.state),
                 )
@@ -149,14 +139,11 @@ class ShopViewModel(
             selectedId = selection.selectedId,
             needsLeft = report?.let { (it.plan.needs - it.facts.needs).coerceAtLeast(0) },
             wantsLeft = report?.let { (it.plan.wants - it.facts.wants).coerceAtLeast(0) },
+            fromWants = content.forSale.mapNotNull { item -> game.wantsToNeeds(state, item.id)?.let { item.id to it } }.toMap(),
             rejection = selection.rejection,
             feedback = selection.feedback,
             upcoming = content.forSale.filter { it.isOnSale(state) && !game.isUnlocked(state, it) }
                 .minByOrNull { it.unlockLevel },
-            planMoves = if (state.currentPeriod.phase != PeriodPhase.ACTIVE) emptyMap() else content.forSale
-                .filter { game.isUnlocked(state, it) &&
-                    (state.sleepingSince == null || (it.effect.satiety == 0 && it.effect.hygiene == 0)) }
-                .mapNotNull { item -> game.wantsToNeeds(state, item.id)?.let { item.id to it } }.toMap(),
         )
     }
 

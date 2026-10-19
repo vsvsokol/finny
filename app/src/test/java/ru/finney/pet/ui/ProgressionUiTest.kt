@@ -73,48 +73,38 @@ class ProgressionUiTest : ViewModelTest() {
         assertEquals(3, rig.homeState().upcoming!!.level)
     }
 
-    @Test fun `перенос в магазине меняет план без покупки и повторное нажатие безопасно`() = test {
+    @Test fun `взять из радостей в магазине переносит план и покупает одним шагом`() = test {
         val rig = rig()
-        assertTrue(rig.shopState().planMoves.isEmpty())
+        assertTrue(rig.shopState().fromWants.isEmpty())
         rig.session.execute { confirmPlan(it, 0, 30, 0) }
         settle()
-        assertEquals(10, rig.shopState().planMoves["apple"])
-        rig.shop.select("apple")
-        rig.shop.moveToNeeds("apple")
-        settle()
-        assertEquals(10, rig.shopState().needsLeft)
-        assertEquals(20, rig.shopState().wantsLeft)
-        assertEquals(50, rig.shopState().balance)
-        assertEquals("apple", rig.shopState().selectedId)
-        assertNull(rig.shopState().planMoves["apple"])
-        rig.shop.moveToNeeds("apple")
-        settle()
-        assertEquals(20, rig.shopState().wantsLeft)
-        rig.shop.buy("apple")
+        assertEquals(10, rig.shopState().fromWants["apple"])
+        rig.shop.buy("apple", fromWants = true)
         settle()
         assertEquals(40, rig.shopState().balance)
         assertEquals(0, rig.shopState().needsLeft)
+        assertEquals(20, rig.shopState().wantsLeft)
     }
 
-    @Test fun `перенос на кухне меняет тот же план без покупки`() = test {
+    @Test fun `взять из радостей на кухне меняет тот же план`() = test {
         val rig = rig()
         rig.session.execute { confirmPlan(it, 0, 30, 0) }
         settle()
-        assertEquals(10, rig.homeState().planMoves["apple"])
-        rig.home.moveToNeeds("apple")
+        assertEquals(10, rig.homeState().fromWants["apple"])
+        rig.home.buy("apple", fromWants = true)
         settle()
-        assertEquals(10, rig.homeState().needsLeft)
+        assertEquals(0, rig.homeState().needsLeft)
         assertEquals(20, rig.homeState().wantsLeft)
-        assertEquals(50, rig.homeState().balance)
+        assertEquals(40, rig.homeState().balance)
     }
 
-    @Test fun `нехватка радостей или денег не предлагает перенос`() = test {
+    @Test fun `нехватка радостей не предлагает взять из них`() = test {
         val rig = rig()
         rig.session.execute { confirmPlan(it, 0, 5, 0) }
         settle()
-        assertNull(rig.shopState().planMoves["apple"])
-        assertNull(rig.homeState().planMoves["apple"])
-        assertNull(rig.shopState().planMoves["candy"])
+        assertNull(rig.shopState().fromWants["apple"])
+        assertNull(rig.homeState().fromWants["apple"])
+        assertNull(rig.shopState().fromWants["candy"])
     }
 
     @Test fun `выбранная в демо цель остается видна после выключения демо`() = test {

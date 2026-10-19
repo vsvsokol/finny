@@ -133,9 +133,7 @@ class ProgressViewModel(
                         icon = taskIcon(task),
                     )
                 },
-            // Мытьё денег не трогает и в истории трат не нужно: оно тратит мыло, а не финки.
             history = state.ledger
-                .filter { it.type != EntryType.WASH }
                 .groupBy { it.periodNumber }
                 .toSortedMap(compareByDescending { it })
                 .map { (number, entries) ->
@@ -188,7 +186,6 @@ fun GameContent.entryLabel(entry: LedgerEntry): String = when (entry.type) {
     EntryType.SAVINGS_WITHDRAW -> if (entry.goalId == null) "Из запаса" else "Из копилки" +
         (entry.goalId.let(::goal)?.let { " с «${it.label}»" } ?: "")
     EntryType.GOAL_COMPLETE -> "Цель достигнута" + (entry.goalId?.let(::goal)?.let { ": ${it.label}" } ?: "")
-    EntryType.WASH -> "Ванна: " + (entry.itemId?.let(::item)?.label ?: "водой")
 }
 
 fun TaskTheme.label(): String = when (this) {

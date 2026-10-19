@@ -76,7 +76,8 @@ internal fun ReceiptGame(task: ReceiptTask, character: PetCharacter, onClose: ()
 
     val errors = TaskEngines.receiptErrors(task, lines)
     val changeWrong = errors.changeShort > 0
-    val right = lines == errors.lines && change == changeWrong
+    // Сдачу от чека с ошибкой ребёнок прав и отметить, и не отметить (changeEither).
+    val right = lines == errors.lines && (change == changeWrong || errors.changeEither)
     val solved = checked && right
     val details = (TaskEngines.evaluate(task, TaskInput.Flags(lines, change)) as? TaskEvaluation.Done)?.details as? TaskDetails.Receipt
 
@@ -116,7 +117,7 @@ internal fun ReceiptGame(task: ReceiptTask, character: PetCharacter, onClose: ()
             ReceiptPaper(
                 task = task,
                 markOf = { id -> mark(id in lines, id in errors.lines) },
-                changeMark = mark(change, changeWrong),
+                changeMark = mark(change, changeWrong || (change && errors.changeEither)),
                 onLine = { id -> edit { lines = if (id in lines) lines - id else lines + id } },
                 onChange = { edit { change = !change } },
             )

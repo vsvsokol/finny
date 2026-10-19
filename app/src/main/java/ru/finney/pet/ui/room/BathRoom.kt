@@ -111,8 +111,11 @@ import kotlin.random.Random
 /** Шаг мытья. DRY — полотенце: в продаже его сейчас нет, шаг оставлен для контента. */
 enum class BathStep(val label: String) { SOAP("Намылить"), RINSE("Смыть"), DRY("Вытереть"), TEETH("Зубы") }
 
-/** Предмет ванны: сколько раз ещё хватит и на сколько хватает одной покупки. */
-data class ShelfItem(val preview: PurchasePreview, val left: Int, val uses: Int, val step: BathStep) {
+/**
+ * Предмет ванны: сколько раз ещё хватит и на сколько хватает одной покупки.
+ * [lockedUntil] — уровень, с которого его можно купить; null — уже можно (Game.isUnlocked).
+ */
+data class ShelfItem(val preview: PurchasePreview, val left: Int, val uses: Int, val step: BathStep, val lockedUntil: Int? = null) {
     val item: ShopItem get() = preview.item
 }
 
@@ -140,6 +143,13 @@ data class BathShelf(
 
     /** Есть чем чистить зубы: и щётка, и паста. */
     val hasTeeth: Boolean get() = brush != null && teethLeft > 0
+
+    /**
+     * Зубы ещё закрыты: чистить нечем, а щётку с пастой купить нельзя до этого уровня.
+     * null — открыты или запас остался с прошлого.
+     */
+    val teethLockedUntil: Int? get() = if (hasTeeth) null else
+        items.filter { it.step == BathStep.TEETH }.mapNotNull { it.lockedUntil }.maxOrNull()
 }
 
 private const val SCRUB_COLS = 5
@@ -287,6 +297,7 @@ fun BathRoom(
                 !s.canRinse -> return flash("Водой больше не отмыть — нужно мыло")
             }
             BathStep.TEETH -> {
+                s.teethLockedUntil?.let { return flash("Зубы откроются на уровне $it") }
                 val brush = s.brush?.takeIf { s.hasTeeth } ?: return currentOnOpenShop(BathStep.TEETH)
                 if (session.soaped) return flash("Сначала смой пену — нажми «Душ»")
                 if (s.full) return flash("$petName и так чистый")
@@ -531,6 +542,7 @@ fun BathRoom(
             StepTile(
                 number = 3, step = BathStep.TEETH, picture = brushPicture,
                 left = shelf.teethLeft, state = tile(BathStep.TEETH), done = BathStep.TEETH in session.done,
+                lockedUntil = shelf.teethLockedUntil,
                 onClick = { begin(BathStep.TEETH) }, modifier = Modifier.weight(1f),
             )
         }
@@ -547,7 +559,8 @@ private class BathGuide(val text: String, val kind: NoteKind, val point: BathSte
  */
 private fun guide(shelf: BathShelf, session: BathSession, petName: String): BathGuide {
     val step = session.step
-    val teethNext = !shelf.full && BathStep.TEETH !in session.done
+    // Закрытые зубы не зовём: купить щётку ещё нельзя, круг кончается на душе.
+    val teethNext = !shelf.full && BathStep.TEETH !in session.done && shelf.teethLockedUntil == null
     return when {
         step != null -> BathGuide(hint(step, petName), NoteKind.Info, null)
         session.soaped -> BathGuide("Смой пену — нажми «Душ»", NoteKind.Info, BathStep.RINSE)
@@ -578,6 +591,7 @@ private enum class TileState { Idle, Next, Now }
  * «Купить» с тележкой: нажал на плитку — магазин этого шага. Следующий шаг — белый, как все,
  * но дышит и на него жмёт рука (плейтест 19.10: жёлтым он читался как уже выбранный).
  * Идущий — жёлтый с толстой обводкой, сделанный — «✓». Не только цвет (ТЗ п. 3.6).
+ * Закрытый по уровню ([lockedUntil]) — замок и «ур. N» вместо «Купить»: в магазин не ведёт.
  */
 @Composable
 private fun StepTile(
@@ -589,12 +603,14 @@ private fun StepTile(
     done: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    lockedUntil: Int? = null,
 ) {
     val shape = RoundedCornerShape(16.dp)
     val empty = left == 0
-    val action = if (empty) "Купить" else step.label
+    val action = if (empty && lockedUntil == null) "Купить" else step.label
     val spoken = "$number. ${step.short()}" + when {
         state == TileState.Now -> ", сейчас"
+        lockedUntil != null -> ", откроется на уровне $lockedUntil"
         empty -> ", нет на полочке"
         done -> ", сделано"
         left != null -> ", хватит на ${times(left)}"
@@ -627,6 +643,7 @@ private fun StepTile(
             }
             Text(step.short(), style = MaterialTheme.typography.bodyLarge, color = FinneyInk, maxLines = 1)
             when {
+                lockedUntil != null -> LockPill(lockedUntil)
                 empty -> BuyPill()
                 left != null -> Text("×$left", style = MaterialTheme.typography.bodyMedium, color = FinneyInk)
                 else -> Text("вода", style = MaterialTheme.typography.bodyMedium, color = FinneyInk)
@@ -683,6 +700,9 @@ private fun NumberBadge(number: Int, modifier: Modifier = Modifier) {
 /** «Купить» на плитке, где кончилось: персиковая, как кнопки, с тележкой. */
 @Composable
 private fun BuyPill() {
+    // На крупном шрифте (130 %) тележка со словом не влезали в плитку, и слово резалось
+    // до «Купит». Слово важнее значка: его и оставляем, а персиковая плашка остаётся кнопкой.
+    val roomy = LocalDensity.current.fontScale < 1.15f
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -690,10 +710,27 @@ private fun BuyPill() {
             .clip(RoundedCornerShape(50))
             .background(FinneyPeach)
             .border(StrokeThin, FinneyInk, RoundedCornerShape(50))
+            .padding(horizontal = if (roomy) 8.dp else 6.dp, vertical = 1.dp),
+    ) {
+        if (roomy) FinneyIcon(FinneyIcons.Cart, size = 16.dp)
+        Text("Купить", style = MaterialTheme.typography.bodyMedium, color = FinneyInk, maxLines = 1)
+    }
+}
+
+/** Замок на плитке, которую ещё нельзя купить: кремовая, как отметки, — не кнопка. */
+@Composable
+private fun LockPill(level: Int) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(FinneyCream)
+            .border(StrokeThin, FinneyInk, RoundedCornerShape(50))
             .padding(horizontal = 8.dp, vertical = 1.dp),
     ) {
-        FinneyIcon(FinneyIcons.Cart, size = 16.dp)
-        Text("Купить", style = MaterialTheme.typography.bodyMedium, color = FinneyInk, maxLines = 1)
+        FinneyIcon(FinneyIcons.Lock, size = 16.dp)
+        Text("ур. $level", style = MaterialTheme.typography.bodyMedium, color = FinneyInk, maxLines = 1)
     }
 }
 
