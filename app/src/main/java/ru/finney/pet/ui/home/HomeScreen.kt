@@ -1127,7 +1127,8 @@ internal fun HomeContent(
         val step = if (sleep != null) NextStep.WAKE.takeIf { now >= sleep.enoughAt } else state.nextStep
         // Подсказка говорит одна: всё, что уже открыто поверх комнаты или ещё объясняет
         // своё (окно отказа, меню, подсказка настроения, сон-загадка), её глушит.
-        val busy = playing != null || care != null || bathShop != null || levelOpen || debugOpen || rejectShown ||
+        // В ванной ведёт своя панель шагов — кольцо звало бы к игре уровня поверх мытья.
+        val busy = playing != null || care != null || bathShop != null || inBath || levelOpen || debugOpen || rejectShown ||
             menuOpen || moodHint || dreamCard != null || gamesOpen || editing
         val tutorial = state.level == 1 && guided
         // Итог покупки на обучении — не отдельной карточкой, а в пузыре подсказки,
