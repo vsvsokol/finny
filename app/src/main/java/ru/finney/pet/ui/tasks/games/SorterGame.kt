@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -72,6 +73,7 @@ import ru.finney.pet.ui.theme.FinneyPeach
 import ru.finney.pet.ui.theme.FinneyPink
 import ru.finney.pet.ui.sound.LocalSounds
 import ru.finney.pet.ui.sound.Sfx
+import ru.finney.pet.ui.pet.rememberPetAnimation
 
 // «Конвейер», как «Food Drop» в Pou, но без спешки: лента ждёт, пока вещь не
 // смахнут вниз, в корзину «Нужное» или «Хочется». Кто не умеет смахивать,
@@ -94,6 +96,7 @@ internal fun SorterGame(
     val bins = remember { mutableStateMapOf<Category, Rect>() }
     val item = task.items.getOrNull(index)
     val sounds = LocalSounds.current
+    val pet = rememberPetAnimation()
 
     fun finishIfLast() {
         if (index == task.items.size) onSubmit(TaskInput.Sorting(answers.toMap()))
@@ -105,15 +108,21 @@ internal fun SorterGame(
         answers.putIfAbsent(current.id, category)
         if (category != current.category) {
             sounds.play(Sfx.Wrong)
+            // Не грустит (ТЗ п. 2.5.12), а тянется к корзине, куда вещь на самом деле.
+            pet.lookAt(if (current.category == Category.NEEDS) -1f else 1f)
             mistake = current
         } else {
             sounds.play(Sfx.Correct)
+            // Питомец радуется каждому верному ходу — видно, что ход засчитан.
+            pet.lookAt(0f)
+            pet.playJoy()
             index++
             finishIfLast()
         }
     }
 
     fun moveOver() {
+        pet.lookAt(0f)
         mistake = null
         index++
         finishIfLast()
@@ -136,16 +145,31 @@ internal fun SorterGame(
                     showHint = index == 0 && mistake == null,
                     bins = bins,
                     onDrop = ::choose,
+                    // Пока вещь тянут, питомец тянется следом — к той корзине, над которой она.
+                    onLean = pet::lookAt,
                 )
             }
 
-            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 val wrong = mistake
+                // На низком экране места хватает только панели — питомца при ошибке тогда не видно.
+                val roomForPet = maxHeight >= 240.dp
                 if (wrong == null) {
                     // Вопрос «"Яблоко" — это что?» убран: вещь на ленте и две корзины понятны без слов.
-                    if (item != null) ScenePet(character, 96.dp, Modifier.width(96.dp))
+                    // По краям — стрелки к корзинам с подписью: куда какая зона (плейтест 02.10).
+                    if (item != null) Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ZoneArrow(Category.NEEDS, Modifier.weight(1f))
+                        ScenePet(character, 96.dp, Modifier.width(96.dp), animation = pet)
+                        ZoneArrow(Category.WANTS, Modifier.weight(1f))
+                    }
                 } else {
-                    MistakePanel(wrong, onMove = ::moveOver)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (roomForPet) ScenePet(character, 72.dp, Modifier.width(72.dp), animation = pet)
+                        MistakePanel(wrong, onMove = ::moveOver)
+                    }
                 }
             }
 
@@ -215,6 +239,7 @@ private fun Belt(
     showHint: Boolean,
     bins: Map<Category, Rect>,
     onDrop: (Category) -> Unit,
+    onLean: (Float) -> Unit,
 ) {
     Box(Modifier.fillMaxWidth().height(96.dp)) {
         Canvas(Modifier.fillMaxWidth().height(84.dp)) {
@@ -245,7 +270,7 @@ private fun Belt(
             horizontalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             if (current != null) {
-                key(current.id) { DraggableItem(current, bins, onDrop) }
+                key(current.id) { DraggableItem(current, bins, onDrop, onLean) }
             } else {
                 Spacer(Modifier.size(64.dp))
             }
@@ -257,7 +282,7 @@ private fun Belt(
 }
 
 @Composable
-private fun DraggableItem(item: SortItem, bins: Map<Category, Rect>, onDrop: (Category) -> Unit) {
+private fun DraggableItem(item: SortItem, bins: Map<Category, Rect>, onDrop: (Category) -> Unit, onLean: (Float) -> Unit) {
     val scope = rememberCoroutineScope()
     val offset = remember { Animatable(Offset.Zero, Offset.VectorConverter) }
     var bounds by remember { mutableStateOf(Rect.Zero) }
@@ -275,20 +300,60 @@ private fun DraggableItem(item: SortItem, bins: Map<Category, Rect>, onDrop: (Ca
                         // Центр вещи — там, где её отпустили. Попала в корзину — выбор, мимо — назад на ленту.
                         val centre = bounds.center
                         val hit = bins.entries.firstOrNull { (_, rect) -> rect.inflate(24f).contains(centre) }?.key
+                        onLean(0f)
                         scope.launch {
                             offset.animateTo(Offset.Zero, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
                         }
                         if (hit != null) onDrop(hit)
                     },
-                    onDragCancel = { scope.launch { offset.animateTo(Offset.Zero) } },
+                    onDragCancel = {
+                        onLean(0f)
+                        scope.launch { offset.animateTo(Offset.Zero) }
+                    },
                 ) { change, drag ->
                     change.consume()
                     scope.launch { offset.snapTo(offset.value + drag) }
+                    onLean(leanTowards(bounds.center.x, bins))
                 }
             },
         contentAlignment = Alignment.Center,
     ) {
         ItemPicture(item, item.label, 56.dp)
+    }
+}
+
+/**
+ * Куда тянуться питомцу: −1 — к «Нужному» слева, 1 — к «Хочется» справа. Середина — между
+ * корзинами, край — внешний край корзины. Корзины ещё не измерены — прямо.
+ */
+private fun leanTowards(x: Float, bins: Map<Category, Rect>): Float {
+    val left = bins[Category.NEEDS] ?: return 0f
+    val right = bins[Category.WANTS] ?: return 0f
+    val middle = (left.right + right.left) / 2
+    val half = (right.right - left.left) / 2
+    return if (half <= 0f) 0f else ((x - middle) / half).coerceIn(-1f, 1f)
+}
+
+/**
+ * Стрелка к корзине у края сцены, с подписью зоны. Корзины внизу, и пока вещь на ленте,
+ * их подписи далеко — стрелка у питомца говорит, в какую сторону что.
+ * Для TalkBack — одна подпись, стрелка сама по себе ничего не значит.
+ */
+@Composable
+private fun ZoneArrow(category: Category, modifier: Modifier = Modifier) {
+    val needs = category == Category.NEEDS
+    Column(
+        modifier = modifier.semantics(mergeDescendants = true) {
+            contentDescription = "${if (needs) "Слева" else "Справа"} — «${categoryWord(category)}»"
+        },
+        horizontalAlignment = if (needs) Alignment.Start else Alignment.End,
+    ) {
+        OutlinedText(if (needs) "↙" else "↘", style = MaterialTheme.typography.headlineLarge)
+        OutlinedText(
+            if (needs) "Нужное" else "Хочется",
+            style = MaterialTheme.typography.titleMedium,
+            fill = Color.White,
+        )
     }
 }
 

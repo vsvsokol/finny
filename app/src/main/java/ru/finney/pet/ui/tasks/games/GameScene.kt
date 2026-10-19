@@ -65,6 +65,7 @@ import ru.finney.pet.ui.components.menuBackdrop
 import ru.finney.pet.ui.components.OutlinedText
 import ru.finney.pet.ui.components.fadingScroll
 import ru.finney.pet.ui.sound.Sfx
+import ru.finney.pet.ui.pet.PetAnimation
 import ru.finney.pet.ui.pet.PetMood
 import ru.finney.pet.ui.pet.PetPose
 import ru.finney.pet.ui.pet.PetView
@@ -353,8 +354,14 @@ internal val LocalPlayerAccessory = staticCompositionLocalOf<List<String>> { emp
 
 /** Питомец игрока в сцене: живой, дышит. */
 @Composable
-internal fun ScenePet(character: PetCharacter, size: Dp, modifier: Modifier = Modifier, mood: PetMood = PetMood.HAPPY) {
-    val animation = rememberPetAnimation()
+internal fun ScenePet(
+    character: PetCharacter,
+    size: Dp,
+    modifier: Modifier = Modifier,
+    mood: PetMood = PetMood.HAPPY,
+    // Снаружи — когда игра сама дёргает питомца: прыжок за верный ход в «Конвейере».
+    animation: PetAnimation = rememberPetAnimation(),
+) {
     PetView(
         character = character,
         bodyColor = LocalPlayerBodyColor.current,
