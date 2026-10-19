@@ -209,6 +209,12 @@ internal fun PlanningContent(
             "Планируем. Монетки пока не тратятся.",
             style = MaterialTheme.typography.bodyMedium, color = FinneyInk,
         )
+        // Не «бонус»: монет за план нет. Соблюдённый план — одна из трёх звёзд итога уровня
+        // (уход, план, копилка), сколько бы очков ни давал points.planMatched для истории.
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FinneyIcon(FinneyIcons.Star, size = 24.dp)
+            Text("Уложишься в план — звезда к уровню", style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
+        }
 
         // Каждый уровень план собирается заново, и на плейтесте это было скучно:
         // одной кнопкой — как в прошлый раз, а дальше подправить «−/+».
