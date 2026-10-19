@@ -209,6 +209,12 @@ internal fun PlanningContent(
             "Планируем. Монетки пока не тратятся.",
             style = MaterialTheme.typography.bodyMedium, color = FinneyInk,
         )
+        // Не «бонус»: монет за план нет. Соблюдённый план — одна из трёх звёзд итога уровня
+        // (уход, план, копилка), сколько бы очков ни давал points.planMatched для истории.
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FinneyIcon(FinneyIcons.Star, size = 24.dp)
+            Text("Уложишься в план — звезда к уровню", style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
+        }
 
         // Каждый уровень план собирается заново, и на плейтесте это было скучно:
         // одной кнопкой — как в прошлый раз, а дальше подправить «−/+».
@@ -222,6 +228,9 @@ internal fun PlanningContent(
 
         // Шаг помещается в остаток — значит, добавлять ещё можно.
         val canAdd = state.remainder >= STEP
+        // Первый план: зачем каждая часть, одной фразой от Финни прямо в строке (чек-лист 20.10).
+        // Дальше фразы уходят, остаётся «?» у строки.
+        val first = state.periodNumber == 1
 
         AmountRow(
             icon = categoryIcon(Category.NEEDS),
@@ -233,6 +242,7 @@ internal fun PlanningContent(
             budget = state.budget,
             minimum = state.needsHint?.takeIf { it > 0 },
             subtitle = "Еда и уход",
+            finneySays = if (first) "Без еды и ванны мне плохо. Это сначала!" else null,
             helpText = state.needsHelp,
         )
         AmountRow(
@@ -240,7 +250,8 @@ internal fun PlanningContent(
             label = "Желаемое",
             pictures = state.wantsItems.mapNotNull(::itemArt),
             value = state.wants,
-            subtitle = "Покупать необязательно",
+            subtitle = "На радости. Можно не тратить",
+            finneySays = if (first) "Игрушки и сладости меня радуют, но могут подождать." else null,
             helpText = state.wantsHelp,
             onChange = onWantsChange,
             canAdd = canAdd,
@@ -281,6 +292,7 @@ internal fun PlanningContent(
                 canAdd = target.remainder >= STEP,
                 budget = target.budget,
                 subtitle = if (target.reserveMode) "Запас: монеты на потом" else "Цель: «${target.goalLabel}»",
+                finneySays = if (first && !target.reserveMode) "Откладывай понемногу, и мы накопим на мечту." else null,
                 helpText = target.savingsHelp,
                 )
         }
@@ -355,11 +367,13 @@ private fun AmountRow(
     budget: Int,
     minimum: Int? = null,
     subtitle: String? = null,
+    finneySays: String? = null,
     helpText: String? = null,
 ) {
     FinneyCard {
         CategoryTitle(icon, label, helpText = helpText)
         subtitle?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = FinneyInk) }
+        finneySays?.let { Text("Финни: «$it»", style = MaterialTheme.typography.bodyLarge, color = FinneyInk) }
         // Рисунки — над суммой, между «−» и «+»: что покупают на эти монеты, стоит
         // прямо на них, а не у края карточки. Диктору они не нужны: слово он уже прочёл.
         AmountStepper(label = label, value = value, onChange = onChange, canAdd = canAdd, step = STEP, pointPlus = false) {
