@@ -61,7 +61,8 @@
    Без `keystore.properties` сборка не падает, а выдаёт неподписанный APK.
 
 Версия — `version.properties` (`major.minor.patch`), `versionCode` считается из неё сам.
-**Сборка для сдачи 29.09 — 1.0.0 (versionCode 10000)**, подписанный APK и тег `v1.0.0` —
+**Финальная сборка 20.10 — 1.1.0 (versionCode 10100)**, подписанный APK и тег `v1.1.0`;
+промежуточная сдача 29.09 — 1.0.0 (versionCode 10000), тег `v1.0.0` —
 <https://github.com/vsvsokol/finny/releases>. Пакет — `ru.finney.pet`.
 Переменные окружения для терминала (`JAVA_HOME`, `ANDROID_HOME`) — README, «Переменные окружения».
 
