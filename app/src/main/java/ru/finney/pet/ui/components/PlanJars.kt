@@ -24,14 +24,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import ru.finney.pet.domain.model.Category
 import ru.finney.pet.domain.model.PeriodFacts
 import ru.finney.pet.domain.model.Plan
 import ru.finney.pet.ui.theme.FinneyInk
@@ -42,8 +43,8 @@ import ru.finney.pet.ui.theme.StrokeRegular
 
 // «План и факт» тремя банками — из редизайна 28.09. Раньше на каждую часть было по две
 // полосы со словами «Собирался» и «Потратил»; банка говорит то же без слов: черта — сколько
-// задумал, заливка — сколько вышло. Цвет у банок один на все: части различаются значком
-// под банкой, как и везде в игре (редизайн красил их в три цвета — это спорило бы с правилом цвета).
+// задумал, заливка — сколько вышло. Заливка — узором своей части, как на круге плана, и значок
+// под банкой: часть узнаётся не по одному цвету (ТЗ п. 3.6).
 
 /** Доля высоты банки, до которой доходит большее из «задумал» и «вышло»: сверху остаётся воздух, и черту видно. */
 private const val JarHeadroom = 0.85f
@@ -63,27 +64,27 @@ private val JarIcon = 48.dp
 fun PlanJars(plan: Plan, facts: PeriodFacts, modifier: Modifier = Modifier) {
     Row(modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         val jar = Modifier.weight(1f)
-        PlanJar(categoryIcon(Category.NEEDS), "Нужное", "еда и ванна", plan.needs, facts.needs, saving = false, jar)
-        PlanJar(categoryIcon(Category.WANTS), "Желаемое", "игрушки и сладости", plan.wants, facts.wants, saving = false, jar)
-        PlanJar(SavingsIcon, "Копилка", "на цель", plan.savings, facts.savings, saving = true, jar)
+        PlanJar(PlanPart.NEEDS, "Нужное", "еда и ванна", plan.needs, facts.needs, jar)
+        PlanJar(PlanPart.WANTS, "Желаемое", "игрушки и сладости", plan.wants, facts.wants, jar)
+        PlanJar(PlanPart.SAVINGS, "Копилка", "на цель", plan.savings, facts.savings, jar)
     }
 }
 
 /**
  * Одна банка. Трата сверх плана — розовая часть над чертой и «!» у числа: цвет не
- * единственный признак (ТЗ п. 3.6). У копилки [saving] больше плана — не ошибка,
+ * единственный признак (ТЗ п. 3.6). У копилки больше плана — не ошибка,
  * заливка просто идёт выше черты.
  */
 @Composable
 private fun PlanJar(
-    icon: FinneyIcons,
+    part: PlanPart,
     label: String,
     hint: String,
     planned: Int,
     fact: Int,
-    saving: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val saving = part == PlanPart.SAVINGS
     val over = !saving && fact > planned
     val scale = maxOf(planned, fact).coerceAtLeast(1) / JarHeadroom
     val shown by animateFloatAsState((fact / scale).coerceIn(0f, 1f), label = "jar")
@@ -97,12 +98,12 @@ private fun PlanJar(
                 if (over) ", больше плана на ${fact - planned}" else ""
         },
     ) {
-        JarGlass(line, shown, over, Modifier.width(JarWidth).height(JarHeight))
+        JarGlass(line, shown, over, Modifier.width(JarWidth).height(JarHeight), fill = rememberPartBrush(part))
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier.size(JarIcon).clip(CircleShape).buttonFill(pressed = false, round = true),
         ) {
-            FinneyIcon(icon, size = 28.dp)
+            FinneyIcon(partIcon(part), size = 28.dp)
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("$fact/$planned", style = MaterialTheme.typography.titleMedium, color = FinneyInk)
@@ -118,9 +119,16 @@ private fun PlanJar(
 /**
  * Сама банка: [shown] — заливка в долях высоты, [line] — черта плана в тех же долях.
  * Отдельно от подписей — справочник рисует ею слово «факт», и в игре ребёнок узнаёт ту же банку.
+ * [fill] — узор части; без части (в справочнике) банка просто жёлтая — деньги.
  */
 @Composable
-internal fun JarGlass(line: Float, shown: Float, over: Boolean, modifier: Modifier = Modifier) {
+internal fun JarGlass(
+    line: Float,
+    shown: Float,
+    over: Boolean,
+    modifier: Modifier = Modifier,
+    fill: Brush = SolidColor(FinneyYellow),
+) {
     Canvas(
         modifier
             .clip(RoundedCornerShape(50))
@@ -131,9 +139,9 @@ internal fun JarGlass(line: Float, shown: Float, over: Boolean, modifier: Modifi
         val h = size.height
         val planY = h * (1f - line)
         val factY = h * (1f - shown)
-        // Жёлтое — до черты или до факта, что ниже; сверх плана у трат — розовое.
-        val yellowTop = if (over) planY else factY
-        drawRect(FinneyYellow, topLeft = Offset(0f, yellowTop), size = Size(w, h - yellowTop))
+        // Узор части — до черты или до факта, что ниже; сверх плана у трат — розовое.
+        val fillTop = if (over) planY else factY
+        drawRect(fill, topLeft = Offset(0f, fillTop), size = Size(w, h - fillTop))
         if (over && factY < planY) {
             drawRect(FinneyPink, topLeft = Offset(0f, factY), size = Size(w, planY - factY))
         }

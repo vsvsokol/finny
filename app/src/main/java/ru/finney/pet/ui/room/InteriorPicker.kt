@@ -772,53 +772,6 @@ private fun DrawScope.houseIcon() {
     drawPath(path, FinneyInk, style = Stroke(2.6f * u, cap = StrokeCap.Round, join = StrokeJoin.Round))
 }
 
-/**
- * Кнопка на главной, которая открывает выбор: круг из кита и валик поверх.
- * Валика в ките нет, он нарисован здесь теми же обводкой и цветами.
- */
-@Composable
-fun RoomEditButton(onClick: () -> Unit, modifier: Modifier = Modifier, diameter: Dp = 56.dp) {
-    val sounds = LocalSounds.current
-    val source = remember { MutableInteractionSource() }
-    val pressed by source.collectIsPressedAsState()
-    Box(
-        modifier = modifier
-            .size(diameter)
-            .graphicsLayer {
-                val s = if (pressed) 0.96f else 1f
-                scaleX = s
-                scaleY = s
-            }
-            .clickable(interactionSource = source, indication = null, role = Role.Button) {
-                sounds.play(Sfx.Tap)
-                onClick()
-            }
-            .semantics { contentDescription = "Обустроить комнату" },
-        contentAlignment = Alignment.Center,
-    ) {
-        Image(painterResource(R.drawable.home_round_button_base), null, Modifier.fillMaxSize())
-        Canvas(Modifier.size(diameter * 0.55f)) {
-            val u = size.width / 36f
-            val stroke = Stroke(3.2f * u, cap = StrokeCap.Round, join = StrokeJoin.Round)
-            val roller = RoundRect(4 * u, 3 * u, 28 * u, 14 * u, CornerRadius(5.5f * u))
-            val body = Path().apply { addRoundRect(roller) }
-            drawPath(body, FinneyPeach)
-            drawPath(body, FinneyInk, style = stroke)
-            val handle = Path().apply {
-                moveTo(28 * u, 8.5f * u); lineTo(32 * u, 8.5f * u); lineTo(32 * u, 17.5f * u)
-                lineTo(17 * u, 17.5f * u); lineTo(17 * u, 23.5f * u)
-            }
-            drawPath(handle, FinneyInk, style = stroke)
-            drawRoundRect(
-                FinneyInk,
-                topLeft = Offset(13.5f * u, 23 * u),
-                size = Size(7 * u, 13 * u),
-                cornerRadius = CornerRadius(3 * u),
-            )
-        }
-    }
-}
-
 @Preview(widthDp = 360, heightDp = 480, showBackground = true, backgroundColor = 0xFF8279BB)
 @Composable
 private fun InteriorPickerPreview() {

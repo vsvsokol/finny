@@ -926,7 +926,7 @@ internal fun HomeContent(
         }
 
         // Звание и ближайшее открытие — в панели уровня (нажатие на значок). Полосой здесь
-        // они стояли над кнопками и сдвигали копилку и «Комнату» вниз (20.10).
+        // они стояли над кнопками и сдвигали копилку вниз (20.10).
         // Кольца освобождают комнату, а сумма и активная игра остаются видны по ТЗ 2.5.3.
         Box(
             modifier = Modifier.fillMaxWidth().weight(1f),
@@ -935,8 +935,6 @@ internal fun HomeContent(
                 state = state, layout = actionLayout, enabled = !sleeping && playing == null && !inBath,
                 alpha = sideAlpha, hintTargets = hintTargets, onOpenGoals = onOpenGoals, onClaimGoal = onClaimGoal,
                 onOpenGames = { gamesOpen = true },
-                // Обустраивают зал днём: во сне свет выключен, а на кухне и в ванной нет торшера.
-                onOpenRoom = if (spot == RoomSpot.LIVING && !sleeping) ({ roomEdit = EditTab.WALL }) else null,
                 onSavingsBounds = { if (savingsBounds != it) savingsBounds = it },
                 onGamesBounds = { if (gamesBounds != it) gamesBounds = it },
             )
