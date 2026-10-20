@@ -82,9 +82,15 @@ fun PetView(
     accessories: List<String> = emptyList(),
     /** Стадия роста = уровень: с ней растут туловище, руки и ноги ([lookFor]). Без стадии — как нарисован. */
     stage: Int = 1,
+    /**
+     * Платная окраска — id облика из ядра (`PetLooks`, `look_pushistik_1`); null — цвет профиля.
+     * Окраска нарисована целиком, поэтому оттенок [bodyColor] поверх неё не кладётся.
+     */
+    coloring: String? = null,
 ) {
-    val skin = character.skin
-    val tint = bodyColor.colorFilter
+    val painted = coloring?.let { lookSkin(it, character.skin) }
+    val skin = painted ?: character.skin
+    val tint = if (painted != null) null else bodyColor.colorFilter
     val look = lookFor(stage)
     val body = skin.bodies[look - 1]
     val lift = skin.headLift(stage)

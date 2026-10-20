@@ -113,7 +113,7 @@ class ProgressViewModel(
             stage = game.stage(state),
             nextProgress = nextProgress(content, game.level(state), state.currentPeriod.number, state.isDemo),
             isDemo = state.isDemo,
-            nodes = levelNodes(game, content, state),
+            nodes = levelNodes(game, content, state, saved.profile.appearance.character),
             current = currentLevel(game, content, state, saved.profile.petName),
             goal = game.goalProgress(state),
             reserveMode = game.isReserveMode(state),

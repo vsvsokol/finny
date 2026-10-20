@@ -1,5 +1,9 @@
 package ru.finney.pet.ui.goals
 
+import ru.finney.pet.domain.model.PetCharacter
+import ru.finney.pet.domain.model.PetLooks
+import ru.finney.pet.domain.progress.LevelUnlocks
+import ru.finney.pet.ui.pet.lookArt
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
@@ -34,19 +38,39 @@ fun rewardArt(rewardId: String): Int? = accessoryArt(rewardId)?.res ?: when (rew
     "sea" -> R.drawable.room_sea_preview
     "forest" -> R.drawable.room_forest_preview
     "town" -> R.drawable.room_town_preview
-    else -> null
+    // Окраска — голова в ней: в кружке 28 dp туловища всё равно не разглядеть.
+    else -> lookArt(rewardId)
 }
+
+/**
+ * Цель подходит питомцу [character]: окраска — только его собственная. Ядро держит окраски
+ * всех пяти персонажей в одном списке целей, а копить на чужую незачем — надеть её нельзя.
+ */
+fun Goal.fitsPet(character: PetCharacter): Boolean =
+    rewardKind != RewardKind.LOOK || PetLooks.character(reward.orEmpty()) == character
+
+/** Открытия уровня без чужих окрасок; null — персонаж неизвестен, всё как есть. */
+fun LevelUnlocks.forPet(character: PetCharacter?): LevelUnlocks =
+    if (character == null) this else copy(goals = goals.filter { it.fitsPet(character) })
 
 /** Рисунок награды цели [Goal.reward]; null — цели без награды или без рисунка. */
 val Goal.rewardArt: Int? @DrawableRes get() = reward?.let(::rewardArt)
 
 /**
- * Примерка награды (план 2.7): вещь — сразу на Финни, тема — комнатой целиком. Ребёнок
+ * Примерка награды (план 2.7): вещь и окраска — сразу на Финни, тема — комнатой целиком. Ребёнок
  * копит на то, что видит на своём питомце, а не на картинку шляпы в углу карточки.
  * Без облика или рисунка — обычная картинка награды; нет и её — ничего.
  */
 @Composable
-fun RewardPreview(goal: Goal, appearance: PetAppearance?, stage: Int, size: Dp = 112.dp, modifier: Modifier = Modifier) {
+fun RewardPreview(
+    goal: Goal,
+    appearance: PetAppearance?,
+    stage: Int,
+    size: Dp = 112.dp,
+    modifier: Modifier = Modifier,
+    /** Надетая окраска: шляпу примеряют на того Финни, какой он сейчас. */
+    coloring: String? = null,
+) {
     val reward = goal.reward ?: return
     val art = goal.rewardArt
     when {
@@ -60,8 +84,19 @@ fun RewardPreview(goal: Goal, appearance: PetAppearance?, stage: Int, size: Dp =
                     bodyColor = appearance.bodyColor,
                     accessories = listOf(reward),
                     stage = stage,
+                    coloring = coloring,
                 )
             }
+        // Окраска — Финни целиком в ней. Чужая окраска сюда не попадает: копилка её не показывает.
+        goal.rewardKind == RewardKind.LOOK && appearance != null ->
+            PetView(
+                character = appearance.character,
+                mood = PetMood.HAPPY,
+                pose = StillPose,
+                modifier = modifier.size(size),
+                stage = stage,
+                coloring = reward,
+            )
         art != null -> Image(painterResource(art), contentDescription = null, modifier = modifier.size(size))
     }
 }

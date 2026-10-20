@@ -1,5 +1,7 @@
 package ru.finney.pet.ui.debug
 
+import kotlinx.coroutines.flow.first
+import ru.finney.pet.domain.model.PetLooks
 import ru.finney.pet.domain.model.Plan
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -36,6 +38,7 @@ data class DebugUiState(
     val sleeping: Boolean = false,
     val room: RoomChoice = RoomChoice(),
     val level: Int = 1,
+    val coloring: String? = null,
 )
 
 enum class DebugStat(val label: String) {
@@ -72,7 +75,7 @@ class DebugViewModel(private val session: Session, private val game: Game) : Vie
         .filterNotNull()
         .map { saved ->
             val state = saved.state
-            DebugUiState(state.pet, state.balance, state.currentPeriod.number, state.currentPeriod.phase, state.sleepingSince != null, state.room, game.level(state))
+            DebugUiState(state.pet, state.balance, state.currentPeriod.number, state.currentPeriod.phase, state.sleepingSince != null, state.room, game.level(state), state.wornLook)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
@@ -111,6 +114,13 @@ class DebugViewModel(private val session: Session, private val game: Game) : Vie
      * Досыпать сразу: питомец будто лёг давным-давно. Хранилище разбудит его
      * перед следующей командой, главный экран — сразу, со «Выспался!».
      */
+    /** Окраска [number] персонажа ([PetLooks]) мимо копилки; null — снять. */
+    fun setColoring(number: Int?) = viewModelScope.launch {
+        val character = session.activeGame.first()?.profile?.appearance?.character ?: return@launch
+        val look = number?.let { PetLooks.id(character, it) }
+        command { GameResult.Ok(it.copy(wornLook = look)) }
+    }
+
     /** Тема на всю комнату — мимо проверки «получено ли»: посмотреть любую, не копя. */
     fun setRoom(themeId: String) = patch { it.copy(room = RoomChoice.whole(themeId)) }
 

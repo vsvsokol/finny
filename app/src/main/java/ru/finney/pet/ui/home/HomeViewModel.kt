@@ -1,5 +1,7 @@
 package ru.finney.pet.ui.home
 
+import ru.finney.pet.ui.room.Coloring
+import ru.finney.pet.domain.model.PetLooks
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -160,6 +162,10 @@ sealed interface HomeUiState {
         /** Комната из сохранения: из какой темы стена, окно и торшер. */
         val room: RoomChoice = RoomChoice(),
         /** Полученные темы комнаты; остальные в выборе — с замком, их копят в копилке. */
+        /** Надетая окраска (`PetLooks`); null — цвет из профиля. */
+        val coloring: String? = null,
+        /** Окраски этого персонажа: какие получены, а какие ещё копить. */
+        val colorings: List<Coloring> = emptyList(),
         val ownedRooms: Set<String> = setOf(RoomThemes.BASE),
         /** Все шляпы и очки из магазина — и свои, и те, что ещё не получены. */
         val outfit: List<Outfit> = emptyList(),
@@ -358,6 +364,13 @@ class HomeViewModel(
         }
     }
 
+    /** Надеть окраску [lookId]; null — вернуться к цвету из профиля. */
+    fun setColoring(lookId: String?) {
+        viewModelScope.launch {
+            (session.execute { setLook(it, lookId) } as? GameResult.Rejected)?.let { _events.send(HomeEvent.Rejected(it.reason)) }
+        }
+    }
+
     /** Поставить тему [themeId] в часть [part] комнаты; null — всю комнату. */
     fun setRoom(themeId: String, part: RoomPart?) {
         viewModelScope.launch {
@@ -451,7 +464,7 @@ class HomeViewModel(
             emotion = game.emotion(state),
             level = level,
             title = game.title(state),
-            upcoming = homeUnlocks(game, content, state),
+            upcoming = homeUnlocks(game, content, state, saved.profile.appearance.character),
             upcomingFood = content.forSale.filter { it.effect.satiety > 0 && !game.isUnlocked(state, it) }
                 .minByOrNull { it.unlockLevel },
             check = check,
@@ -481,6 +494,10 @@ class HomeViewModel(
             fromWants = content.shop.mapNotNull { item -> game.wantsToNeeds(state, item.id)?.let { item.id to it } }.toMap(),
             worn = state.worn,
             room = state.room,
+            coloring = game.lookFor(state, saved.profile.appearance.character),
+            colorings = game.looks(state, saved.profile.appearance.character).toSet().let { owned ->
+                PetLooks.of(saved.profile.appearance.character).map { Coloring(it, it in owned) }
+            },
             ownedRooms = game.rooms(state).toSet(),
             outfit = game.wardrobe(state).map { it.id }.toSet().let { owned ->
                 content.shop.filter { it.kind == ItemKind.ACCESSORY }.map { Outfit(it.id, it.label, it.id in owned) }

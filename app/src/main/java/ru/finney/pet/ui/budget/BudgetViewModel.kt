@@ -1,5 +1,6 @@
 package ru.finney.pet.ui.budget
 
+import ru.finney.pet.ui.goals.fitsPet
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -217,7 +218,7 @@ class BudgetViewModel(
             needsHint = game.needsHint(state),
             goalLabel = if (reserveMode) "Запас" else goal?.label,
             goals = if (state.activeGoalId == null) {
-                content.goals.filterNot { state.isGoalCompleted(it.id) }
+                content.goals.filter { it.fitsPet(saved.profile.appearance.character) && !state.isGoalCompleted(it.id) }
             } else {
                 emptyList()
             },

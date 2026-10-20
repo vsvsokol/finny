@@ -78,6 +78,7 @@ fun DebugPanel(
             onPreviewStage = onPreviewStage,
             interior = it.room.toInterior(),
             onInterior = { theme -> viewModel.setRoom(theme.id) },
+            onColoring = { viewModel.setColoring(it) },
             onDismiss = onDismiss,
             modifier = modifier,
         )
@@ -101,6 +102,7 @@ private fun DebugContent(
     onPreviewStage: (Int?) -> Unit = {},
     interior: RoomInterior = Interiors.Default,
     onInterior: (RoomInterior) -> Unit = {},
+    onColoring: (Int?) -> Unit = {},
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -173,6 +175,10 @@ private fun DebugContent(
             // Ставится в сохранение мимо копилки: любую тему видно сразу.
             Line("Комната: ${interior.label}")
             Buttons(*Interiors.all.map { it.label to { onInterior(it) } }.toTypedArray())
+
+            // Тоже мимо копилки: посмотреть окраску на питомце, не копя 135 монет.
+            Line("Окраска: ${state.coloring ?: "нет"}")
+            Buttons("Нет" to { onColoring(null) }, "1" to { onColoring(1) }, "2" to { onColoring(2) })
 
             Buttons(
                 if (confirmWipe) {

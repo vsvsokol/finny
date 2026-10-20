@@ -109,6 +109,7 @@ internal fun WardrobeContent(
             PetView(
                 character = state.appearance.character,
                 bodyColor = state.appearance.bodyColor,
+                coloring = state.coloring,
                 accessories = state.worn,
                 mood = PetMood.HAPPY,
                 pose = rememberPoseProvider(animation),

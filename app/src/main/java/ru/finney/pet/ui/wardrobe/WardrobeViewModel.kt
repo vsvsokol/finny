@@ -44,6 +44,8 @@ sealed interface WardrobeUiState {
         val worn: List<String>,
         val items: List<WardrobeItem>,
         val rejection: Rejection? = null,
+        /** Надетая окраска; null — цвет профиля. */
+        val coloring: String? = null,
     ) : WardrobeUiState
 }
 
@@ -81,6 +83,7 @@ class WardrobeViewModel(
         return WardrobeUiState.Ready(
             appearance = saved.profile.appearance,
             worn = state.worn,
+            coloring = game.lookFor(state, saved.profile.appearance.character),
             items = content.shop.filter { it.kind == ItemKind.ACCESSORY }.map { item ->
                 val goal = content.goalFor(item.id)
                 WardrobeItem(

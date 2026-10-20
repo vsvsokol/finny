@@ -1,5 +1,7 @@
 package ru.finney.pet.ui.period
 
+import ru.finney.pet.ui.goals.forPet
+import ru.finney.pet.domain.model.PetCharacter
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -116,7 +118,7 @@ class PeriodResultViewModel(
             leveledUp = after > before,
             growth = growth?.let { it.copy(changes = it.changes - it.games.toSet()) },
             unlocks = if (growth == null) emptyList() else
-                (growth.games + unlockedNow(before, after, state.isDemo)).distinct(),
+                (growth.games + unlockedNow(before, after, state.isDemo, saved.profile.appearance.character)).distinct(),
             balance = state.balance,
             levelGame = levelTask?.title,
             levelGameIcon = levelTask?.let(::taskIcon),
@@ -132,9 +134,9 @@ class PeriodResultViewModel(
      * Вещи, цели и звание, открытые этим переходом. Игры уже посчитал [periodGrowth] — с учётом
      * периода, которого [Game.unlocksBetween] не знает. В демо вещи и цели открыты с начала.
      */
-    private fun unlockedNow(before: Int, after: Int, isDemo: Boolean): List<String> =
+    private fun unlockedNow(before: Int, after: Int, isDemo: Boolean, character: PetCharacter): List<String> =
         game.unlocksBetween(before, after).flatMap { unlocks ->
-            val shown = unlocks.copy(games = emptyList(), harderGames = emptyList())
+            val shown = unlocks.forPet(character).copy(games = emptyList(), harderGames = emptyList())
             unlockLines(if (isDemo) shown.copy(items = emptyList(), goals = emptyList()) else shown, future = false, isDemo = isDemo)
                 .map { "$it." }
         }

@@ -1,14 +1,16 @@
 package ru.finney.pet.ui.progress
 
+import ru.finney.pet.ui.goals.forPet
+import ru.finney.pet.domain.model.PetCharacter
 import ru.finney.pet.domain.game.Game
 import ru.finney.pet.domain.model.GameContent
 import ru.finney.pet.domain.model.GameState
 
 /** Ближайшее реальное открытие: в демо доступ уже есть, но сложность и звания ещё растут. */
-internal fun homeUnlocks(game: Game, content: GameContent, state: GameState): NextProgress? {
+internal fun homeUnlocks(game: Game, content: GameContent, state: GameState, character: PetCharacter? = null): NextProgress? {
     val level = game.level(state)
     val next = game.nextUnlocks(state) ?: return null
-    return game.unlocksBetween(next.level - 1, content.economy.maxLevel).firstNotNullOfOrNull { unlocks ->
+    return game.unlocksBetween(next.level - 1, content.economy.maxLevel).map { it.forPet(character) }.firstNotNullOfOrNull { unlocks ->
         val shown = unlocks.copy(
             games = if (state.isDemo) emptyList() else unlocks.games.filter {
                 it.unlockPeriod <= state.currentPeriod.number + unlocks.level - level

@@ -1,5 +1,7 @@
 package ru.finney.pet.ui.progress
 
+import ru.finney.pet.ui.goals.forPet
+import ru.finney.pet.domain.model.PetCharacter
 import ru.finney.pet.ui.goals.rewardArt
 import ru.finney.pet.domain.game.Game
 import ru.finney.pet.domain.game.GoalProgress
@@ -64,7 +66,7 @@ data class CurrentLevel(
     val goal: GoalProgress?,
 )
 
-internal fun levelNodes(game: Game, content: GameContent, state: GameState): List<LevelNode> {
+internal fun levelNodes(game: Game, content: GameContent, state: GameState, character: PetCharacter? = null): List<LevelNode> {
     val current = game.level(state)
     // Период играли на уровне, который был до него: проигранный период уровень не двигает.
     val played = state.periods.filter { it.result != null }.groupBy { game.levelAfter(state, it.number - 1) }
@@ -76,7 +78,7 @@ internal fun levelNodes(game: Game, content: GameContent, state: GameState): Lis
             level < current -> NodeStatus.DONE
             else -> NodeStatus.FUTURE
         }
-        val unlocks = game.unlocksAt(level)
+        val unlocks = game.unlocksAt(level).forPet(character)
         LevelNode(
             level = level,
             status = status,

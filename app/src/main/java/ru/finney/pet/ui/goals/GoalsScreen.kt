@@ -285,7 +285,7 @@ private fun GoalsPageContent(
         } else {
             FinneyCard {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    RewardPreview(progress.goal, state.appearance, state.stage)
+                    RewardPreview(progress.goal, state.appearance, state.stage, coloring = state.coloring)
                     Column(Modifier.weight(1f)) {
                         Text(progress.goal.label, style = MaterialTheme.typography.titleLarge, color = FinneyInk)
                         Text(if (progress.remaining > 0) "Осталось ${progress.remaining} монет" else "Накоплено!",

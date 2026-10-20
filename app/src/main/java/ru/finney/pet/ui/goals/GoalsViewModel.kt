@@ -83,6 +83,8 @@ sealed interface GoalsUiState {
         /** Облик питомца — примерить награду: Финни в этой шляпе, а не шляпа отдельно. */
         val appearance: PetAppearance? = null,
         val stage: Int = 1,
+        /** Надетая окраска — примерка шляпы на том Финни, какой он сейчас. */
+        val coloring: String? = null,
     ) : GoalsUiState
 }
 
@@ -192,7 +194,8 @@ class GoalsViewModel(
             ?.let { (it.plan.savings - it.facts.savings).coerceAtLeast(0) } ?: 0
         // Закрытые цели не показываем, кроме одной ближайшей строкой «Скоро».
         // Цель с отложенными монетами видна всегда — иначе монеты в ней будто пропали.
-        val goals = content.goals.map { goal ->
+        val character = saved.profile.appearance.character
+        val goals = content.goals.filter { it.fitsPet(character) }.map { goal ->
             GoalRow(
                 goal = goal,
                 saved = state.goalSaved(goal.id),
@@ -204,7 +207,7 @@ class GoalsViewModel(
         return GoalsUiState.Ready(
             goals = goals,
             progress = progress,
-            upcoming = content.goals.filter { !game.isUnlocked(state, it) && it.id != state.activeGoalId &&
+            upcoming = content.goals.filter { it.fitsPet(character) && !game.isUnlocked(state, it) && it.id != state.activeGoalId &&
                 !state.isGoalCompleted(it.id) && state.goalSaved(it.id) == 0 }.minByOrNull { it.unlockLevel },
             balance = state.balance,
             canMoveMoney = state.currentPeriod.phase == PeriodPhase.ACTIVE,
@@ -229,6 +232,7 @@ class GoalsViewModel(
             reserveSaved = if (reserveMode) game.savingsBalance(state) else 0,
             appearance = saved.profile.appearance,
             stage = game.stage(state),
+            coloring = game.lookFor(state, saved.profile.appearance.character),
         )
     }
 

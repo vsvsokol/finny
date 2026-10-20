@@ -272,6 +272,7 @@ fun HomeScreen(
             onTakeOff = viewModel::takeOff,
             onColour = viewModel::setBodyColor,
             onSetRoom = viewModel::setRoom,
+            onSetColoring = viewModel::setColoring,
             onClaimGoal = viewModel::completeGoal,
             purchased = purchased,
             onHidePurchased = { purchased = null },
@@ -355,6 +356,7 @@ internal fun HomeContent(
     onTakeOff: (itemId: String) -> Unit = {},
     onColour: (BodyColor) -> Unit = {},
     onSetRoom: (themeId: String, part: RoomPart?) -> Unit = { _, _ -> },
+    onSetColoring: (lookId: String?) -> Unit = {},
     onOpenGlossary: () -> Unit = {},
     onClaimGoal: () -> Unit = {},
     purchased: ActionFeedback? = null,
@@ -793,6 +795,7 @@ internal fun HomeContent(
             PetView(
                 character = state.appearance.character,
                 bodyColor = state.appearance.bodyColor,
+                coloring = state.coloring,
                 accessories = state.worn,
                 stage = previewStage ?: state.stage,
                 mood = if (eyesClosed) PetMood.SLEEP else state.emotion.toMood(),
@@ -1565,7 +1568,8 @@ internal fun HomeContent(
             InteriorPicker(
                 interior = interior,
                 ownedRooms = state.ownedRooms,
-                look = PetLook(state.appearance.character, state.appearance.bodyColor, state.worn, state.outfit),
+                look = PetLook(state.appearance.character, state.appearance.bodyColor, state.worn, state.outfit, state.coloring, state.colorings),
+                onColoring = onSetColoring,
                 tab = shownTab,
                 onTab = { roomEdit = it },
                 onPick = { part, theme -> onSetRoom(theme.id, part.core) },
