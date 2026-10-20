@@ -87,11 +87,11 @@
 
 ## Ключевые экраны
 
-| Создание питомца | Главный | План и факт | Мини-игра |
+| Создание питомца | Главный | План и факт | Мини-игра «Касса» |
 |---|---|---|---|
-| <img src="docs/rustore/screen-6-setup.png" width="200" alt="Создание питомца: персонаж, цвет тела, имя"> | <img src="docs/rustore/screen-1-home.png" width="200" alt="Главный экран: питомец, баланс, копилка, цель, игра уровня"> | <img src="docs/rustore/screen-2-plan.png" width="200" alt="План и факт: нужное, желаемое, копилка"> | <img src="docs/rustore/screen-3-game.png" width="200" alt="Мини-игра «Дождливый день»"> |
+| <img src="docs/rustore/screen-6-setup.png" width="200" alt="Создание питомца: персонаж, цвет тела, имя"> | <img src="docs/rustore/screen-1-home.png" width="200" alt="Главный экран: питомец, баланс, копилка, цель, игра уровня"> | <img src="docs/rustore/screen-2-plan.png" width="200" alt="План и факт: нужное, желаемое, копилка"> | <img src="docs/rustore/screen-3-game.png" width="200" alt="Мини-игра «Касса»: отсчитай сдачу"> |
 
-Снято на эмуляторе API 37 (1080×2400) 26.09; с тех пор экраны доработаны по плейтестам. Все
+Сняты на телефоне с финальной сборки 1.1.0, 20.10. Все
 скриншоты и черновик карточки RuStore — [docs/rustore/](docs/rustore/card.md).
 
 ## Статус
