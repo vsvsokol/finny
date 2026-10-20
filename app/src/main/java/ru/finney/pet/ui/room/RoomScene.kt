@@ -120,8 +120,14 @@ private const val LEAP_OVERSHOOT = 0.02f
  */
 private const val PLAY_LAMP_PEEK = 0.04f
 
-/** За сколько камера выбора интерьера возвращается: столько же уезжает панель выбора (HomeScreen). */
-private const val FOCUS_RETURN_MS = 250
+/**
+ * За сколько камера выбора интерьера отъезжает к обычному виду. Быстрее, чем уезжает
+ * панель выбора (250 мс, HomeScreen): низ холста опускается раньше её верха.
+ */
+private const val FOCUS_OUT_MS = 220
+
+/** За сколько камера выбора интерьера наезжает на выбранную часть. */
+private const val FOCUS_IN_MS = 400
 
 /**
  * Прогулка по игровой: раз в несколько секунд питомец сам скачет в случайное место.
@@ -618,6 +624,9 @@ fun RoomScene(
         // Один прогресс зума связывает масштаб со сдвигом: край холста остаётся
         // за экраном на каждом кадре. Перед сменой объекта отъезжаем к обычному виду,
         // меняем точку приближения и наезжаем снова — без горизонтального пролёта.
+        // Низ холста при выборе может стоять выше низа экрана — его закрывает панель
+        // ([focusSolid]). Отъезд быстрее, чем панель уезжает, а при входе наезд начинается
+        // после отъезда — когда панель уже поднялась: под ней не проглядывает кремовый фон.
         var editCamera by remember { mutableStateOf(editTarget) }
         val editZoom = remember { Animatable(1f) }
         LaunchedEffect(editTarget, animations) {
@@ -626,15 +635,10 @@ fun RoomScene(
                 editZoom.snapTo(1f)
             } else {
                 if (editCamera != editTarget) {
-                    // Назад — вместе с панелью: под её полупрозрачным краем
-                    // не должен открываться фон, пока камера ещё приближена.
-                    val returning = shown != spot || (focus == null && !focusPet && !focusRug)
-                    val out = if (returning) tween<Float>(FOCUS_RETURN_MS, easing = LinearOutSlowInEasing)
-                        else tween(220, easing = FastOutSlowInEasing)
-                    editZoom.animateTo(0f, out)
+                    editZoom.animateTo(0f, tween(FOCUS_OUT_MS, easing = FastOutSlowInEasing))
                     editCamera = editTarget
                 }
-                editZoom.animateTo(1f, tween(400, easing = FastOutSlowInEasing))
+                editZoom.animateTo(1f, tween(FOCUS_IN_MS, easing = FastOutSlowInEasing))
             }
         }
 
