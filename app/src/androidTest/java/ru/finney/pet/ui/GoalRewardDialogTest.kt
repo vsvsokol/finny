@@ -36,7 +36,7 @@ class GoalRewardDialogTest {
         val goal = AssetContentLoader(context).load().goals.last()
         val next = "Все награды собраны! Теперь можно откладывать монеты в запас."
         val feedback = ActionFeedback(
-            title = "${goal.label} — твоя!",
+            title = "Награда получена!",
             lines = emptyList(),
             why = "Копил — и получилось! Награда уже на питомце. " +
                 "Остаток 10 монет вернулся в кошелёк. $next",

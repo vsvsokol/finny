@@ -177,6 +177,7 @@ import ru.finney.pet.ui.room.InteriorPart
 import ru.finney.pet.ui.room.EditTab
 import ru.finney.pet.ui.room.InteriorPicker
 import ru.finney.pet.ui.room.InteriorPickerHeight
+import ru.finney.pet.ui.room.InteriorPickerSolidHeight
 import ru.finney.pet.ui.room.toInterior
 import ru.finney.pet.ui.room.core
 import ru.finney.pet.domain.model.RoomPart
@@ -495,16 +496,10 @@ internal fun HomeContent(
     // выбирают, интерфейс главной расступается, а камера подлетает к питомцу или вещи.
     var roomEdit by rememberSaveable { mutableStateOf<EditTab?>(null) }
     val editing = roomEdit != null
-    // Панель живёт там, где видны стена, окно и торшер: в спальне и в игровой. Ковёр лежит
-    // только в игровой — на вкладке «Ковёр» питомец уходит туда. Из кухни и ванной — в спальню,
-    // а из игровой и спальни на других вкладках никуда не уходит. Закрыли панель — остаётся, где был.
-    LaunchedEffect(roomEdit) {
-        val tab = roomEdit ?: return@LaunchedEffect
-        spot = when {
-            tab.room == InteriorPart.RUG -> RoomSpot.PLAY
-            spot.hasWindow && spot.hasLamp -> spot
-            else -> RoomSpot.LIVING
-        }
+    // Панель живёт в игровой (разбор 20.10): там видно всё сразу — стену, окно, торшер и ковёр,
+    // и питомец не прыгает между комнатами при смене вкладки. Закрыли панель — остаётся там.
+    LaunchedEffect(editing) {
+        if (editing) spot = RoomSpot.PLAY
     }
     val editScope = rememberCoroutineScope()
     // Комната — из сохранения (ядро помнит её после перезапуска). «Вся комната» ставит
@@ -825,7 +820,8 @@ internal fun HomeContent(
     )
     // Сколько снизу закрывает панель выбора: камера ставит вещь посередине того, что над ней.
     // Заголовок и «Готово» висят над рамкой — их высота тоже закрыта.
-    val pickerCovers = InteriorPickerHeight + 36.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val navBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val pickerCovers = InteriorPickerHeight + 36.dp + navBar
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -869,6 +865,7 @@ internal fun HomeContent(
             focusPet = roomEdit?.pet == true,
             focusRug = roomEdit?.room == InteriorPart.RUG,
             focusBottom = pickerCovers,
+            focusSolid = InteriorPickerSolidHeight + navBar,
             onToyDrag = ::onToyDrag,
             onToyDrop = ::onToyDrop,
             toyNudge = showcase::offsetFor,
@@ -1586,8 +1583,8 @@ internal fun HomeContent(
             burger = burgerBounds,
             onDismiss = { menuOpen = false },
             onOpenBudget = onOpenBudget,
-            // «Украсить» — панель «Финни» с первой вкладки; в какую комнату, решает roomEdit выше.
-            // Во сне — экраном.
+            // «Украсить» — панель «Финни» с первой вкладки. Панель живёт в игровой (см. roomEdit),
+            // туда она и уводит из других комнат. Во сне — экраном.
             onDecorate = if (!sleeping) ({ roomEdit = EditTab.COLOUR }) else onOpenWardrobe,
             onOpenHelp = onOpenHelp,
             onOpenGlossary = onOpenGlossary,
@@ -2292,10 +2289,11 @@ private fun LevelGameRow(game: String, passed: Boolean, required: Boolean) {
 }
 
 /**
- * Условие уровня плиткой: крупный значок, подпись и отметка под ней.
+ * Условие уровня плиткой: крупный значок и подпись под ним.
  *
- * Выполненное — зелёная плитка, но главный признак — галочка в квадрате
- * под ней: по ТЗ п. 3.6 цвет не может быть единственным. Подпись — наше
+ * Выполненное — зелёная плитка с круглым «✓» на углу, как везде в приложении
+ * ([CheckBadge]): по ТЗ п. 3.6 цвет не может быть единственным. Строки «✓ Готово» /
+ * «Ещё нет» под каждой плиткой убраны (разбор 20.10) — значок говорит то же. Подпись — наше
  * добавление к макету: без неё смайлик и монету ребёнок не свяжет с условием.
  */
 @Composable
@@ -2324,15 +2322,17 @@ private fun ConditionTile(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(RoundedCornerShape(RadiusCard))
-                .background(if (done) FinneyGreen else FinneyCream)
-                .border(StrokeRegular, FinneyInk, RoundedCornerShape(RadiusCard)),
-            contentAlignment = Alignment.Center,
-        ) { icon() }
+        Box(Modifier.fillMaxWidth().aspectRatio(1f)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(RadiusCard))
+                    .background(if (done) FinneyGreen else FinneyCream)
+                    .border(StrokeRegular, FinneyInk, RoundedCornerShape(RadiusCard)),
+                contentAlignment = Alignment.Center,
+            ) { icon() }
+            if (done) CheckBadge(Modifier.align(Alignment.TopEnd).padding(5.dp), size = 28.dp)
+        }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(label, style = LevelItemText, color = FinneyInk, maxLines = 1)
             expanded?.let { open ->
@@ -2345,7 +2345,6 @@ private fun ConditionTile(
                 }
             }
         }
-        Text(if (done) "✓ Готово" else "Ещё нет", style = MaterialTheme.typography.bodyMedium, color = FinneyInk)
     }
 }
 

@@ -124,15 +124,19 @@ class ProgressionScreenTest {
         val home = HomeUiState.Ready("Финни", appearance, false, state.pet, game.emotion(state), 1,
             game.levelCheck(state), 1, 50, 0, null, 1, PeriodPhase.PLANNING, game.needsHint(state),
             null, emptyList(), emptyList(), title = "Новичок",
-            upcoming = NextProgress(2, 1, listOf("Откроется мини-игра «Касса Финни»", "Новое звание: Планировщик")))
-        show { HomeContent(home, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}) }
+            path = ru.finney.pet.ui.home.miniPathWindow(
+                ru.finney.pet.ui.progress.levelNodes(game, content, state, appearance.character)))
+        var pathOpened = false
+        show { HomeContent(home, {}, {}, {}, {}, {}, {}, { pathOpened = true }, {}, {}, {}, {}) }
         // Полосы со званием на главном нет (20.10: сдвигала кнопки) — открытия в панели уровня.
         compose.onNodeWithText("Звание: Новичок").assertDoesNotExist()
         shot("home-font130")
         compose.onNode(SemanticsMatcher("клик «Что нужно для уровня»") {
             it.config.getOrNull(SemanticsActions.OnClick)?.label == "Что нужно для уровня"
         }).performClick()
-        compose.onNodeWithText("Новое звание: Планировщик").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Уровень 1, ты здесь", useUnmergedTree = true).assertIsDisplayed()
         shot("home-level-font130")
+        compose.onNodeWithText("Весь путь ›").performClick()
+        compose.runOnIdle { assertTrue(pathOpened) }
     }
 }
