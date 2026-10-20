@@ -238,7 +238,12 @@ internal fun PetSetupContent(
                 }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                // Кольцо зарядки и вспышка выходят за кнопку: оставляем место
+                // внутри scroll viewport, иначе его нижний край обрезает эффект.
+                modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+            ) {
                 ArtBackButton(onClick = { back?.onBackPressed() }, enabled = !entering)
                 // «Начать игру» заряжается — начало игры бывает один раз и должно ощущаться.
                 // С неверным именем заряжать нечего: обычное нажатие сразу покажет ошибку.
