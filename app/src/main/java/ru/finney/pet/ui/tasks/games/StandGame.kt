@@ -125,6 +125,9 @@ private fun Morning(
     onOpen: () -> Unit,
 ) {
     val i = task.ingredient
+    // Лавка не открылась — «?»: денег не хватит или лимонов мало.
+    val pet = rememberPetReactions()
+    LaunchedEffect(inputError) { if (inputError != null) pet.oops() else pet.calm() }
     GameScene(backdrop = Backdrop.SKY, onClose = onClose, money = task.budget - count * i.price) {
         // Закупка сверху, питомец внизу на траве, «Открыть лавку» у края экрана.
         // Раньше питомец висел в небе, а под панелью оставалось полэкрана пустой травы.
@@ -187,7 +190,7 @@ private fun Morning(
                 if (inputError != null) Note(inputErrorText(inputError), color = FinneyPeach)
             }
             Spacer(Modifier.weight(1f))
-            PetSays(character, "Сколько взять, чтобы хватило всем гостям?", petSize = 120.dp)
+            PetSays(character, "Сколько взять, чтобы хватило всем гостям?", petSize = 200.dp, reactions = pet)
         }
     }
 }
@@ -222,9 +225,13 @@ private fun Day(task: StandTask, character: PetCharacter, count: Int, money: Int
     val walletCoinInset = with(density) { 27.dp.toPx() }
     val guestInset = with(density) { 36.dp.toPx() }
 
+    // Каждый налитый стакан — радость за прилавком.
+    val pet = rememberPetReactions()
+
     fun pour() {
         if (done) return
         sounds.play(Sfx.Pour)
+        pet.right()
         served++
         val from = queueAt
         val to = walletAt
@@ -263,7 +270,7 @@ private fun Day(task: StandTask, character: PetCharacter, count: Int, money: Int
                 CupStrip(cups = cups, poured = served)
 
                 Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Stall(character, task.cupPrice)
+                    Stall(character, task.cupPrice, pet)
                     // Обслуженный гость уходит вправо со стаканом и сердечком.
                     ServedGuest(served, others, Modifier.align(Alignment.BottomEnd))
                 }
@@ -434,8 +441,8 @@ private fun CupStrip(cups: Int, poured: Int) {
 
 /** Лавка: полосатый навес с фестонами, столбики, питомец за прилавком. */
 @Composable
-private fun Stall(character: PetCharacter, cupPrice: Int) {
-    Box(Modifier.fillMaxWidth(0.85f).height(230.dp)) {
+private fun Stall(character: PetCharacter, cupPrice: Int, pet: PetReactions) {
+    Box(Modifier.fillMaxWidth(0.85f).height(330.dp)) {
         Canvas(Modifier.fillMaxSize()) {
             val awning = 44.dp.toPx()
             val stripe = 26.dp.toPx()
@@ -461,7 +468,7 @@ private fun Stall(character: PetCharacter, cupPrice: Int) {
             }
             drawRect(FinneyInk, Offset.Zero, Size(size.width, awning), style = Stroke(stroke))
         }
-        ScenePet(character, 120.dp, Modifier.width(120.dp).align(Alignment.Center).offset(y = 10.dp))
+        ScenePet(character, 225.dp, Modifier.width(225.dp).align(Alignment.BottomCenter).offset(y = (-52).dp), reactions = pet)
         Box(
             Modifier
                 .align(Alignment.BottomCenter)

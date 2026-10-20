@@ -114,6 +114,7 @@ fun FinneyNavHost(
                 onBack = { navController.back() },
                 onOpenBudget = { navController.go(BudgetRoute) },
                 onOpenHistory = { navController.go(ProgressRoute) },
+                onOpenGoals = { navController.go(GoalsRoute) },
             )
         }
 

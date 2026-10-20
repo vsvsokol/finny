@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -87,6 +88,7 @@ internal fun ChoresGame(task: ChoresTask, character: PetCharacter, onClose: () -
         return (with.fees - with.tiredLoss) - (pay.fees - pay.tiredLoss)
     }
 
+    val pet = rememberPetReactions()
     GameScene(backdrop = Backdrop.DOTS, onClose = onClose) {
         SceneBody(
             bottom = {
@@ -95,10 +97,11 @@ internal fun ChoresGame(task: ChoresTask, character: PetCharacter, onClose: () -
         ) {
             // Условия, дни и дела — в один экран 360 × 740 dp без прокрутки: на плейтесте,
             // чтобы понять задачу, пришлось листать вниз. Поэтому здесь теснее, чем в сцене
-            // обычно, дни стоят одним рядом, а питомец меньше.
+            // обычно, дни стоят одним рядом. Питомец 88 dp: в 56 его было не разглядеть
+            // (плейтест 20.10), дни и дела ради него сдвинуты ниже.
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 GoalCard(task, earned, rest)
-                PetSays(character, petLine(task, earned, rest, pay.tiredLoss), petSize = 56.dp)
+                PetSays(character, petLine(task, earned, rest, pay.tiredLoss), petSize = 132.dp, reactions = pet)
 
                 // Все дни одним рядом: вторым рядом неделя не влезала в экран.
                 Row(horizontalArrangement = Arrangement.spacedBy(DayGap), modifier = Modifier.fillMaxWidth()) {
@@ -136,6 +139,8 @@ internal fun ChoresGame(task: ChoresTask, character: PetCharacter, onClose: () -
                                     modifier = Modifier.weight(1f),
                                     onAdd = {
                                         sounds.play(Sfx.Coin)
+                                        // Дело принесло монеты — радость; устал и платят меньше — «?».
+                                        if (gain(chore) > 0) pet.right() else pet.oops()
                                         week = week.mapIndexed { d, day -> if (d == selected) day + chore.id else day }
                                     },
                                 )

@@ -16,8 +16,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.translate
@@ -27,7 +25,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
-import ru.finney.pet.domain.model.BodyColor
 import ru.finney.pet.domain.model.PetCharacter
 
 // Питомец собирается из слоёв одного холста, поэтому детали совпадают по положению
@@ -77,23 +74,26 @@ fun PetView(
     mood: PetMood,
     pose: () -> PetPose,
     modifier: Modifier = Modifier,
-    bodyColor: BodyColor = BodyColor.A,
     /** Надетое — id из магазина: шляпа и очки. Двигается вместе с питомцем: лежит внутри позы. */
     accessories: List<String> = emptyList(),
     /** Стадия роста = уровень: с ней растут туловище, руки и ноги ([lookFor]). Без стадии — как нарисован. */
     stage: Int = 1,
     /**
-     * Платная окраска — id облика из ядра (`PetLooks`, `look_pushistik_1`); null — цвет профиля.
-     * Окраска нарисована целиком, поэтому оттенок [bodyColor] поверх неё не кладётся.
+     * Окраска — id облика из ядра (`PetLooks`, `look_pushistik_1`); null — родной цвет рисунка.
      */
     coloring: String? = null,
+    /**
+     * Только голова, без туловища, рук и ног: в мини-играх питомец — голова-смайлик
+     * с реакциями (`ui/tasks/games/PetHead.kt`). Наклон и масштаб тогда идут от шеи, а не от ступней.
+     */
+    headOnly: Boolean = false,
 ) {
     val painted = coloring?.let { lookSkin(it, character.skin) }
     val skin = painted ?: character.skin
-    val tint = if (painted != null) null else bodyColor.colorFilter
     val look = lookFor(stage)
     val body = skin.bodies[look - 1]
-    val lift = skin.headLift(stage)
+    val lift = if (headOnly) 0f else skin.headLift(stage)
+    val pivot = if (headOnly) TransformOrigin(0.5f, skin.neck) else skin.ground
     Box(
         modifier = modifier
             .aspectRatio(1f)
@@ -103,19 +103,20 @@ fun PetView(
                 scaleY = current.scaleY
                 translationY = current.offsetY.toPx()
                 rotationZ = current.tilt
-                transformOrigin = skin.ground
+                transformOrigin = pivot
             },
     ) {
-        Image(
-            painter = painterResource(body.torso),
-            contentDescription = null,
-            colorFilter = tint,
-            modifier = Modifier.matchParentSize(),
-        )
-        Limb(body.leftLeg, skin.grownPivot(skin.leftLegPivot, look), tint) { pose().leftLeg }
-        Limb(body.rightLeg, skin.grownPivot(skin.rightLegPivot, look), tint) { pose().rightLeg }
-        Limb(body.leftHand, skin.grownPivot(skin.leftHandPivot, look), tint) { pose().leftHand }
-        Limb(body.rightHand, skin.grownPivot(skin.rightHandPivot, look), tint) { pose().rightHand }
+        if (!headOnly) {
+            Image(
+                painter = painterResource(body.torso),
+                contentDescription = null,
+                modifier = Modifier.matchParentSize(),
+            )
+            Limb(body.leftLeg, skin.grownPivot(skin.leftLegPivot, look)) { pose().leftLeg }
+            Limb(body.rightLeg, skin.grownPivot(skin.rightLegPivot, look)) { pose().rightLeg }
+            Limb(body.leftHand, skin.grownPivot(skin.leftHandPivot, look)) { pose().leftHand }
+            Limb(body.rightHand, skin.grownPivot(skin.rightHandPivot, look)) { pose().rightHand }
+        }
 
         // Голова с лицом и тем, что на ней надето, — поднята на подросшее туловище.
         Box(modifier = Modifier.matchParentSize().graphicsLayer { translationY = -size.height * lift }) {
@@ -131,13 +132,11 @@ fun PetView(
                     painter = painterResource(current.base),
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
-                    colorFilter = tint,
                 )
                 current.blink?.let { blink ->
                     Image(
                         painter = painterResource(blink),
                         contentDescription = null,
-                        colorFilter = tint,
                         modifier = Modifier
                             .fillMaxSize()
                             .eyelid(skin) { pose().lid },
@@ -151,7 +150,6 @@ fun PetView(
             Image(
                 painter = painterResource(skin.mouth),
                 contentDescription = null,
-                colorFilter = tint,
                 modifier = Modifier
                     .matchParentSize()
                     .graphicsLayer {
@@ -230,54 +228,16 @@ private fun Modifier.eyelid(skin: PetSkin, lid: () -> Float): Modifier = this
 private fun BoxScope.Limb(
     @DrawableRes res: Int,
     pivot: TransformOrigin,
-    tint: ColorFilter?,
     rotation: () -> Float,
 ) {
     Image(
         painter = painterResource(res),
         contentDescription = null,
-        colorFilter = tint,
         modifier = Modifier
             .matchParentSize()
             .graphicsLayer {
                 transformOrigin = pivot
                 rotationZ = rotation()
             },
-    )
-}
-
-// ---------- Цвет тела ----------
-// Три цвета тела без перерисовки: слои те же, оттенок сдвигается матрицей цвета —
-// так и предложено в docs/assets-spec.md («дублировать слой тела и сдвинуть оттенок»).
-// Чёрный контур и белые блики от поворота оттенка не меняются, поэтому рисунок
-// остаётся «своим». Углы подобраны по рендеру всех пяти питомцев: каждый из трёх
-// вариантов заметно отличается от двух других (ТЗ п. 2.6 — 9 различимых комбинаций).
-
-private const val HUE_B = 120f
-private const val HUE_C = -110f
-
-/** null — исходные цвета рисунка. */
-val BodyColor.colorFilter: ColorFilter?
-    get() = when (this) {
-        BodyColor.A -> null
-        BodyColor.B -> HueFilterB
-        BodyColor.C -> HueFilterC
-    }
-
-private val HueFilterB = ColorFilter.colorMatrix(hueRotation(HUE_B))
-private val HueFilterC = ColorFilter.colorMatrix(hueRotation(HUE_C))
-
-/** Поворот оттенка с сохранением яркости — та же матрица, что у SVG feColorMatrix hueRotate. */
-private fun hueRotation(degrees: Float): ColorMatrix {
-    val rad = Math.toRadians(degrees.toDouble())
-    val c = kotlin.math.cos(rad).toFloat()
-    val s = kotlin.math.sin(rad).toFloat()
-    return ColorMatrix(
-        floatArrayOf(
-            0.213f + c * 0.787f - s * 0.213f, 0.715f - c * 0.715f - s * 0.715f, 0.072f - c * 0.072f + s * 0.928f, 0f, 0f,
-            0.213f - c * 0.213f + s * 0.143f, 0.715f + c * 0.285f + s * 0.140f, 0.072f - c * 0.072f - s * 0.283f, 0f, 0f,
-            0.213f - c * 0.213f - s * 0.787f, 0.715f - c * 0.715f + s * 0.715f, 0.072f + c * 0.928f + s * 0.072f, 0f, 0f,
-            0f, 0f, 0f, 1f, 0f,
-        ),
     )
 }

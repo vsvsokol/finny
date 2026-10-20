@@ -81,7 +81,6 @@ fun RewardPreview(
                     mood = PetMood.HAPPY,
                     pose = StillPose,
                     modifier = Modifier.size(size),
-                    bodyColor = appearance.bodyColor,
                     accessories = listOf(reward),
                     stage = stage,
                     coloring = coloring,

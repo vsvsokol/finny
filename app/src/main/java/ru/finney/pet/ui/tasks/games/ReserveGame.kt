@@ -42,6 +42,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -114,8 +116,11 @@ internal fun ReserveGame(
             ) {
                 // Обе цели недели — наверху и с отметками: раньше «хоть одна радость» была
                 // только в итоге, и проигрыш казался несправедливым.
-                WeekGoals(joys = joys, reserve = maxOf(0, reserve))
-                ScenePanel(title = "Моя неделя", modifier = Modifier.fillMaxWidth()) {
+                val density = LocalDensity.current
+                var goalsHeight by remember { mutableStateOf(0.dp) }
+                var planHeight by remember { mutableStateOf(0.dp) }
+                WeekGoals(joys = joys, reserve = maxOf(0, reserve), Modifier.onSizeChanged { goalsHeight = with(density) { it.height.toDp() } })
+                ScenePanel(title = "Моя неделя", modifier = Modifier.fillMaxWidth().onSizeChanged { planHeight = with(density) { it.height.toDp() } }) {
                     // По три конверта в ряд на всю ширину панели. С шириной числом они
                     // оставляли справа пустую полосу, а на широком экране — ещё шире.
                     task.spendings.chunked(3).forEach { row ->
@@ -146,14 +151,16 @@ internal fun ReserveGame(
                     }
                     TwoPartMeter(spent = spent, total = task.amount)
                 }
-                Spacer(Modifier.weight(1f))
                 // Питомец отвечает на план: без радостей — скучает, без запаса — тревожится.
                 val (mood, line) = when {
                     joys == 0 -> PetMood.SAD to "Целая неделя без радостей? Скучно…"
                     reserve <= 0 -> PetMood.HAPPY to "Ура, радость! А если что-то случится?"
                     else -> PetMood.HAPPY to "И радость есть, и запас. Поехали!"
                 }
-                PetSays(character, line, petSize = 100.dp, mood = mood)
+                // Крупнее, если под планом есть место; на угол панели заходит чуть-чуть — там полоска.
+                PetInFreeSpace(above = goalsHeight + planHeight + 12.dp, min = 150.dp, max = 225.dp, maxLift = 16.dp) { size, modifier ->
+                    PetSays(character, line, modifier, petSize = size, mood = mood)
+                }
             }
         }
         return
@@ -170,6 +177,8 @@ internal fun ReserveGame(
     val sounds = LocalSounds.current
     var today by remember { mutableIntStateOf(0) }
     val stopDay = remember(week, reserve) { stopDay(week, reserve) }
+    // Радость недели и сюрприз, оплаченный из запаса, — прыжок; запаса не хватило — «?».
+    val pet = rememberPetReactions()
     LaunchedEffect(Unit) {
         val animate = motionEnabled()
         for (d in 1..DAYS_IN_WEEK) {
@@ -181,6 +190,10 @@ internal fun ReserveGame(
                     day.surprise != null -> sounds.play(Sfx.Wrong)
                     day.joy != null -> sounds.play(Sfx.PetHappy)
                     else -> sounds.play(Sfx.Tap)
+                }
+                when {
+                    d == stopDay -> pet.oops()
+                    day.surprise != null || day.joy != null -> pet.right()
                 }
             }
             if (d == stopDay) break
@@ -259,7 +272,7 @@ internal fun ReserveGame(
             Spacer(Modifier.weight(1f))
             // Реплика «Хорошо, что был запас! / Желаемое купим потом…» повторяла объяснение
             // итога слово в слово — питомец просто стоит рядом. Лицо — по радостям недели.
-            PetAtRight(character, 100.dp, mood = if (today > 1 && joys == 0) PetMood.SAD else PetMood.HAPPY)
+            PetAtRight(character, 150.dp, mood = if (today > 1 && joys == 0) PetMood.SAD else PetMood.HAPPY, reactions = pet)
         }
     }
 }
@@ -311,8 +324,8 @@ private fun stopDay(week: List<WeekDay>, reserve: Int): Int? {
 
 /** Цели недели отметками: хоть одна радость и запас. Не выполнено — голубой «!», не только цвет. */
 @Composable
-private fun WeekGoals(joys: Int, reserve: Int) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+private fun WeekGoals(joys: Int, reserve: Int, modifier: Modifier = Modifier) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = modifier.fillMaxWidth()) {
         GoalChip(
             done = joys > 0,
             text = if (joys > 0) "Радость: $joys" else "Нужна радость",

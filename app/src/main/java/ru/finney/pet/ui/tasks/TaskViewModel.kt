@@ -18,7 +18,6 @@ import ru.finney.pet.domain.game.Rejection
 import ru.finney.pet.domain.game.Session
 import ru.finney.pet.domain.game.TaskResult
 import ru.finney.pet.domain.model.GameContent
-import ru.finney.pet.domain.model.BodyColor
 import ru.finney.pet.domain.model.PeriodPhase
 import ru.finney.pet.domain.model.PetCharacter
 import ru.finney.pet.domain.model.SavedGame
@@ -45,8 +44,6 @@ sealed interface TaskUiState {
     data class Ready(
         val task: TaskDefinition,
         val character: PetCharacter,
-        /** Цвет тела питомца игрока — чтобы в сцене игры он был тем же, что на главном. */
-        val bodyColor: BodyColor = BodyColor.A,
         /** Надетый аксессуар — и в сцене игры питомец в своей шляпе. */
         val worn: List<String> = emptyList(),
         val balance: Int,
@@ -137,7 +134,6 @@ class TaskViewModel(
         return TaskUiState.Ready(
             task = task,
             character = saved.profile.appearance.character,
-            bodyColor = saved.profile.appearance.bodyColor,
             worn = state.worn,
             balance = state.balance,
             available = game.isTaskAvailable(state, task),

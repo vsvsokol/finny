@@ -268,7 +268,6 @@ fun HomeScreen(
             onPlay = viewModel::play,
             onWear = viewModel::wear,
             onTakeOff = viewModel::takeOff,
-            onColour = viewModel::setBodyColor,
             onSetRoom = viewModel::setRoom,
             onSetColoring = viewModel::setColoring,
             onClaimGoal = viewModel::completeGoal,
@@ -352,7 +351,6 @@ internal fun HomeContent(
     onPlay: (toyId: String, shakes: Int) -> Unit = { _, _ -> },
     onWear: (itemId: String) -> Unit = {},
     onTakeOff: (itemId: String) -> Unit = {},
-    onColour: (BodyColor) -> Unit = {},
     onSetRoom: (themeId: String, part: RoomPart?) -> Unit = { _, _ -> },
     onSetColoring: (lookId: String?) -> Unit = {},
     onOpenGlossary: () -> Unit = {},
@@ -829,7 +827,6 @@ internal fun HomeContent(
             // лёг бы квадратом вокруг.
             PetView(
                 character = state.appearance.character,
-                bodyColor = state.appearance.bodyColor,
                 coloring = state.coloring,
                 accessories = state.worn,
                 stage = previewStage ?: state.stage,
@@ -1571,7 +1568,7 @@ internal fun HomeContent(
             InteriorPicker(
                 interior = interior,
                 ownedRooms = state.ownedRooms,
-                look = PetLook(state.appearance.character, state.appearance.bodyColor, state.worn, state.outfit, state.coloring, state.colorings),
+                look = PetLook(state.appearance.character, state.worn, state.outfit, state.coloring, state.colorings),
                 onColoring = onSetColoring,
                 tab = shownTab,
                 onTab = { roomEdit = it },
@@ -1587,7 +1584,6 @@ internal fun HomeContent(
                         }
                     }
                 },
-                onColour = onColour,
                 onWear = onWear,
                 onTakeOff = onTakeOff,
                 onLocked = {

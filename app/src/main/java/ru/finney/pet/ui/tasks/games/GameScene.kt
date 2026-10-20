@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.SideEffect
@@ -34,6 +35,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -54,7 +56,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
-import ru.finney.pet.domain.model.BodyColor
 import ru.finney.pet.domain.model.PetCharacter
 import ru.finney.pet.ui.components.Coin
 import ru.finney.pet.ui.components.CoinAmount
@@ -158,6 +159,39 @@ internal fun Modifier.bleed(): Modifier = layout { measurable, constraints ->
     layout(constraints.maxWidth, placeable.height) { placeable.place(-extra / 2, 0) }
 }
 
+/** Высота видимой части [SceneBody] без кнопок: по ней содержимое решает, сколько места свободно. */
+internal val LocalSceneViewport = compositionLocalOf { Dp.Unspecified }
+
+/**
+ * Питомец внизу [SceneBody] на всё свободное место: от [min] до [max]. Места меньше [min] —
+ * заходит на то, что выше, не больше чем на [maxLift], а дальше прокрутка. [above] — высота
+ * всего, что стоит выше, вместе с промежутками между этим. На плейтесте 20.10 питомец
+ * в играх был мелким, хотя под ним пустовало место.
+ */
+@Composable
+internal fun ColumnScope.PetInFreeSpace(
+    above: Dp,
+    min: Dp,
+    max: Dp,
+    maxLift: Dp = 32.dp,
+    pet: @Composable (size: Dp, modifier: Modifier) -> Unit,
+) {
+    val viewport = LocalSceneViewport.current
+    // Два промежутка колонки: до распорки и после неё.
+    val room = if (viewport == Dp.Unspecified) min else viewport - above - 24.dp
+    val size = (room + maxLift).coerceIn(min, max)
+    val lift = (size - room).coerceIn(0.dp, maxLift)
+    Spacer(Modifier.weight(1f))
+    pet(
+        size,
+        Modifier.layout { measurable, constraints ->
+            val placeable = measurable.measure(constraints)
+            val up = lift.roundToPx()
+            layout(placeable.width, (placeable.height - up).coerceAtLeast(0)) { placeable.place(0, -up) }
+        },
+    )
+}
+
 /** Высота верхней полосы: содержимое сцены начинается ниже, чтобы не залезть под крестик. */
 internal val HudHeight: Dp = 60.dp
 
@@ -178,15 +212,17 @@ internal fun SceneBody(
 ) {
     Column(modifier.fillMaxSize().padding(top = HudHeight), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .fadingScroll(rememberScrollState())
-                    .heightIn(min = maxHeight),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                horizontalAlignment = horizontalAlignment,
-                content = content,
-            )
+            CompositionLocalProvider(LocalSceneViewport provides maxHeight) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .fadingScroll(rememberScrollState())
+                        .heightIn(min = maxHeight),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalAlignment = horizontalAlignment,
+                    content = content,
+                )
+            }
         }
         bottom()
     }
@@ -344,31 +380,31 @@ private fun Rain(amount: () -> Float) {
 }
 
 /**
- * Цвет тела питомца игрока. Задаёт экран задания, читает [ScenePet]: так цвет не нужно
+ * Надетый аксессуар питомца игрока. Задаёт экран задания, читает [ScenePet]: так его не нужно
  * протаскивать параметром через все шесть игр. Гостей в сценах он не касается.
  */
-internal val LocalPlayerBodyColor = staticCompositionLocalOf { BodyColor.A }
-
-/** Надетый аксессуар питомца игрока — тем же способом, что и цвет тела. */
 internal val LocalPlayerAccessory = staticCompositionLocalOf<List<String>> { emptyList() }
 
-/** Питомец игрока в сцене: живой, дышит. */
+/**
+ * Питомец игрока в сцене — голова-смайлик с реакциями ([PetHead]): дышит, моргает,
+ * радуется верному ходу и задумывается над ошибкой.
+ */
 @Composable
 internal fun ScenePet(
     character: PetCharacter,
     size: Dp,
     modifier: Modifier = Modifier,
     mood: PetMood = PetMood.HAPPY,
-    // Снаружи — когда игра сама дёргает питомца: прыжок за верный ход в «Конвейере».
-    animation: PetAnimation = rememberPetAnimation(),
+    // Снаружи — когда игра сама дёргает питомца: прыжок за верный ход, «?» за ошибку.
+    reactions: PetReactions = rememberPetReactions(),
 ) {
-    PetView(
+    PetHead(
         character = character,
-        bodyColor = LocalPlayerBodyColor.current,
-        accessories = LocalPlayerAccessory.current,
+        size = size,
+        reactions = reactions,
         mood = mood,
-        pose = rememberPoseProvider(animation),
-        modifier = modifier.widthIn(max = size).fillMaxWidth(),
+        accessories = LocalPlayerAccessory.current,
+        modifier = modifier,
     )
 }
 
@@ -391,20 +427,27 @@ internal fun PetSays(
     character: PetCharacter,
     text: String,
     modifier: Modifier = Modifier,
-    petSize: Dp = 120.dp,
+    petSize: Dp = 180.dp,
     mood: PetMood = PetMood.HAPPY,
+    reactions: PetReactions = rememberPetReactions(),
 ) {
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
         Bubble(text, Tail.RIGHT, Modifier.weight(1f, fill = false), maxWidth = 240.dp)
-        ScenePet(character, petSize, Modifier.width(petSize), mood = mood)
+        ScenePet(character, petSize, Modifier.width(petSize), mood = mood, reactions = reactions)
     }
 }
 
 /** Питомец сам по себе, у правого края сцены — там же, где он говорит в [PetSays]. */
 @Composable
-internal fun PetAtRight(character: PetCharacter, petSize: Dp, modifier: Modifier = Modifier, mood: PetMood = PetMood.HAPPY) {
+internal fun PetAtRight(
+    character: PetCharacter,
+    petSize: Dp,
+    modifier: Modifier = Modifier,
+    mood: PetMood = PetMood.HAPPY,
+    reactions: PetReactions = rememberPetReactions(),
+) {
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-        ScenePet(character, petSize, Modifier.width(petSize), mood = mood)
+        ScenePet(character, petSize, Modifier.width(petSize), mood = mood, reactions = reactions)
     }
 }
 
@@ -413,7 +456,7 @@ internal fun PetAtRight(character: PetCharacter, petSize: Dp, modifier: Modifier
  * 15 монет». Число и монетка читаются быстрее слов. Питомец справа, как в [PetSays].
  */
 @Composable
-internal fun PetOffers(character: PetCharacter, amount: Int, modifier: Modifier = Modifier, petSize: Dp = 120.dp) {
+internal fun PetOffers(character: PetCharacter, amount: Int, modifier: Modifier = Modifier, petSize: Dp = 180.dp) {
     val tailSize = 12.dp
     val shape = remember { BubbleShape(Tail.RIGHT, 16.dp, tailSize) }
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
