@@ -159,7 +159,7 @@ fun PetSetupScreen(
  * [PetSetupViewModel] остался.
  */
 @Composable
-private fun PetSetupContent(
+internal fun PetSetupContent(
     state: PetSetupUiState,
     isDemo: Boolean,
     onNameChange: (String) -> Unit,
@@ -297,35 +297,35 @@ private fun DemoBadge() {
 @Composable
 private fun SetupLayout(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     BoxWithConstraints(modifier) {
-    val viewportHeight = constraints.maxHeight
-    Layout(content, Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) { measurables, constraints ->
-        val (title, stage, form, buttons) = measurables
-        val loose = constraints.copy(minWidth = 0, minHeight = 0)
-        val t = title.measure(loose)
-        val f = form.measure(loose)
-        val b = buttons.measure(loose)
-        val gap = ArtGap.roundToPx()
-        // Прокрутка даёт неограниченную высоту: исходный размер окна берём снаружи.
-        val height = viewportHeight
-        val stageRoom = (height - t.height - f.height - b.height - gap * 3).coerceAtLeast(0)
-        // Даже на низком экране остаются реплика и небольшой питомец.
-        val s = stage.measure(loose.copy(maxHeight = maxOf(stageRoom, 160.dp.roundToPx())))
-        val contentHeight = maxOf(height, t.height + s.height + f.height + b.height + gap * 3)
-        val free = (contentHeight - t.height - s.height - gap - f.height - b.height).coerceAtLeast(0)
-        val half = free / 2
+        val viewportHeight = constraints.maxHeight
+        Layout(content, Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) { measurables, constraints ->
+            val (title, stage, form, buttons) = measurables
+            val loose = constraints.copy(minWidth = 0, minHeight = 0)
+            val t = title.measure(loose)
+            val f = form.measure(loose)
+            val b = buttons.measure(loose)
+            val gap = ArtGap.roundToPx()
+            // Прокрутка даёт неограниченную высоту: исходный размер окна берём снаружи.
+            val height = viewportHeight
+            val stageRoom = (height - t.height - f.height - b.height - gap * 3).coerceAtLeast(0)
+            // Даже на низком экране остаются реплика и небольшой питомец.
+            val s = stage.measure(loose.copy(maxHeight = maxOf(stageRoom, 160.dp.roundToPx())))
+            val contentHeight = maxOf(height, t.height + s.height + f.height + b.height + gap * 3)
+            val free = (contentHeight - t.height - s.height - gap - f.height - b.height).coerceAtLeast(0)
+            val half = free / 2
 
-        layout(constraints.maxWidth, contentHeight) {
-            fun centred(w: Int) = (constraints.maxWidth - w) / 2
-            var y = 0
-            t.place(centred(t.width), y)
-            y += t.height + half
-            s.place(centred(s.width), y, zIndex = -1f)
-            y += s.height + gap
-            f.place(centred(f.width), y)
-            y += f.height + half
-            b.place(centred(b.width), y)
+            layout(constraints.maxWidth, contentHeight) {
+                fun centred(w: Int) = (constraints.maxWidth - w) / 2
+                var y = 0
+                t.place(centred(t.width), y)
+                y += t.height + half
+                s.place(centred(s.width), y, zIndex = -1f)
+                y += s.height + gap
+                f.place(centred(f.width), y)
+                y += f.height + half
+                b.place(centred(b.width), y)
+            }
         }
-    }
     }
 }
 
