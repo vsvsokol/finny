@@ -41,6 +41,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.PathMeasure
@@ -156,6 +157,7 @@ internal fun MiniPath(nodes: List<LevelNode>, onOpen: () -> Unit, modifier: Modi
                         .width(slot)
                         .offset(x = slot * i, y = centerY(i) - size / 2)
                         .graphicsLayer {
+                            compositingStrategy = CompositingStrategy.ModulateAlpha
                             val t = ((reveal.value - i * 0.08f) / 0.6f).coerceIn(0f, 1f)
                             val scale = 0.82f + 0.18f * t + 0.12f * sin(PI.toFloat() * t)
                             alpha = t
