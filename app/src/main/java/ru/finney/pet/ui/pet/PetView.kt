@@ -33,7 +33,7 @@ import ru.finney.pet.domain.model.PetCharacter
 // Питомец собирается из слоёв одного холста, поэтому детали совпадают по положению
 // сами и координаты подбирать не нужно.
 //
-// Порядок отрисовки снизу вверх: ноги, руки, базовый слой (голова и туловище),
+// Порядок отрисовки снизу вверх: ноги, туловище, руки, базовый слой (голова),
 // слой моргания, открытый рот. Моргание и рот собирает из состояний сна тот же скрипт.
 // В базовом слое конечности вырезаны из состояния лица — см. tools/split_pet_base.py.
 // Без выреза под повёрнутой рукой видно исходную; вырез обязан быть точным по краю,
@@ -58,6 +58,8 @@ data class PetPose(
     val lid: Float = 0f,
     /** Рот: 0 — как у настроения, 1 — открыт навстречу еде. */
     val mouth: Float = 0f,
+    /** Наклон головы от шеи, в градусах. Туловище при этом стоит. */
+    val headTilt: Float = 0f,
 )
 
 /**
@@ -110,13 +112,15 @@ fun PetView(
             },
     ) {
         if (!headOnly) {
+            // Ноги под туловищем: край рубашки ложится на штаны, и когда ноги расходятся
+            // в прыжке, стык прикрыт. Поверх туловища между ними открывалась щель.
+            Limb(body.leftLeg, skin.grownPivot(skin.leftLegPivot, look)) { pose().leftLeg }
+            Limb(body.rightLeg, skin.grownPivot(skin.rightLegPivot, look)) { pose().rightLeg }
             Image(
                 painter = painterResource(body.torso),
                 contentDescription = null,
                 modifier = Modifier.matchParentSize(),
             )
-            Limb(body.leftLeg, skin.grownPivot(skin.leftLegPivot, look)) { pose().leftLeg }
-            Limb(body.rightLeg, skin.grownPivot(skin.rightLegPivot, look)) { pose().rightLeg }
             Limb(body.leftHand, skin.grownPivot(skin.leftHandPivot, look)) { pose().leftHand }
             Limb(body.rightHand, skin.grownPivot(skin.rightHandPivot, look)) { pose().rightHand }
         }
@@ -125,7 +129,11 @@ fun PetView(
         Box(
             modifier = Modifier
                 .matchParentSize()
-                .graphicsLayer { translationY = -size.height * lift }
+                .graphicsLayer {
+                    translationY = -size.height * lift
+                    transformOrigin = TransformOrigin(0.5f, skin.neck)
+                    rotationZ = pose().headTilt
+                }
                 .then(if (headOnly) Modifier.withoutNeck() else Modifier),
         ) {
 
@@ -253,6 +261,7 @@ private fun Modifier.eyelid(skin: PetSkin, lid: () -> Float): Modifier = this
         }
     }
 
+/** Конечность поворачивается целиком вокруг плеча или бедра. Поворот читается на отрисовке, как и поза в [PetView]. */
 @Composable
 private fun BoxScope.Limb(
     @DrawableRes res: Int,

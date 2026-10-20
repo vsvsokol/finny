@@ -29,11 +29,17 @@ PNG в ресурсы не кладём: те же картинки в WebP бе
 Здесь же собираются слои моргания — см. [blink] — и открытого рта — см. [mouth].
 
 Запуск из корня репозитория (нужны Pillow и scipy: pip install Pillow scipy):
-    python tools/split_pet_base.py
+    python tools/split_pet_base.py                 # все питомцы
+    python tools/split_pet_base.py luchik bantik   # только эти
+    python tools/split_pet_base.py --small         # сжатие посильнее, для выпуска
+
+Питомцы разбираются параллельно, по процессу на питомца.
 
 Перезапускать после каждого нового экспорта от дизайнера.
 """
 
+import sys
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -43,13 +49,21 @@ from scipy import ndimage
 SRC = Path("design/exports/pet")
 RES = Path("app/src/main/res/drawable-nodpi")
 
-# Сторона слоя в ресурсах. Холсты у дизайнеров 2048 и 2200, и класть их в
+# Сторона слоя в ресурсах. Холсты у дизайнеров по 2200, и класть их в
 # drawable-nodpi как есть нельзя: nodpi запрещает Android масштабировать картинку
 # при загрузке, поэтому слой разворачивается в памяти целиком — 2200×2200×4 ≈ 19 МБ.
 # На питомца пять слоёв, а на экране подбора их двое: выходило под 190 МБ растра
 # ради кружка в 400 пикселей, и кадр падал до 200 мс (5 fps) при 60 на главном.
 # 512 хватает с запасом: крупнее всего питомца рисуют примерно в 400 px.
 SIDE = 512
+
+# Насколько упорно жать WebP. Без потерь при любом значении — меняется только размер
+# файла: 6 на несколько процентов меньше, но в разы дольше, и весь прогон шёл минут десять.
+METHOD = 6 if "--small" in sys.argv else 4
+
+# Сколько питомцев разбирать одновременно. Каждый процесс держит несколько холстов
+# 2200×2200 во float — по несколько сотен МБ; десять окрасок разом не влезли в память.
+WORKERS = 4
 STATES = ("happy", "sad", "dirty", "sleep")
 LIMBS = ("left_leg", "right_leg", "left_hand", "right_hand")
 
@@ -68,7 +82,7 @@ def save(image: Image.Image, pet: str, name: str) -> None:
         image = image.resize((SIDE, SIDE), Image.LANCZOS)
     if name.startswith(("base_", "blink_")) or name == "mouth":
         image = drop_head(image)
-    image.save(out, "WEBP", lossless=True, method=6)
+    image.save(out, "WEBP", lossless=True, method=METHOD)
     print(f"{out} — {out.stat().st_size // 1024} КБ")
 
 
@@ -120,21 +134,32 @@ def split(pet: str, limb_suffix: str) -> None:
     # Туловище — отдельный слой: с уровнем оно растёт вместе с руками и ногами,
     # а голова остаётся прежней (стадии роста, ui/pet/PetGrowth.kt).
     torso = load(pet, "body" + limb_suffix)
+    drawn = torso.copy()
     # Слой туловища у дизайнеров местами на пиксель-два шире, чем туловище в кадре
-    # (под краем руки): обрезаем по тому, что остаётся от кадра без рук.
+    # (под краем руки): обрезаем по тому, что остаётся от кадра без рук. Такое туловище
+    # нужно только для разбора головы ниже.
     frame_alpha = np.asarray(uncomposite(load(pet, "happy").split()[3], limb_alpha))
     torso.putalpha(Image.fromarray(np.minimum(np.asarray(torso.split()[3]), frame_alpha)))
-    save(torso, pet, "torso")
+    # В приложение — по кадру вместе с руками: плечи под руками остаются. Их нарисовали
+    # как раз на то, чтобы под поднятой рукой было туловище; обрезанное по кадру без рук,
+    # оно теряло плечи, и под рукой открывался белый клин.
+    drawn.putalpha(Image.fromarray(np.minimum(np.asarray(drawn.split()[3]), np.asarray(load(pet, "happy").split()[3]))))
+    save(drawn, pet, "torso")
     rows = np.flatnonzero(np.asarray(torso.split()[3]).any(axis=1))
     ground = np.flatnonzero(np.asarray(load(pet, "happy").split()[3]).any(axis=1))[-1] + 1
     print(f"{pet}: туловище сверху {rows[0]}, ступни {ground} из {torso.size[1]}")
 
     # Облики постарше: те же туловище и конечности крупнее, линия прежней толщины.
     line = stroke_width(torso)
+    # Увеличение — самое долгое в разборе; сделанное здесь берёт и check_looks.
+    grown = {}
     for look, scale in LOOKS.items():
-        save(grow(torso, scale, ground, line), pet, f"torso_{look}")
-        for limb in LIMBS:
-            save(grow(load(pet, limb + limb_suffix), scale, ground, line, leg_raise(limb, scale, line)), pet, f"{limb}_{look}")
+        big_torso = grow(drawn, scale, ground, line)
+        big_limbs = [grow(load(pet, limb + limb_suffix), scale, ground, line, leg_raise(limb, scale, line)) for limb in LIMBS]
+        save(big_torso, pet, f"torso_{look}")
+        for limb, image in zip(LIMBS, big_limbs):
+            save(image, pet, f"{limb}_{look}")
+        grown[look] = (big_torso, big_limbs)
 
     for state in STATES:
         src = load(pet, state)
@@ -144,7 +169,7 @@ def split(pet: str, limb_suffix: str) -> None:
         check_seamless(head, torso, limbs, src, pet, state)
         save(head, pet, f"base_{state}")
         if state == "happy":
-            check_looks(pet, head, torso, limb_suffix, ground, line)
+            check_looks(pet, head, drawn, limb_suffix, ground, grown)
 
 
 def leg_raise(limb: str, scale: float, line: float) -> float:
@@ -191,16 +216,18 @@ def gaps(frame: Image.Image) -> int:
     return int((closed & ~solid).sum())
 
 
-def check_looks(pet: str, head: Image.Image, torso: Image.Image, limb_suffix: str, ground: int, line: float) -> None:
-    """Щели в каждом облике против питомца как нарисован; больше чем на GAP_PIXELS — проверить."""
+def check_looks(pet: str, head: Image.Image, torso: Image.Image, limb_suffix: str, ground: int,
+                grown: dict[int, tuple[Image.Image, list[Image.Image]]]) -> None:
+    """Щели в каждом облике против питомца как нарисован; больше чем на GAP_PIXELS — проверить.
+    [grown] — увеличенные туловище и конечности, уже сделанные в split."""
     attach = head_attach(head)
     print(f"{pet}: голова садится по {attach} из {head.size[1]}")
     limbs = [load(pet, limb + limb_suffix) for limb in LIMBS]
     before = gaps(look_frame(head, torso, limbs, 0))
     for look, scale in LOOKS.items():
-        grown = [grow(image, scale, ground, line, leg_raise(name, scale, line)) for name, image in zip(LIMBS, limbs)]
+        big_torso, big_limbs = grown[look]
         lift = round((ground - attach) * (scale - 1))
-        found = gaps(look_frame(head, grow(torso, scale, ground, line), grown, lift))
+        found = gaps(look_frame(head, big_torso, big_limbs, lift))
         # Только отчёт: у подросшего тела другая форма, и в вогнутых углах силуэта —
         # подмышки, между ногами — «закрытие» находит пиксель-другой и без разрезов.
         # Разрез между частями даёт десятки пикселей подряд — его видно в этой строке.
@@ -466,13 +493,26 @@ def shrink_mask(mask: np.ndarray) -> np.ndarray:
     return np.asarray(image.resize((SIDE, SIDE), Image.BOX)) > 0
 
 
+def chosen(names: list[str]) -> list[str]:
+    """Питомцы из командной строки; без имён — все."""
+    asked = [a for a in names if not a.startswith("--")]
+    unknown = [a for a in asked if a not in PETS]
+    if unknown:
+        sys.exit(f"Нет таких питомцев: {', '.join(unknown)}. Есть: {', '.join(PETS)}")
+    return asked or list(PETS)
+
+
+def build(pet: str) -> None:
+    print(f"— {pet}")
+    split(pet, PETS[pet])
+    blink(pet)
+    mouth(pet)
+
+
 def main() -> None:
     RES.mkdir(parents=True, exist_ok=True)
-    for pet, limb_suffix in PETS.items():
-        print(f"— {pet}")
-        split(pet, limb_suffix)
-        blink(pet)
-        mouth(pet)
+    with ProcessPoolExecutor(max_workers=WORKERS) as pool:
+        list(pool.map(build, chosen(sys.argv[1:])))
 
 
 if __name__ == "__main__":

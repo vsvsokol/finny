@@ -10,7 +10,7 @@ import ru.finney.pet.domain.model.PetCharacter
 // вращения. Сама сборка и анимация общие — см. PetView и PetAnimation.
 //
 // Точки заданы долями стороны холста, поэтому не зависят от размера, в котором
-// питомца рисуют на экране. Холсты у дизайнеров разные (2048 у Пушистика, 2200 у
+// питомца рисуют на экране. Холсты у дизайнеров могут быть разные (у первого Пушистика был 2048, сейчас у всех 2200 — как у
 // Рогатика), и делитель у каждого скина свой — числители те же пиксели, которые
 // видно в редакторе.
 
@@ -80,7 +80,7 @@ data class PetBody(
 @Immutable
 data class PetFace(@DrawableRes val base: Int, @DrawableRes val blink: Int?)
 
-private const val PUSHISTIK_CANVAS = 2048f
+private const val PUSHISTIK_CANVAS = 2200f
 
 // Полосу глаз не снимают в редакторе: её печатает tools/split_pet_base.py, и уже
 // в пикселях слоя в ресурсах, а не холста. Центр рта он печатает сразу долями.
@@ -93,8 +93,7 @@ private const val ROGATIK_CANVAS = 2200f
 
 // Звёздочка, Бантик и Лучик рисовались по шаблону Рогатика, поэтому холст у них тот же.
 // Точки вращения не подбирались на глаз: плечи и бёдра — это верхний внутренний
-// угол альфы соответствующего слоя, точка опоры — низ силуэта. По Пушистику и Рогатику
-// правило сходится с тем, что уже стояло в коде, с точностью до пары пикселей.
+// угол альфы соответствующего слоя, точка опоры — низ силуэта.
 private const val ZVEZDOCHKA_CANVAS = 2200f
 private const val BANTIK_CANVAS = 2200f
 private const val LUCHIK_CANVAS = 2200f
@@ -113,18 +112,16 @@ private val PushistikSkin = PetSkin(
         PetBody(R.drawable.pushistik_torso_2, R.drawable.pushistik_left_hand_2, R.drawable.pushistik_right_hand_2, R.drawable.pushistik_left_leg_2, R.drawable.pushistik_right_leg_2),
         PetBody(R.drawable.pushistik_torso_3, R.drawable.pushistik_left_hand_3, R.drawable.pushistik_right_hand_3, R.drawable.pushistik_left_leg_3, R.drawable.pushistik_right_leg_3),
     ),
-    leftHandPivot = TransformOrigin(930f / PUSHISTIK_CANVAS, 1500f / PUSHISTIK_CANVAS),
-    rightHandPivot = TransformOrigin(1130f / PUSHISTIK_CANVAS, 1500f / PUSHISTIK_CANVAS),
-    leftLegPivot = TransformOrigin(960f / PUSHISTIK_CANVAS, 1640f / PUSHISTIK_CANVAS),
-    rightLegPivot = TransformOrigin(1100f / PUSHISTIK_CANVAS, 1640f / PUSHISTIK_CANVAS),
-    ground = TransformOrigin(0.5f, 1828f / PUSHISTIK_CANVAS),
-    // Не низ воротника (1690): он свисает до плеч, и в старших обликах руки прятались
-    // под капюшоном. По плечам голова выше, шов под воротником чистый — проверено рендером.
-    neck = 1560f / PUSHISTIK_CANVAS,
-    eyesTop = 234f / BLINK_LAYER + HEAD_DROP,
-    eyesBottom = 342f / BLINK_LAYER + HEAD_DROP,
-    mouthCenter = TransformOrigin(0.5022f, 0.6619f + HEAD_DROP),
-    hat = HatFit(centerX = 0.50f, brim = 0.23f + HEAD_DROP, width = 0.72f),
+    leftHandPivot = TransformOrigin(1006f / PUSHISTIK_CANVAS, 1576f / PUSHISTIK_CANVAS),
+    rightHandPivot = TransformOrigin(1206f / PUSHISTIK_CANVAS, 1576f / PUSHISTIK_CANVAS),
+    leftLegPivot = TransformOrigin(1036f / PUSHISTIK_CANVAS, 1716f / PUSHISTIK_CANVAS),
+    rightLegPivot = TransformOrigin(1176f / PUSHISTIK_CANVAS, 1716f / PUSHISTIK_CANVAS),
+    ground = TransformOrigin(0.5f, 1904f / PUSHISTIK_CANVAS),
+    neck = 1615f / PUSHISTIK_CANVAS,
+    eyesTop = 235f / BLINK_LAYER + HEAD_DROP,
+    eyesBottom = 337f / BLINK_LAYER + HEAD_DROP,
+    mouthCenter = TransformOrigin(0.502f, 0.6507f + HEAD_DROP),
+    hat = HatFit(centerX = 0.50f, brim = 0.25f + HEAD_DROP, width = 0.67f),
 )
 
 private val RogatikSkin = PetSkin(
