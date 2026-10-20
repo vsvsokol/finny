@@ -72,7 +72,10 @@ import ru.finney.pet.ui.theme.FinneyTheme
 import ru.finney.pet.ui.sound.LocalSounds
 import ru.finney.pet.ui.sound.Sfx
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import androidx.compose.runtime.snapshotFlow
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -121,6 +124,12 @@ private const val PLAY_LAMP_PEEK = 0.04f
  * Пауза случайная — по часам его прыжков не ждут, и он выглядит живым, а не заведённым.
  */
 private val StrollPauseMs = 6_000L..14_000L
+
+/** Сколько питомец стоит у ящика, прежде чем отойти: подошёл посмотреть — и в сторону. */
+private val NearBoxPauseMs = 1_200L..2_500L
+
+/** Насколько питомцу можно зайти на ящик — доля ширины ящика. Краешек можно, закрыть нельзя. */
+private const val BOX_OVERLAP = 0.2f
 
 /** Длина одного скачка, доля ширины холста: дальние перебежки — несколько скачков подряд. */
 private const val HOP_LENGTH = 0.09f
@@ -246,6 +255,8 @@ private val UfoPauseMs = 20_000L..45_000L
  * @param onToyDrop игрушку отпустили.
  * @param toyNudge сдвиг рисунка игрушки в пикселях — показ и подпрыгивание, см. [RoomToy].
  * @param onToyPlaced где игрушка на экране.
+ * @param onToyGone игрушка ушла с пола: в ящик (ToyBox.kt) или вместе с комнатой.
+ * @param onToyBoxEmpty нажали на пустой ящик для игрушек.
  * @param interior задник, окно и торшер. Сменённая часть не подменяется, а меняется
  *   с анимацией: стену прокатывает валик, окно схлопывается и раскрывается, торшер
  *   падает сверху и мигает, включаясь.
@@ -270,6 +281,8 @@ fun RoomScene(
     onToyDrop: (toyId: String) -> Unit = {},
     toyNudge: (toyId: String) -> Offset = { Offset.Zero },
     onToyPlaced: (toyId: String, bounds: Rect) -> Unit = { _, _ -> },
+    onToyGone: (toyId: String) -> Unit = {},
+    onToyBoxEmpty: () -> Unit = {},
     interior: RoomInterior = Interiors.Default,
     focus: RelRect? = null,
     focusPet: Boolean = false,
@@ -379,6 +392,44 @@ fun RoomScene(
             .let { found -> found.zip(toySlots(found.size, visibleLeft, visibleRight)) }
         val toyFloor = ToyFloor(left = visibleLeft, right = visibleRight)
         val toyMoves = rememberToyMoves()
+        // Ящик для игрушек (ToyBox.kt). Проданная или пропавшая игрушка из него уходит.
+        val toyBox = rememberToyBox()
+        val toyBoxRect = toyBoxRect(toyFloor)
+        LaunchedEffect(toys) { toyBox.inside.retainAll(toys) }
+        // С какого сдвига прогулки питомец не закрывает ящик: заходит на него не больше
+        // чем на [BOX_OVERLAP] ширины. Ящик в холсте до отражения слева, и чем меньше
+        // сдвиг, тем питомец к нему ближе. Своё место считается свободным всегда.
+        val boxClear = (toyBoxRect.right - toyBoxRect.width * BOX_OVERLAP - home.left - home.width * PET_MARGIN)
+            .coerceAtMost(0f)
+        val currentToyPlaces by rememberUpdatedState(toyPlaces)
+        val currentOnHop by rememberUpdatedState(onHop)
+        val currentOnToyBoxEmpty by rememberUpdatedState(onToyBoxEmpty)
+        fun tapToyBox() {
+            val places = currentToyPlaces.associate { (toy, place) -> toy.first to place }
+            // Свободное место — подальше от игрушек на полу, тех, что уже летят, и от ног питомца.
+            val pet = home.shiftedX(stroll.value)
+            val taken = buildList {
+                for ((id, place) in places) {
+                    if (toyBox.away(id)) continue
+                    val here = toyHere(id, place, toyMoves, toyFloor)
+                    add(Offset((here.left + here.right) / 2f, here.bottom))
+                }
+                toyBox.flights.values.filter { !it.into }.forEach { add(Offset((it.to.left + it.to.right) / 2f, it.to.bottom)) }
+                val feet = (pet.left + pet.right) / 2f
+                add(Offset(feet - pet.width * 0.15f, Room.PLAY_PET_FEET))
+                add(Offset(feet + pet.width * 0.15f, Room.PLAY_PET_FEET))
+            }
+            toyBox.tap(
+                box = toyBoxRect,
+                landing = toyLanding(toyBox.inside, places, toyFloor, taken),
+                moves = toyMoves,
+                animated = animations,
+                onEmpty = { currentOnToyBoxEmpty() },
+                // Игрушка снова на полу — питомец подпрыгивает от радости, если не стоит у ящика:
+                // тогда он и так отскочит в сторону.
+                onToss = { if (stroll.value >= boxClear) currentOnHop() },
+            )
+        }
         // Какая комната на экране сейчас: пока питомец уходит, это ещё старая.
         var shown by remember { mutableStateOf(spot) }
         // Где питомец на экране относительно своего места — доля ширины холста, вправо +.
@@ -432,13 +483,13 @@ fun RoomScene(
         }
 
         // Без анимаций не гуляет: прыжки по игровой стали бы телепортом с места на место.
-        val canWander = wander && spot == RoomSpot.PLAY && shown == RoomSpot.PLAY && !asleep && animations &&
-            !travel.isRunning
-        LaunchedEffect(canWander, strollMin, strollMax) {
-            if (!canWander || strollMax <= strollMin) return@LaunchedEffect
-            while (true) {
-                delay(Random.nextLong(StrollPauseMs.first, StrollPauseMs.last))
-                val target = Random.nextFloat() * (strollMax - strollMin) + strollMin
+        // Здесь же он отходит от ящика: и сам, постояв у него, и сразу, когда к ящику
+        // несут игрушку или нажимают на него, — даже когда гулять ему не время (с ним играют).
+        val canMove = spot == RoomSpot.PLAY && shown == RoomSpot.PLAY && !asleep && animations && !travel.isRunning
+        val currentWander by rememberUpdatedState(wander)
+        LaunchedEffect(canMove, strollMin, strollMax, boxClear) {
+            if (!canMove || strollMax <= strollMin) return@LaunchedEffect
+            suspend fun hopTo(target: Float) {
                 val from = stroll.value
                 val hops = maxOf(1, kotlin.math.ceil(kotlin.math.abs(target - from) / HOP_LENGTH).toInt())
                 for (i in 1..hops) {
@@ -450,6 +501,23 @@ fun RoomScene(
                     )
                     // Приземлился — лёгкий шажок.
                     sounds.play(Sfx.Tap)
+                }
+            }
+            // Отходит от ящика недалеко — на шаг-другой, чтобы ящик открылся.
+            val awayMin = maxOf(boxClear, strollMin)
+            val awayMax = minOf(strollMax, awayMin + HOP_LENGTH * 2f)
+            while (true) {
+                val near = stroll.value < boxClear
+                val pause = if (near) Random.nextLong(NearBoxPauseMs.first, NearBoxPauseMs.last)
+                else Random.nextLong(StrollPauseMs.first, StrollPauseMs.last)
+                val pokes = toyBox.pokes
+                // Ждёт паузу, но к ящику обратились — не ждёт.
+                val poked = withTimeoutOrNull(pause) { snapshotFlow { toyBox.pokes }.first { it != pokes } } != null
+                when {
+                    stroll.value < boxClear && (poked || currentWander) ->
+                        hopTo(awayMin + Random.nextFloat() * (awayMax - awayMin))
+                    poked || !currentWander -> Unit
+                    else -> hopTo(Random.nextFloat() * (strollMax - strollMin) + strollMin)
                 }
             }
         }
@@ -556,6 +624,11 @@ fun RoomScene(
                     onToyDrop = onToyDrop,
                     toyNudge = toyNudge,
                     onToyPlaced = onToyPlaced,
+                    onToyGone = onToyGone,
+                    toyBox = toyBox,
+                    toyBoxRect = toyBoxRect,
+                    onToyBoxTap = ::tapToyBox,
+                    animations = animations,
                     pet = pet,
                     mirrorAxis = mirrorAxis.takeIf { room == RoomSpot.PLAY },
                     toysWatch = { toysWatch },
@@ -639,6 +712,11 @@ private fun RoomCanvas(
     onToyDrop: (toyId: String) -> Unit,
     toyNudge: (toyId: String) -> Offset,
     onToyPlaced: (toyId: String, bounds: Rect) -> Unit,
+    onToyGone: (toyId: String) -> Unit,
+    toyBox: ToyBoxState,
+    toyBoxRect: RelRect,
+    onToyBoxTap: () -> Unit,
+    animations: Boolean,
     pet: @Composable BoxScope.() -> Unit,
     modifier: Modifier = Modifier,
     petVisibility: () -> Float = { 1f },
@@ -687,7 +765,22 @@ private fun RoomCanvas(
             when (room) {
                 // Игрушки на полу: дальше ступней питомца — за ним, ближе — перед ним (RoomToys.kt).
                 RoomSpot.PLAY -> {
+                    // Ящик — за питомцем и за игрушками на полу: он дальше от зрителя.
+                    val arts = toys.associate { (toy, _) -> toy.first to toy.second }
+                    ToyBox(
+                        state = toyBox,
+                        rect = toyBoxRect,
+                        arts = arts,
+                        canvasW = canvasW,
+                        canvasH = canvasH,
+                        lighting = lighting,
+                        enabled = toysEnabled,
+                        animated = animations,
+                        mirrored = mirrorAxis != null,
+                        onTap = onToyBoxTap,
+                    )
                     for ((toy, place) in toys) {
+                        if (toyBox.away(toy.first)) continue
                         key(toy.first) {
                             RoomToy(
                                 toyId = toy.first,
@@ -705,6 +798,23 @@ private fun RoomCanvas(
                                 mirrored = mirrorAxis != null,
                                 watching = toysWatch,
                                 onPlaced = onToyPlaced,
+                                onMoved = { _, here -> toyBox.hover(toyBoxRect, here) },
+                                catch = { id, here, lift -> toyBox.catch(id, here, lift, toyBoxRect, animations) },
+                                onGone = onToyGone,
+                            )
+                        }
+                    }
+                    for ((id, flight) in toyBox.flights) {
+                        val art = arts[id] ?: continue
+                        key(id) {
+                            FlyingToy(
+                                art = art,
+                                flight = flight,
+                                rim = toyBoxRim(toyBoxRect),
+                                canvasW = canvasW,
+                                canvasH = canvasH,
+                                lighting = lighting,
+                                mirrored = mirrorAxis != null,
                             )
                         }
                     }

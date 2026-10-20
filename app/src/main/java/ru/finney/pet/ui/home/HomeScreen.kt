@@ -720,6 +720,11 @@ internal fun HomeContent(
                 speechNote = "Я уже наигрался!\nНовые игры —\nна следующем уровне."
                 speechRequest++
             }
+            // Все игрушки убраны в ящик — показывать на полу нечего.
+            s.toys.none { it in toyBounds } -> {
+                speechNote = "Игрушки в ящике.\nНажми на него —\nи они выпрыгнут!"
+                speechRequest++
+            }
             playShow?.isActive != true -> playShow = editScope.launch {
                 val id = s.toys.firstOrNull { it in toyBounds } ?: return@launch
                 toyShown = true
@@ -819,6 +824,12 @@ internal fun HomeContent(
             onToyDrop = ::onToyDrop,
             toyNudge = showcase::offsetFor,
             onToyPlaced = { id, bounds -> if (toyBounds[id] != bounds) toyBounds[id] = bounds },
+            // Игрушка в ящике не лежит на полу: ни рука, ни подскок её не показывают.
+            onToyGone = { id -> toyBounds -= id },
+            onToyBoxEmpty = {
+                speechNote = "Ящик пустой.\nПеретащи в него\nигрушку!"
+                speechRequest++
+            },
         ) {
             // Нажатие — питомец подпрыгивает и говорит, как ему: это игра, а не меню.
             // Раньше реплику открывало сердечко у головы — радость теперь кольцом на «Игре».
