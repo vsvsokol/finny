@@ -29,7 +29,7 @@ import ru.finney.pet.ui.budget.ActiveContent
 import ru.finney.pet.ui.budget.BudgetUiState
 import ru.finney.pet.ui.home.HomeContent
 import ru.finney.pet.ui.home.HomeUiState
-import ru.finney.pet.ui.home.miniPathWindow
+import ru.finney.pet.ui.home.miniPathLevels
 import ru.finney.pet.ui.motion.LocalAnimations
 import ru.finney.pet.ui.progress.NodeStatus
 import ru.finney.pet.ui.progress.levelNodes
@@ -150,7 +150,7 @@ class LevelMenuInteriorReviewTest {
             level = level, check = LevelCheck(true, true, false, false, 1, null, true, false),
             stage = 2, balance = 60, totalSavings = 0, goal = null, periodNumber = 3,
             phase = PeriodPhase.ACTIVE, needsHint = null, levelGame = null,
-            food = emptyList(), care = emptyList(), nextStep = null, path = miniPathWindow(path),
+            food = emptyList(), care = emptyList(), nextStep = null, path = path.filter { it.level in miniPathLevels(level, content.economy.maxLevel) },
         )
     }
 

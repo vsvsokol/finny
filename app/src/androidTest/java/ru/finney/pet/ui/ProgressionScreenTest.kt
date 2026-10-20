@@ -124,8 +124,8 @@ class ProgressionScreenTest {
         val home = HomeUiState.Ready("Финни", appearance, false, state.pet, game.emotion(state), 1,
             game.levelCheck(state), 1, 50, 0, null, 1, PeriodPhase.PLANNING, game.needsHint(state),
             null, emptyList(), emptyList(), title = "Новичок",
-            path = ru.finney.pet.ui.home.miniPathWindow(
-                ru.finney.pet.ui.progress.levelNodes(game, content, state, appearance.character)))
+            path = ru.finney.pet.ui.progress.levelNodes(game, content, state, appearance.character)
+                .filter { it.level in ru.finney.pet.ui.home.miniPathLevels(1, content.economy.maxLevel) })
         var pathOpened = false
         show { HomeContent(home, {}, {}, {}, {}, {}, {}, { pathOpened = true }, {}, {}, {}, {}) }
         // Полосы со званием на главном нет (20.10: сдвигала кнопки) — открытия в панели уровня.

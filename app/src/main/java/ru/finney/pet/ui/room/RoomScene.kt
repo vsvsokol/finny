@@ -3,15 +3,11 @@ package ru.finney.pet.ui.room
 import ru.finney.pet.ui.motion.motionEnabled
 import ru.finney.pet.ui.motion.LocalAnimations
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.StartOffset
@@ -124,8 +120,14 @@ private const val LEAP_OVERSHOOT = 0.02f
  */
 private const val PLAY_LAMP_PEEK = 0.04f
 
-/** За сколько камера выбора интерьера возвращается: столько же уезжает панель выбора (HomeScreen). */
-private const val FOCUS_RETURN_MS = 250
+/**
+ * За сколько камера выбора интерьера отъезжает к обычному виду. Быстрее, чем уезжает
+ * панель выбора (250 мс, HomeScreen): низ холста опускается раньше её верха.
+ */
+private const val FOCUS_OUT_MS = 220
+
+/** За сколько камера выбора интерьера наезжает на выбранную часть. */
+private const val FOCUS_IN_MS = 400
 
 /**
  * Прогулка по игровой: раз в несколько секунд питомец сам скачет в случайное место.
@@ -575,14 +577,14 @@ fun RoomScene(
         }
 
         // Камера выбора интерьера: выбранная часть крупно над панелью выбора.
-        // Масштаб не меньше «холст во всю ширину» и сдвиг зажат, как у камеры сна:
+        // Масштаб не меньше обычного вида и сдвиг зажат, как у камеры сна:
         // за краем холста пусто, и показывать это нельзя.
         // Пока питомец ещё идёт в нужную комнату, кадр держится на старой: иначе камера
         // уезжала бы к вещи в спальне, а на экране оставалась игровая.
         // Игровая отражена: часть и питомец там лежат зеркально, и холст на экране кончается
         // по краям отражения, а не своим.
         val mirroredRoom = shown == RoomSpot.PLAY
-        val edit = with(density) {
+        val editTarget = with(density) {
             val framed = when {
                 shown != spot -> null
                 focusPet -> petOnScreen(shown)
@@ -590,7 +592,7 @@ fun RoomScene(
                 mirroredRoom -> focus?.mirrored(mirrorAxis)
                 else -> focus
             }
-            val target = framed?.let { rect ->
+            framed?.let { rect ->
                 val w = maxWidth.toPx()
                 val h = (maxHeight - focusBottom).toPx().coerceAtLeast(1f)
                 val floor = (maxHeight - focusSolid).toPx()
@@ -602,42 +604,48 @@ fun RoomScene(
                 val pad = FOCUS_PAD.toPx()
                 val rw = cw * rect.width
                 val rh = ch * rect.height
-                val s = minOf((w - 2 * pad) / rw, (h - 2 * pad) / rh, FOCUS_MAX_ZOOM).coerceAtLeast(w / (right - left))
+                val s = minOf((w - 2 * pad) / rw, (h - 2 * pad) / rh, FOCUS_MAX_ZOOM)
+                    .coerceAtLeast(maxOf(1f, w / (right - left)))
+                if (s == 1f) return@let Triple(1f, 0f, 0f)
                 val cx = shiftX.toPx() + cw * (rect.left + rect.width / 2f)
                 val cy = top + ch * (rect.top + rect.height / 2f)
                 val x = (w / 2f - s * cx).coerceIn(minOf(w - s * right, -s * left), -s * left)
                 val y = (h / 2f - s * cy).coerceIn(minOf(floor - s * (top + ch), -s * top), -s * top)
                 Triple(s, x, y)
+            } ?: Triple(1f, 0f, 0f)
+        }
+        // Один прогресс зума связывает масштаб со сдвигом: край холста остаётся
+        // за экраном на каждом кадре. Перед сменой объекта отъезжаем к обычному виду,
+        // меняем точку приближения и наезжаем снова — без горизонтального пролёта.
+        // Низ холста при выборе может стоять выше низа экрана — его закрывает панель
+        // ([focusSolid]). Отъезд быстрее, чем панель уезжает, а при входе наезд начинается
+        // после отъезда — когда панель уже поднялась: под ней не проглядывает кремовый фон.
+        var editCamera by remember { mutableStateOf(editTarget) }
+        val editZoom = remember { Animatable(1f) }
+        LaunchedEffect(editTarget, animations) {
+            if (!animations) {
+                editCamera = editTarget
+                editZoom.snapTo(1f)
+            } else {
+                if (editCamera != editTarget) {
+                    editZoom.animateTo(0f, tween(FOCUS_OUT_MS, easing = FastOutSlowInEasing))
+                    editCamera = editTarget
+                }
+                editZoom.animateTo(1f, tween(FOCUS_IN_MS, easing = FastOutSlowInEasing))
             }
-            // Без перелёта: масштаб и сдвиг идут одной кривой, и по дороге край холста
-            // не отходит от края экрана. С пружиной 0.8 они расходились — проглядывал фон.
-            //
-            // Низ холста при выборе может стоять выше низа экрана — его закрывает панель. Панель
-            // уезжает за 250 мс (HomeScreen), а камера отъезжала пружиной дольше секунды, и
-            // под уехавшей панелью был виден кремовый фон. Поэтому назад — за то же время и
-            // кривой, что не отстаёт от панели: низ холста всё время ниже её верха.
-            val spec: AnimationSpec<Float> = when {
-                !animations -> snap()
-                target == null -> tween(FOCUS_RETURN_MS, easing = LinearOutSlowInEasing)
-                else -> spring(dampingRatio = 1f, stiffness = Spring.StiffnessVeryLow)
-            }
-            val goal = target ?: Triple(1f, 0f, 0f)
-            Triple(
-                animateFloatAsState(goal.first, spec, label = "focusScale"),
-                animateFloatAsState(goal.second, spec, label = "focusX"),
-                animateFloatAsState(goal.third, spec, label = "focusY"),
-            )
         }
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
+                    val z = editZoom.value
+                    val s = 1f + (editCamera.first - 1f) * z
                     transformOrigin = TransformOrigin(0f, 0f)
-                    scaleX = edit.first.value
-                    scaleY = edit.first.value
-                    translationX = edit.second.value
-                    translationY = edit.third.value
+                    scaleX = s
+                    scaleY = s
+                    translationX = editCamera.second * z
+                    translationY = editCamera.third * z
                 },
         ) {
         Box(
@@ -714,9 +722,10 @@ fun RoomScene(
                 if (t >= 1f) return@drawBehind
                 val z = zoom.value
                 val sleep = 1f + (SLEEP_ZOOM - 1f) * z
-                val scale = edit.first.value * sleep
+                val edit = 1f + (editCamera.first - 1f) * editZoom.value
+                val scale = edit * sleep
                 val atCanvas = shiftY.toPx() + canvasH.toPx() * rollerAt(t)
-                val y = edit.third.value + edit.first.value * (camera.y * z + sleep * atCanvas)
+                val y = editCamera.third * editZoom.value + edit * (camera.y * z + sleep * atCanvas)
                 roller(y, h = canvasW.toPx() * 0.045f * scale, t = t)
             },
         )
