@@ -24,11 +24,16 @@
 
 Запуск из корня репозитория (Pillow, scipy):
     py -I tools/make_pet_looks.py           # слои и код
+    py -I tools/make_pet_looks.py luchik    # окраски только этих питомцев
     py -I tools/make_pet_looks.py --kotlin  # только код
+    py -I tools/make_pet_looks.py --small   # сжатие посильнее, как в split_pet_base
+
+Окраски собираются параллельно, по процессу на окраску.
 """
 
 import sys
 import tempfile
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -249,24 +254,30 @@ internal fun lookArt(lookId: String): Int? = when (lookId) {{
 
 private fun lookCharacterSkin(lookId: String): PetSkin? =
     ru.finney.pet.domain.model.PetLooks.character(lookId)?.skin
-""", encoding="utf-8")
+""", encoding="utf-8", newline="\n")
     print(KOTLIN)
+
+
+def build(pet: str, number: int, work: Path) -> None:
+    # В отдельном процессе свои глобальные split: папку с перекрашенными слоями
+    # задаём здесь, а не один раз в main.
+    name = make(pet, number, work)
+    split.SRC = work
+    print(f"— {name}")
+    split.split(name, split.PETS[pet])
+    split.blink(name)
+    split.mouth(name)
 
 
 def main() -> None:
     if "--kotlin" in sys.argv:
         write_kotlin()
         return
-    with tempfile.TemporaryDirectory() as tmp:
-        work = Path(tmp)
-        split.SRC = work
-        for pet, limb_suffix in split.PETS.items():
-            for number in (1, 2):
-                name = make(pet, number, work)
-                print(f"— {name}")
-                split.split(name, limb_suffix)
-                split.blink(name)
-                split.mouth(name)
+    pets = split.chosen(sys.argv[1:])
+    with tempfile.TemporaryDirectory() as tmp, ProcessPoolExecutor(max_workers=split.WORKERS) as pool:
+        jobs = [pool.submit(build, pet, number, Path(tmp)) for pet in pets for number in (1, 2)]
+        for job in jobs:
+            job.result()
     write_kotlin()
 
 

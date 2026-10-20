@@ -7,6 +7,9 @@ import ru.finney.pet.domain.game.Game
 import ru.finney.pet.domain.game.GoalProgress
 import ru.finney.pet.domain.model.GameContent
 import ru.finney.pet.domain.model.GameState
+import ru.finney.pet.domain.model.Goal
+import ru.finney.pet.domain.model.RewardKind
+import ru.finney.pet.R
 import ru.finney.pet.domain.progress.LevelUnlocks
 import ru.finney.pet.ui.components.FinneyIcons
 import ru.finney.pet.ui.room.itemArt
@@ -87,7 +90,8 @@ internal fun levelNodes(game: Game, content: GameContent, state: GameState, char
             failedTries = periods.count { game.isPassed(it) == false },
             unlocks = unlockLines(unlocks, future = level > current, isDemo = state.isDemo),
             chips = unlockChips(unlocks),
-            goalArt = unlocks.goals.mapNotNull { goal -> goal.rewardArt },
+            // Окраска — первой: на карте видно, где питомца можно перекрасить.
+            goalArt = unlocks.goals.sortedByDescending { it.rewardKind == RewardKind.LOOK }.mapNotNull { it.roadmapArt }.distinct(),
         )
     }
 }
@@ -116,9 +120,12 @@ internal fun unlockChips(unlocks: LevelUnlocks): List<UnlockChip> = buildList {
     unlocks.games.forEach { add(UnlockChip("Игра «${it.title}»")) }
     unlocks.harderGames.forEach { add(UnlockChip("«${it.title}» сложнее")) }
     unlocks.items.forEach { add(UnlockChip(it.label, art = itemArt(it.id), icon = FinneyIcons.Cart)) }
-    unlocks.goals.forEach { add(UnlockChip("Цель: ${it.label}", art = it.rewardArt, icon = FinneyIcons.Piggy)) }
+    unlocks.goals.forEach { add(UnlockChip("Цель: ${it.label}", art = it.roadmapArt, icon = FinneyIcons.Piggy)) }
     unlocks.title?.let { add(UnlockChip("Звание: $it")) }
 }
+
+/** На карте окраска — значком «облик», один на все окраски, а не головой в ней. */
+private val Goal.roadmapArt: Int? get() = if (rewardKind == RewardKind.LOOK) R.drawable.ic_look else rewardArt
 
 internal fun currentLevel(game: Game, content: GameContent, state: GameState, petName: String, now: Long = System.currentTimeMillis()): CurrentLevel {
     val level = game.level(state)

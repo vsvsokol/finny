@@ -162,18 +162,20 @@ private fun PathStep(node: LevelNode, next: LevelNode?, selected: Boolean, onCli
 private fun NodeCircle(node: LevelNode, selected: Boolean, onClick: () -> Unit) {
     // Выбранный узел — в голубом кольце: где ты на карте и что открыто в окне — разные вещи.
     val ring = if (selected) Modifier.border(StrokeRegular, FinneyBlue, CircleShape).padding(4.dp) else Modifier.padding(4.dp)
-    Box(
-        modifier = Modifier
-            .size(NodeSize)
-            .clip(CircleShape)
-            .clickable(onClick = onClick)
-            .then(ring),
-        contentAlignment = Alignment.Center,
-    ) {
-        when (node.status) {
-            NodeStatus.CURRENT -> LevelBadge(node.level, size = NodeSize - 8.dp)
-            NodeStatus.DONE -> Box(contentAlignment = Alignment.Center) {
-                Box(
+    // «✓» пройденного — поверх круга, а не внутри него: круг обрезан по себе (clip нужен
+    // нажатию), и галочка в его углу срезалась наполовину (20.10).
+    Box(Modifier.size(NodeSize)) {
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .clip(CircleShape)
+                .clickable(onClick = onClick)
+                .then(ring),
+            contentAlignment = Alignment.Center,
+        ) {
+            when (node.status) {
+                NodeStatus.CURRENT -> LevelBadge(node.level, size = NodeSize - 8.dp)
+                NodeStatus.DONE -> Box(
                     modifier = Modifier
                         .size(NodeSize - 8.dp)
                         .clip(CircleShape)
@@ -181,16 +183,18 @@ private fun NodeCircle(node: LevelNode, selected: Boolean, onClick: () -> Unit) 
                         .border(StrokeRegular, FinneyInk, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) { OutlinedText(node.level.toString(), style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center) }
-                CheckBadge(Modifier.align(Alignment.BottomEnd), size = 22.dp)
+                NodeStatus.FUTURE -> Box(
+                    modifier = Modifier
+                        .size(NodeSize - 8.dp)
+                        .clip(CircleShape)
+                        .background(FinneyCream)
+                        .border(StrokeRegular, FinneyInkFaded, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) { Text(node.level.toString(), style = MaterialTheme.typography.titleLarge, color = FinneyInkFaded) }
             }
-            NodeStatus.FUTURE -> Box(
-                modifier = Modifier
-                    .size(NodeSize - 8.dp)
-                    .clip(CircleShape)
-                    .background(FinneyCream)
-                    .border(StrokeRegular, FinneyInkFaded, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) { Text(node.level.toString(), style = MaterialTheme.typography.titleLarge, color = FinneyInkFaded) }
+        }
+        if (node.status == NodeStatus.DONE) {
+            CheckBadge(Modifier.align(Alignment.BottomEnd).offset(x = 2.dp, y = 2.dp), size = 24.dp)
         }
     }
 }
