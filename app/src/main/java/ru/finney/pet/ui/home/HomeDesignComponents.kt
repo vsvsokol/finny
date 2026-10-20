@@ -25,17 +25,23 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathOperation
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -43,7 +49,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import ru.finney.pet.R
@@ -55,6 +63,8 @@ import androidx.compose.foundation.border
 import ru.finney.pet.ui.motion.LocalAnimations
 import ru.finney.pet.ui.sound.LocalSounds
 import ru.finney.pet.ui.sound.Sfx
+import ru.finney.pet.ui.tasks.games.PillShade
+import ru.finney.pet.ui.tasks.games.insetShade
 import ru.finney.pet.ui.theme.*
 
 /** Исходная основа и пиктограмма остаются отдельными слоями, кольцо показывает реальные данные. */
@@ -208,51 +218,93 @@ internal fun HomeCareAction(
     }
 }
 
-/** Хвост остаётся у головы: меняется прозрачность и масштаб, а не размер области размещения. */
+/**
+ * Реплика питомца на главном. Пузырь — одна форма с хвостиком к голове, в обычной рамке
+ * и с тенью по низу, как плашки в играх: тонкий овал с отдельным хвостиком выглядел
+ * дёшево и чужим среди остального (20.10). Слева — значок того, что нужно питомцу, тот же,
+ * что на кнопке внизу: ребёнок видит, куда нажать.
+ *
+ * Хвост остаётся у головы: меняется прозрачность и масштаб, а не размер области размещения.
+ */
 @Composable
 internal fun PetSpeechBubble(
     text: String, onClick: () -> Unit, modifier: Modifier = Modifier, visible: Boolean = true,
-    tailAbove: Boolean = false,
+    tailAbove: Boolean = false, @DrawableRes icon: Int? = null,
 ) {
     val animations = LocalAnimations.current
+    val shape = remember(tailAbove) { SpeechShape(tailAbove) }
     Box(modifier) {
         AnimatedVisibility(visible,
             enter = if (animations) fadeIn(tween(180)) + scaleIn(
                 spring(dampingRatio = 0.72f, stiffness = 550f), initialScale = 0.84f,
-                transformOrigin = TransformOrigin(0.75f, if (tailAbove) 0f else 1f)) else EnterTransition.None,
+                transformOrigin = TransformOrigin(SpeechTailAt, if (tailAbove) 0f else 1f)) else EnterTransition.None,
             exit = if (animations) fadeOut(tween(220)) + scaleOut(tween(220), targetScale = 0.94f,
-                transformOrigin = TransformOrigin(0.75f, if (tailAbove) 0f else 1f)) else ExitTransition.None,
+                transformOrigin = TransformOrigin(SpeechTailAt, if (tailAbove) 0f else 1f)) else ExitTransition.None,
         ) {
-            Box(Modifier.widthIn(max = 196.dp).clickable(enabled = visible, role = Role.Button,
-                onClickLabel = "Помочь питомцу", onClick = onClick)) {
-                Canvas(Modifier.matchParentSize().graphicsLayer {
-                    scaleY = if (tailAbove) -1f else 1f
-                }) {
-                    val tail = 14.dp.toPx()
-                    val path = Path().apply {
-                        moveTo(size.width * 0.52f, size.height - tail - 4.dp.toPx())
-                        quadraticTo(size.width * 0.58f, size.height, size.width * 0.80f, size.height)
-                        quadraticTo(size.width * 0.70f, size.height - tail / 2, size.width * 0.72f, size.height - tail - 4.dp.toPx())
-                        close()
-                    }
-                    drawPath(path, Color.White)
-                    drawPath(path, FinneyInk, style = Stroke(StrokeThin.toPx()))
-                    drawOval(FinneyInk, size = Size(size.width, size.height - tail))
-                    val stroke = StrokeThin.toPx()
-                    drawOval(Color.White, topLeft = Offset(stroke, stroke),
-                        size = Size(size.width - stroke * 2, size.height - tail - stroke * 2))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier
+                    .widthIn(max = 236.dp)
+                    .background(Color.White, shape)
+                    .insetShade(shape, PillShade, 5.dp)
+                    .border(StrokeRegular, FinneyInk, shape)
+                    .clickable(enabled = visible, role = Role.Button, onClickLabel = "Помочь питомцу", onClick = onClick)
+                    .padding(
+                        start = 12.dp, end = 16.dp,
+                        top = 10.dp + if (tailAbove) SpeechTail else 0.dp,
+                        bottom = 14.dp + if (tailAbove) 0.dp else SpeechTail,
+                    ),
+            ) {
+                if (icon != null) {
+                    Box(
+                        Modifier.size(44.dp).background(FinneyCream, CircleShape).border(StrokeThin, FinneyInk, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) { Image(painterResource(icon), contentDescription = null, modifier = Modifier.size(30.dp)) }
                 }
                 AnimatedContent(text, transitionSpec = {
                     if (animations) fadeIn(tween(180, delayMillis = 80)) togetherWith fadeOut(tween(100))
                     else EnterTransition.None togetherWith ExitTransition.None
                 }, label = "petSpeechText") { message ->
-                    Text(message, style = MaterialTheme.typography.bodyMedium, color = FinneyInk,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(start = 18.dp, end = 18.dp,
-                            top = if (tailAbove) 28.dp else 14.dp, bottom = if (tailAbove) 14.dp else 28.dp))
+                    Text(
+                        message, style = MaterialTheme.typography.titleMedium, color = FinneyInk,
+                        textAlign = if (icon != null) TextAlign.Start else TextAlign.Center,
+                    )
                 }
             }
         }
+    }
+}
+
+/** Где по ширине пузыря кончик хвостика: над головой питомца, его ставит раскладка в HomeScreen. */
+private const val SpeechTailAt = 0.66f
+
+/** Высота хвостика реплики. */
+private val SpeechTail = 14.dp
+
+/**
+ * Пузырь и хвостик — один контур: прямоугольник и хвост объединены, поэтому рамка
+ * не перечёркивает основание хвоста. Хвост мягкий, слегка загнут к питомцу.
+ */
+private class SpeechShape(private val tailAbove: Boolean) : Shape {
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+        val t = with(density) { SpeechTail.toPx() }
+        val r = with(density) { 22.dp.toPx() }
+        val w = with(density) { 22.dp.toPx() }
+        val top = if (tailAbove) t else 0f
+        val bottom = if (tailAbove) size.height else size.height - t
+        val body = Path().apply { addRoundRect(RoundRect(0f, top, size.width, bottom, CornerRadius(r))) }
+        val tip = size.width * SpeechTailAt
+        // Основание хвоста заходит внутрь тела, чтобы объединение было без щели.
+        val baseY = if (tailAbove) top + t * 0.6f else bottom - t * 0.6f
+        val tipY = if (tailAbove) 0f else size.height
+        val tail = Path().apply {
+            moveTo(tip - w * 0.75f, baseY)
+            quadraticTo(tip - w * 0.1f, (baseY + tipY) / 2f, tip + w * 0.15f, tipY)
+            quadraticTo(tip + w * 0.2f, (baseY + tipY) / 2f + (if (tailAbove) t * 0.2f else -t * 0.2f), tip + w * 0.55f, baseY)
+            close()
+        }
+        return Outline.Generic(Path().apply { op(body, tail, PathOperation.Union) })
     }
 }
 

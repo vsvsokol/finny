@@ -49,10 +49,17 @@ abstract class GameDao {
     abstract suspend fun setWorn(profileId: Long, itemId: String?, eyesId: String?)
 
     @Query(
-        "UPDATE profiles SET roomWall = :wall, roomWindow = :window, roomLamp = :lamp, wornLook = :look " +
+        "UPDATE profiles SET roomWall = :wall, roomWindow = :window, roomLamp = :lamp, roomRug = :rug, wornLook = :look " +
             "WHERE id = :profileId",
     )
-    abstract suspend fun setRoomAndLook(profileId: Long, wall: String?, window: String?, lamp: String?, look: String?)
+    abstract suspend fun setRoomAndLook(
+        profileId: Long,
+        wall: String?,
+        window: String?,
+        lamp: String?,
+        rug: String?,
+        look: String?,
+    )
 
     @Upsert
     abstract suspend fun upsertPet(pet: PetStateEntity)
@@ -111,7 +118,7 @@ abstract class GameDao {
     open suspend fun writeGame(profileId: Long, game: GameRows) {
         setActiveGoal(profileId, game.activeGoalId)
         setWorn(profileId, game.wornItemId, game.wornEyesId)
-        setRoomAndLook(profileId, game.roomWall, game.roomWindow, game.roomLamp, game.wornLook)
+        setRoomAndLook(profileId, game.roomWall, game.roomWindow, game.roomLamp, game.roomRug, game.wornLook)
         upsertPet(game.pet)
         upsertPeriods(game.periods)
 
@@ -147,6 +154,7 @@ data class GameRows(
     val roomWall: String? = null,
     val roomWindow: String? = null,
     val roomLamp: String? = null,
+    val roomRug: String? = null,
     val wornLook: String? = null,
     val pet: PetStateEntity,
     val periods: List<PeriodEntity>,

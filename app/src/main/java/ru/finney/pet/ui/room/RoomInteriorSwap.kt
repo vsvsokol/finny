@@ -4,8 +4,11 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -27,12 +30,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -49,12 +55,17 @@ import kotlin.math.sin
 // Смена частей интерьера в комнате. Часть не подменяется кадром: ребёнок должен
 // увидеть, что именно поменялось, и порадоваться этому. У каждой части свой ход:
 // стену прокатывает валик (он поверх всей комнаты, см. RoomScene), окно схлопывается и раскрывается, торшер падает сверху
-// и мигает, включаясь. Всё читается на отрисовке и не пересобирает комнату.
+// и мигает, включаясь, старый ковёр сворачивается и раскатывается новый. Всё читается на отрисовке
+// и не пересобирает комнату.
 
-/** Сколько идёт смена: стена — проход валика, окно — схлопнулось и раскрылось, торшер — до конца мигания. */
+/**
+ * Сколько идёт смена: стена — проход валика, окно — схлопнулось и раскрылось, торшер — до конца
+ * мигания, ковёр — свернули старый и раскатали новый.
+ */
 internal const val WALL_SWAP_MS = 750
 internal const val WINDOW_SWAP_MS = 950
 internal const val LAMP_SWAP_MS = 1600
+internal const val RUG_SWAP_MS = 1300
 
 /** Доли смены торшера: когда новый стукнулся об пол и когда щёлкнул выключатель. */
 internal const val LAMP_LANDS = 0.5f
@@ -74,6 +85,14 @@ private const val WINDOW_IN_START = 0.25f
 /** Торшер: старый пропадает за эту долю, новый начинает падать с этой. */
 private const val LAMP_OUT_END = 0.18f
 private const val LAMP_FALL_START = 0.15f
+
+/** Ковёр: старый сворачивается до этой доли, новый раскатывается от и до. */
+private const val RUG_OUT_END = 0.35f
+private const val RUG_IN_START = 0.3f
+private const val RUG_IN_END = 0.85f
+
+/** Ковёр сворачивается и раскатывается рукой: быстро в начале, мягко у края. */
+private val RugEasing = CubicBezierEasing(0.3f, 0f, 0.2f, 1f)
 
 /**
  * Часть интерьера в смене: что было, что стало и сколько смены прошло (1 — закончилась).
@@ -217,6 +236,62 @@ internal fun LampSwap(swap: PartSwap<LampSkin>, canvasW: Dp, canvasH: Dp) {
             }
         },
     ) { Layer(now.layer, canvasW, canvasH) }
+}
+
+/**
+ * Ковёр: старый сворачивается вправо, новый раскатывается слева направо и чуть
+ * подпрыгивает, расправляясь. Место у каждого своё ([rugRect]): рисунки разной высоты.
+ *
+ * @param mirrored холст отражён (игровая): рисунок разворачивается обратно, чтобы
+ *   ковёр был таким, как нарисован, а раскатывался по экрану слева направо.
+ */
+@Composable
+internal fun RugSwap(swap: PartSwap<RugSkin>, floor: ToyFloor, canvasW: Dp, canvasH: Dp, mirrored: Boolean) {
+    if (swap.running) {
+        val old = swap.old
+        Rug(old, rugRect(floor, old), canvasW, canvasH, mirrored) {
+            // Сворачивается к правому краю: слева остаётся пол.
+            val k = RugEasing.transform(phase(swap.progress.value, 0f, RUG_OUT_END))
+            clipRect(left = size.width * k) { this@Rug.drawContent() }
+        }
+    }
+    val now = swap.now
+    val rect = rugRect(floor, now)
+    Rug(now, rect, canvasW, canvasH, mirrored) {
+        val t = swap.progress.value
+        if (t >= 1f) return@Rug drawContent()
+        val k = RugEasing.transform(phase(t, RUG_IN_START, RUG_IN_END))
+        if (k <= 0f) return@Rug
+        clipRect(right = size.width * k) { this@Rug.drawContent() }
+    }
+    // Искры над раскатанным ковром — как у окна и торшера.
+    Box(
+        Modifier.fillMaxSize().drawBehind {
+            val t = swap.progress.value
+            if (t < 1f) sparks(Offset(rect.left + rect.width / 2f, rect.top + rect.height / 2f), phase(t, RUG_IN_END - 0.1f, 1f))
+        },
+    )
+}
+
+@Composable
+private fun Rug(
+    skin: RugSkin,
+    rect: RelRect,
+    canvasW: Dp,
+    canvasH: Dp,
+    mirrored: Boolean,
+    clip: ContentDrawScope.() -> Unit,
+) {
+    Image(
+        painter = painterResource(skin.image),
+        contentDescription = null,
+        contentScale = ContentScale.FillBounds,
+        modifier = Modifier
+            .offset(canvasW * rect.left, canvasH * rect.top)
+            .requiredSize(canvasW * rect.width, canvasH * rect.height)
+            .graphicsLayer { if (mirrored) scaleX = -1f }
+            .drawWithContent { clip() },
+    )
 }
 
 /**

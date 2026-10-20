@@ -38,6 +38,7 @@ fun rewardArt(rewardId: String): Int? = accessoryArt(rewardId)?.res ?: when (rew
     "sea" -> R.drawable.room_sea_preview
     "forest" -> R.drawable.room_forest_preview
     "town" -> R.drawable.room_town_preview
+    "oasis" -> R.drawable.room_oasis_preview
     // Окраска — голова в ней: в кружке 28 dp туловища всё равно не разглядеть.
     else -> lookArt(rewardId)
 }

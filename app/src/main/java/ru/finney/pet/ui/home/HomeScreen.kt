@@ -32,6 +32,7 @@ import ru.finney.pet.ui.theme.RadiusCheckbox
 import ru.finney.pet.ui.theme.RadiusPanel
 import ru.finney.pet.ui.theme.StrokeBold
 import ru.finney.pet.ui.theme.StrokeRegular
+import ru.finney.pet.ui.motion.SteadyFrameRate
 import ru.finney.pet.ui.motion.motionEnabled
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -330,6 +331,16 @@ private fun emotionReason(emotion: Emotion, hasToys: Boolean): String? = when (e
     Emotion.CALM -> null
 }
 
+/** Значок у реплики — тот же, что на кнопке, которая поможет. Весёлому и спокойному значок не нужен. */
+@DrawableRes
+private fun emotionIcon(emotion: Emotion): Int? = when (emotion) {
+    Emotion.HUNGRY -> R.drawable.home_eat_icon
+    Emotion.DIRTY -> R.drawable.home_wash_icon
+    Emotion.TIRED -> R.drawable.home_sleep_icon
+    Emotion.SAD -> R.drawable.home_smile_icon
+    Emotion.HAPPY, Emotion.CALM -> null
+}
+
 @Composable
 internal fun HomeContent(
     state: HomeUiState.Ready,
@@ -361,6 +372,9 @@ internal fun HomeContent(
     actionLayout: HomeActionLayout = HomeActionLayout.SPLIT,
     shopContent: @Composable (Int, () -> Unit) -> Unit = { balance, click -> HomeShopButton(balance, click) },
 ) {
+    // Комната тяжёлая для 120 Гц: на ровных 60 анимации идут без рывков (SteadyFrameRate).
+    SteadyFrameRate()
+
     // Питомец спит — это ночь: он в капсуле, свет выключен, игра на паузе
     // до утра. Глаза закрываются, когда он уже внутри, и открываются,
     // как только проснулся. Открыли приложение, а он спит, — глаза закрыты сразу.
@@ -467,6 +481,12 @@ internal fun HomeContent(
     // выбирают, интерфейс главной расступается, а камера подлетает к питомцу или вещи.
     var roomEdit by rememberSaveable { mutableStateOf<EditTab?>(null) }
     val editing = roomEdit != null
+    // Панель живёт в спальне, а ковёр лежит в игровой: на вкладке «Ковёр» питомец уходит туда,
+    // с остальных вкладок — обратно. Закрыли панель — остаётся, где был.
+    LaunchedEffect(roomEdit) {
+        val tab = roomEdit ?: return@LaunchedEffect
+        spot = if (tab.room == InteriorPart.RUG) RoomSpot.PLAY else RoomSpot.LIVING
+    }
     val editScope = rememberCoroutineScope()
     // Комната — из сохранения (ядро помнит её после перезапуска). «Вся комната» ставит
     // части по очереди и сверяется со свежей комнатой, а не с той, что была при нажатии.
@@ -720,6 +740,11 @@ internal fun HomeContent(
                 speechNote = "Я уже наигрался!\nНовые игры —\nна следующем уровне."
                 speechRequest++
             }
+            // Все игрушки убраны в ящик — показывать на полу нечего.
+            s.toys.none { it in toyBounds } -> {
+                speechNote = "Игрушки в ящике.\nНажми на него —\nи они выпрыгнут!"
+                speechRequest++
+            }
             playShow?.isActive != true -> playShow = editScope.launch {
                 val id = s.toys.firstOrNull { it in toyBounds } ?: return@launch
                 toyShown = true
@@ -814,11 +839,18 @@ internal fun HomeContent(
             interior = interior,
             focus = roomEdit?.room?.let { interior.focusOf(it) },
             focusPet = roomEdit?.pet == true,
+            focusRug = roomEdit?.room == InteriorPart.RUG,
             focusBottom = pickerCovers,
             onToyDrag = ::onToyDrag,
             onToyDrop = ::onToyDrop,
             toyNudge = showcase::offsetFor,
             onToyPlaced = { id, bounds -> if (toyBounds[id] != bounds) toyBounds[id] = bounds },
+            // Игрушка в ящике не лежит на полу: ни рука, ни подскок её не показывают.
+            onToyGone = { id -> toyBounds -= id },
+            onToyBoxEmpty = {
+                speechNote = "Ящик пустой.\nПеретащи в него\nигрушку!"
+                speechRequest++
+            },
         ) {
             // Нажатие — питомец подпрыгивает и говорит, как ему: это игра, а не меню.
             // Раньше реплику открывало сердечко у головы — радость теперь кольцом на «Игре».
@@ -1062,6 +1094,7 @@ internal fun HomeContent(
             PetSpeechBubble(
                 visible = speechVisible, tailAbove = speechBelow,
                 text = speechNote ?: emotionReason(state.emotion, state.toys.isNotEmpty()) ?: "Мне хорошо!",
+                icon = if (speechNote == null) emotionIcon(state.emotion) else null,
                 onClick = {
                     speechVisible = false
                     if (speechNote == null) when (state.emotion) {

@@ -192,6 +192,7 @@ object TaskChecks {
     private fun MutableList<String>.checkReceipt(task: ReceiptTask, at: String) {
         if (task.cart.isEmpty()) add("$at — cart пустой")
         if (task.lines.isEmpty()) add("$at — lines пустой")
+        task.mistakes?.let { if (it !in 1..task.cart.size + 1) add("$at — mistakes от 1 до ${task.cart.size + 1}: по ошибке на товар и сдачу") }
         duplicates(task.cart.map { it.id }).forEach { add("$at — повторяется товар $it") }
         duplicates(task.lines.map { it.id }).forEach { add("$at — повторяется строка $it") }
         task.cart.filter { it.price <= 0 || it.qty <= 0 }.forEach { add("$at — ${it.id}: цена и qty должны быть > 0") }

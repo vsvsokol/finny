@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -101,7 +102,7 @@ private val ToyFooting = Footing(feetX = 0.5f, feetY = 0.92f)
 private const val HELD_SCALE = 1.2f
 
 /** На сколько поднята игрушка в руке — доля её высоты. Тень остаётся на полу. */
-private const val HELD_LIFT = 0.45f
+internal const val HELD_LIFT = 0.45f
 
 /** Поднятая игрушка дальше от пола — тень под ней бледнее на эту долю. */
 private const val HELD_SHADOW_FADE = 0.45f
@@ -155,6 +156,12 @@ private fun clampToFloor(place: RelRect, shift: Offset, floor: ToyFloor): Offset
     y = shift.y.coerceIn(FLOOR_BACK - place.bottom, FLOOR_FRONT - place.bottom),
 )
 
+/** Где игрушка с местом [place] лежит сейчас, с учётом сдвига из [moves]. */
+internal fun toyHere(toyId: String, place: RelRect, moves: Map<String, Offset>, floor: ToyFloor): RelRect {
+    val shift = clampToFloor(place, moves[toyId] ?: Offset.Zero, floor)
+    return place.shiftedX(shift.x).shiftedY(shift.y)
+}
+
 /**
  * Одна игрушка на полу.
  *
@@ -169,6 +176,10 @@ private fun clampToFloor(place: RelRect, shift: Offset, floor: ToyFloor): Offset
  *   Читается на отрисовке.
  * @param mirrored комната отражена (игровая): рисунок и сдвиги на экране разворачиваются
  *   обратно, чтобы игрушка выглядела как в магазине, а рука несла её туда, куда надо.
+ * @param onMoved игрушку несут, и она теперь здесь — доли холста. Для ящика (ToyBox.kt).
+ * @param catch игрушку отпустили здесь, поднятой на столько-то: true — её забрал ящик,
+ *   и на пол она не опускается.
+ * @param onGone игрушка ушла со сцены: в ящик или из комнаты.
  */
 @Composable
 internal fun RoomToy(
@@ -187,6 +198,9 @@ internal fun RoomToy(
     onPlaced: (toyId: String, bounds: Rect) -> Unit = { _, _ -> },
     mirrored: Boolean = false,
     watching: () -> Boolean = { false },
+    onMoved: (toyId: String, here: RelRect) -> Unit = { _, _ -> },
+    catch: (toyId: String, here: RelRect, lift: Float) -> Boolean = { _, _, _ -> false },
+    onGone: (toyId: String) -> Unit = {},
 ) {
     val flip = if (mirrored) -1f else 1f
     val shift = clampToFloor(place, moves[toyId] ?: Offset.Zero, floor)
@@ -200,11 +214,24 @@ internal fun RoomToy(
     val move by rememberUpdatedState(onDrag)
     val placed by rememberUpdatedState(onPlaced)
     val canvasPx = with(LocalDensity.current) { Size(canvasW.toPx(), canvasH.toPx()) }
+    val moved by rememberUpdatedState(onMoved)
+    val caught by rememberUpdatedState(catch)
+    val gone by rememberUpdatedState(onGone)
+    val currentPlace by rememberUpdatedState(place)
+    val currentFloor by rememberUpdatedState(floor)
+    DisposableEffect(toyId) { onDispose { gone(toyId) } }
+
+    // Где игрушка сейчас — по последнему сдвигу, а не по тому, что было при нажатии.
+    fun hereNow(): RelRect {
+        val now = clampToFloor(currentPlace, moves[toyId] ?: Offset.Zero, currentFloor)
+        return currentPlace.shiftedX(now.x).shiftedY(now.y)
+    }
 
     fun release() {
         if (!held) return
         held = false
         drop(toyId)
+        if (caught(toyId, hereNow(), lift.value)) return
         scope.launch { lift.animateTo(0f, spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMediumLow)) }
     }
 
@@ -243,6 +270,7 @@ internal fun RoomToy(
                         val now = moves[toyId] ?: Offset.Zero
                         val step = Offset(amount.x / canvasPx.width, amount.y / canvasPx.height)
                         moves[toyId] = clampToFloor(place, now + step, floor)
+                        moved(toyId, hereNow())
                         val onScreen = Offset(amount.x * flip, amount.y)
                         move(toyId, bounds.center + onScreen, onScreen)
                     },

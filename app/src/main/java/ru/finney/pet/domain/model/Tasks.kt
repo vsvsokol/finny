@@ -433,6 +433,8 @@ data class ChangeRound(
 /**
  * «Проверь чек»: сверить чек с пакетом и сдачу, найти ошибки кассира.
  * [paid] — сколько Финни дал на кассе, [change] — сколько сдачи вернул кассир.
+ * С [mistakes] строки, «дали», сдачу и тексты итога пишет генератор (`ReceiptMaker`),
+ * каждый раз с новыми ошибками; без него — как записано в tasks.json.
  */
 @Serializable
 @SerialName("receipt")
@@ -450,9 +452,11 @@ data class ReceiptTask(
     /** Что на самом деле в пакете. Цена — как на ценнике в магазине. */
     val cart: List<ReceiptItem>,
     /** Что пробито в чеке, по строке на штуку. */
-    val lines: List<ReceiptLine>,
-    val paid: Int,
-    val change: Int,
+    val lines: List<ReceiptLine> = emptyList(),
+    val paid: Int = 0,
+    val change: Int = 0,
+    /** Сколько ошибок сделает кассир; null — ошибки уже записаны в [lines] и [change]. */
+    val mistakes: Int? = null,
 ) : TaskDefinition()
 
 /** Товар в пакете: [qty] штук по [price] за штуку. */

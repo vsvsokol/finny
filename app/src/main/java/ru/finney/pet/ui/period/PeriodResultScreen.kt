@@ -111,7 +111,15 @@ fun PeriodResultScreen(
             FinneyButton(text = "На главный", onClick = onBack)
         }
 
-        is PeriodResultUiState.Ready -> PeriodResultContent(state = s, onBack = onBack, onOpenBudget = onOpenBudget)
+        // Свежий итог — праздник тактами; из истории и по «Подробнее» — отчёт с банками и деньгами.
+        is PeriodResultUiState.Ready -> {
+            var details by rememberSaveable { mutableStateOf(false) }
+            if (s.canPlanNext && !details) {
+                LevelCeremony(state = s, onFinish = onOpenBudget, onDetails = { details = true })
+            } else {
+                PeriodResultContent(state = s, onBack = onBack, onOpenBudget = onOpenBudget)
+            }
+        }
     }
 }
 
@@ -347,7 +355,7 @@ private fun ConditionTile(condition: Condition, lit: () -> Float, modifier: Modi
 
 /** Пятиконечная звезда: жёлтая — заработана, бледный контур — нет. */
 @Composable
-private fun Star(filled: Boolean, modifier: Modifier = Modifier) {
+internal fun Star(filled: Boolean, modifier: Modifier = Modifier) {
     Canvas(modifier) {
         val c = Offset(size.width / 2f, size.height / 2f)
         val r = size.minDimension / 2f

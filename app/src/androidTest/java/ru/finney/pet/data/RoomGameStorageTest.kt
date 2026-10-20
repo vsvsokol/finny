@@ -132,7 +132,7 @@ class RoomGameStorageTest {
         db.close()
         db = open()
         val state = RoomGameStorage(db.gameDao()).load(id)!!.state
-        assertEquals(RoomChoice(wall = "honey", window = "honey", lamp = RoomThemes.BASE), state.room)
+        assertEquals(RoomChoice(wall = "honey", window = "honey", lamp = RoomThemes.BASE, rug = "honey"), state.room)
         assertNull(state.wornLook)
     }
 
