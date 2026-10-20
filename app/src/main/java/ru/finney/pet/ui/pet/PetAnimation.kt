@@ -1,5 +1,6 @@
 package ru.finney.pet.ui.pet
 
+import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.FastOutLinearInEasing
@@ -41,6 +42,9 @@ import kotlin.random.Random
  * Игры с игрушкой — [lookAt]: тянется к игрушке в руке ребёнка.
  * Грусти — [playSigh]: вздыхает и оседает, руки повисают.
  *
+ * Когда с питомцем давно ничего не делали, он сам наклоняет голову, оглядывается
+ * или переминается — см. [idle]. Запускает это [rememberPetAnimation].
+ *
  * Без анимаций (ТЗ п. 3.6) цепочки `play*` не начинаются: при нулевой скорости каждый
  * шаг длится кадр, и питомец мелькал бы промежуточными позами. Одиночные переходы
  * ([lookAt], [openMouth]) просто встают в конечное положение.
@@ -53,6 +57,17 @@ class PetAnimation internal constructor(private val scope: CoroutineScope) {
 
     /** 0 — обычная поза, 1 — максимальное приседание перед прыжком. */
     internal val crouch = Animatable(0f)
+
+    /**
+     * Вытянутость в прыжке: 0 — как обычно, 1 — вытянут сильнее всего. Отдельно от [lift]:
+     * вытягивается он, пока летит быстро, — при отрыве и падении, — а в верхней точке
+     * и на земле нет. Когда вытянутость шла за высотой, у земли она пропадала раньше
+     * приседания, и между ними мелькала обычная поза: прыжок выглядел деревянным.
+     */
+    internal val stretch = Animatable(0f)
+
+    /** Наклон головы в градусах, по часовой — положительный. Только в [idle]. */
+    internal val headTilt = Animatable(0f)
 
     /** 0 — рот настроения, 1 — открыт навстречу еде. */
     internal val mouth = Animatable(0f)
@@ -72,11 +87,25 @@ class PetAnimation internal constructor(private val scope: CoroutineScope) {
     private var leanJob: Job? = null
     private var droopJob: Job? = null
 
+    /** Прыжок от начала приседания до касания земли. Пружинка после касания сюда не входит. */
+    private var airborne = false
+
+    /** Падает вниз из верхней точки. */
+    private var falling = false
+
+    /** Когда питомца в последний раз о чём-то просили, по [SystemClock.uptimeMillis]. */
+    private var pokedAt = SystemClock.uptimeMillis()
+
+    private fun poke() {
+        pokedAt = SystemClock.uptimeMillis()
+    }
+
     /**
      * Потянуться к игрушке: [side] — где она, от −1 (слева) до 1 (справа). Глаза у питомца
      * нарисованы, водить ими нельзя, поэтому «смотрит» он всем телом. 0 — выпрямиться.
      */
     fun lookAt(side: Float) {
+        poke()
         leanJob?.cancel()
         leanJob = scope.launch {
             lean.animateTo(side.coerceIn(-1f, 1f), spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessLow))
@@ -85,6 +114,7 @@ class PetAnimation internal constructor(private val scope: CoroutineScope) {
 
     /** Грустно: медленно оседает, стоит так и нехотя выпрямляется. Пока вздыхает, новый не начинается. */
     fun playSigh() {
+        poke()
         if (droopJob?.isActive == true) return
         droopJob = scope.launch {
             if (!motionEnabled()) return@launch
@@ -96,6 +126,7 @@ class PetAnimation internal constructor(private val scope: CoroutineScope) {
 
     /** Еда летит к питомцу — рот открывается навстречу; мимо — закрывается. */
     fun openMouth(open: Boolean) {
+        poke()
         mouthJob?.cancel()
         mouthJob = scope.launch {
             mouth.animateTo(
@@ -107,6 +138,7 @@ class PetAnimation internal constructor(private val scope: CoroutineScope) {
 
     /** Поймал: рот захлопывается, три жевка с приседанием, потом радость. */
     fun playEat() {
+        poke()
         mouthJob?.cancel()
         mouthJob = scope.launch {
             // Рот мог остаться открытым навстречу еде — закрыть без жевания и прыжка.
@@ -129,6 +161,7 @@ class PetAnimation internal constructor(private val scope: CoroutineScope) {
 
     /** Щекотно от мыла. Пока покачивание идёт, новые касания его не перезапускают. */
     fun playGiggle() {
+        poke()
         if (wiggleJob?.isActive == true) return
         wiggleJob = scope.launch {
             if (!motionEnabled()) return@launch
@@ -142,30 +175,110 @@ class PetAnimation internal constructor(private val scope: CoroutineScope) {
      * Прыжок радости. Пока прыгает, новые касания его не перезапускают: раньше каждое касание
      * обрывало прыжок и начинало с приседания, а высота оставалась прежней — при частых
      * касаниях питомец зависал в воздухе.
+     *
+     * Пружинку после приземления новый прыжок обрывает. Иначе при прогулке по залу
+     * (`RoomScene`, скачок раз в 670 мс) каждый второй скачок попадал на пружинку
+     * и пропускался, и питомец ехал по полу, не подпрыгивая.
+     *
+     * Сумма приседания и полёта — 670 мс, как у скачка в `RoomScene`: менять вместе.
+     * Следующий скачок прогулки просят ровно в момент касания, и стоит кадру опоздать,
+     * прыжок ещё «в воздухе» — поэтому у самой земли новый уже можно начать.
      */
     fun playJoy() {
-        if (job?.isActive == true) return
+        poke()
+        if (airborne && !(falling && lift.value < LANDING_LIFT)) return
+        job?.cancel()
         job = scope.launch {
             if (!motionEnabled()) return@launch
+            airborne = true
             try {
                 crouch.animateTo(1f, tween(durationMillis = 140, easing = FastOutLinearInEasing))
-                launch { crouch.animateTo(0f, tween(durationMillis = 170)) }
-                lift.animateTo(1f, tween(durationMillis = 250, easing = FastOutSlowInEasing))
-                lift.animateTo(0f, tween(durationMillis = 280, easing = FastOutSlowInEasing))
-                crouch.animateTo(0.55f, tween(durationMillis = 80))
+                // Отрыв: из приседания сразу в вытянутую позу, без остановки в обычной.
+                launch { crouch.animateTo(0f, tween(durationMillis = 90)) }
+                launch {
+                    stretch.animateTo(1f, tween(durationMillis = 90))
+                    stretch.animateTo(0f, tween(durationMillis = 160, easing = LinearOutSlowInEasing))
+                }
+                // Вверх тормозит, вниз разгоняется — так летит брошенное.
+                lift.animateTo(1f, tween(durationMillis = 250, easing = LinearOutSlowInEasing))
+                launch { stretch.animateTo(0.8f, tween(durationMillis = 280, easing = FastOutLinearInEasing)) }
+                falling = true
+                lift.animateTo(0f, tween(durationMillis = 280, easing = FastOutLinearInEasing))
+                airborne = false
+                falling = false
+                // Касание: вытянутость сразу переходит в приседание.
+                launch { stretch.animateTo(0f, tween(durationMillis = 70)) }
+                crouch.animateTo(0.55f, tween(durationMillis = 70))
                 crouch.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
             } finally {
+                airborne = false
+                falling = false
                 // Прыжок оборвала другая анимация (жевание берёт приседание) — приземлиться.
                 if (lift.value != 0f) scope.launch { lift.animateTo(0f, tween(durationMillis = 200)) }
+                if (stretch.value != 0f) scope.launch { stretch.animateTo(0f, tween(durationMillis = 120)) }
             }
+        }
+    }
+
+    /**
+     * Сам себя занимает, пока с ним ничего не делают: раз в несколько секунд — наклон
+     * головы, оглядывание или переминание. Паузы случайные, как у моргания и прогулки:
+     * по часам он выглядел бы заведённым. Пока идёт любая другая анимация — ждёт.
+     */
+    internal suspend fun idle() {
+        while (true) {
+            delay(Random.nextLong(IDLE_PAUSE_MS.first, IDLE_PAUSE_MS.last))
+            if (!motionEnabled()) continue
+            if (SystemClock.uptimeMillis() - pokedAt < IDLE_AFTER_MS) continue
+            if (listOf(job, mouthJob, wiggleJob, leanJob, droopJob).any { it?.isActive == true }) continue
+            val side = if (Random.nextBoolean()) 1f else -1f
+            val roll = Random.nextFloat()
+            // Отдельной задачей: касание перехватывает приседание, и прерванная анимация
+            // бросает отмену. Здесь она гасит только это движение, а не весь цикл.
+            scope.launch {
+                when {
+                    roll < 0.5f -> {
+                        headTilt.animateTo(side * Random.nextFloat() * 3f + side * 5f, HeadSpring)
+                        delay(Random.nextLong(900, 1700))
+                        headTilt.animateTo(0f, HeadSpring)
+                    }
+                    roll < 0.8f -> {
+                        headTilt.animateTo(side * 6f, HeadSpring)
+                        delay(450)
+                        headTilt.animateTo(-side * 6f, HeadSpring)
+                        delay(450)
+                        headTilt.animateTo(0f, HeadSpring)
+                    }
+                    else -> repeat(2) {
+                        crouch.animateTo(0.25f, tween(durationMillis = 180, easing = FastOutSlowInEasing))
+                        crouch.animateTo(0f, tween(durationMillis = 220, easing = FastOutSlowInEasing))
+                    }
+                }
+            }.join()
         }
     }
 }
 
+// Сколько с питомцем ничего не должно происходить, прежде чем он займёт себя сам,
+// и паузы между такими движениями. Прогулка по залу считается делом — скачок идёт
+// через [PetAnimation.playJoy].
+// Ниже этой высоты падающий питомец уже «у земли» и новый прыжок можно начать.
+// Последние ~40 мс падения: хватает на опоздавший кадр-другой и не даёт взлетать
+// касаниями посреди прыжка.
+private const val LANDING_LIFT = 0.3f
+
+private const val IDLE_AFTER_MS = 5_000L
+private val IDLE_PAUSE_MS = 4_000L..9_000L
+
+// Голова наклоняется мягко и чуть пружинит на месте: без пружины выглядело механически.
+private val HeadSpring = spring<Float>(dampingRatio = 0.55f, stiffness = Spring.StiffnessLow)
+
 @Composable
 fun rememberPetAnimation(): PetAnimation {
     val scope = rememberCoroutineScope()
-    return remember(scope) { PetAnimation(scope) }
+    val animation = remember(scope) { PetAnimation(scope) }
+    LaunchedEffect(animation) { animation.idle() }
+    return animation
 }
 
 /**
@@ -214,6 +327,7 @@ fun rememberPoseProvider(animation: PetAnimation): () -> PetPose {
                 animation.lift.value, animation.crouch.value,
                 lid.value, animation.mouth.value, animation.wiggle.value,
                 animation.lean.value, animation.droop.value,
+                animation.stretch.value, animation.headTilt.value,
             )
         }
     }
@@ -260,11 +374,13 @@ private fun composePose(
     wiggle: Float,
     lean: Float = 0f,
     droop: Float = 0f,
+    stretch: Float = 0f,
+    headTilt: Float = 0f,
 ): PetPose =
     // Дыхание и прыжок — это объём: что прибавилось по высоте, то убавилось по ширине.
     PetPose(
-        scaleX = 1f - breath * 0.008f + crouch * 0.07f - lift * 0.035f + droop * 0.03f,
-        scaleY = 1f + breath * 0.016f - crouch * 0.10f + lift * 0.055f - droop * 0.06f,
+        scaleX = 1f - breath * 0.008f + crouch * 0.07f - stretch * 0.035f + droop * 0.03f,
+        scaleY = 1f + breath * 0.016f - crouch * 0.10f + stretch * 0.055f - droop * 0.06f,
         offsetY = (-38f * lift + 8f * crouch + 4f * droop).dp,
         tilt = sway * 0.7f + wiggle * 5f + lean * 8f,
         leftHand = sway * 3f - lift * 34f + droop * 14f,
@@ -273,6 +389,7 @@ private fun composePose(
         rightLeg = lift * 8f,
         lid = lid,
         mouth = mouth,
+        headTilt = headTilt,
     )
 
 /**
@@ -309,6 +426,6 @@ fun PetAnimation.currentPose(): PetPose {
     // Моргание сюда не входит: превью — один неподвижный кадр, глаза в нём открыты.
     return composePose(
         if (animations) breath else 1f, if (animations) sway else 0f, lift.value, crouch.value,
-        lid = 0f, mouth.value, wiggle.value, lean.value, droop.value,
+        lid = 0f, mouth.value, wiggle.value, lean.value, droop.value, stretch.value, headTilt.value,
     )
 }

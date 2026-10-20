@@ -1,15 +1,20 @@
 package ru.finney.pet.ui.pet
 
+import android.graphics.Bitmap
+import android.graphics.Paint
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.ClipOp
@@ -20,15 +25,25 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import ru.finney.pet.domain.model.PetCharacter
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.sin
 
 // Питомец собирается из слоёв одного холста, поэтому детали совпадают по положению
 // сами и координаты подбирать не нужно.
@@ -58,6 +73,8 @@ data class PetPose(
     val lid: Float = 0f,
     /** Рот: 0 — как у настроения, 1 — открыт навстречу еде. */
     val mouth: Float = 0f,
+    /** Наклон головы от шеи, в градусах. Туловище при этом стоит. */
+    val headTilt: Float = 0f,
 )
 
 /**
@@ -125,7 +142,11 @@ fun PetView(
         Box(
             modifier = Modifier
                 .matchParentSize()
-                .graphicsLayer { translationY = -size.height * lift }
+                .graphicsLayer {
+                    translationY = -size.height * lift
+                    transformOrigin = TransformOrigin(0.5f, skin.neck)
+                    rotationZ = pose().headTilt
+                }
                 .then(if (headOnly) Modifier.withoutNeck() else Modifier),
         ) {
 
@@ -253,20 +274,97 @@ private fun Modifier.eyelid(skin: PetSkin, lid: () -> Float): Modifier = this
         }
     }
 
+/**
+ * Конечность не поворачивается целиком, а сгибается: у плеча (бедра) она стоит на месте,
+ * дальше угол нарастает до полного к кончику. Жёсткий поворот вокруг точки отводил край
+ * среза от туловища, и в стыке открывался клин фона — вырез у плеча не дуга вокруг точки.
+ *
+ * Поворот читается на отрисовке, как и поза в [PetView].
+ */
 @Composable
 private fun BoxScope.Limb(
     @DrawableRes res: Int,
     pivot: TransformOrigin,
     rotation: () -> Float,
 ) {
-    Image(
-        painter = painterResource(res),
-        contentDescription = null,
+    val image = ImageBitmap.imageResource(res)
+    val mesh = remember(image, pivot) { LimbMesh(image.asAndroidBitmap(), pivot) }
+    Spacer(
         modifier = Modifier
             .matchParentSize()
-            .graphicsLayer {
-                transformOrigin = pivot
-                rotationZ = rotation()
+            .drawBehind {
+                drawIntoCanvas { mesh.draw(it.nativeCanvas, size.width / mesh.side, rotation()) }
             },
     )
+}
+
+// Сгиб начинается на этой доле длины конечности (от точки вращения до дальнего пикселя)
+// и доходит до полного угла к её концу. Подобрано по рендеру всех пяти питомцев и их окрасок
+// в первом и третьем облике, руки вверх и вниз: щелей в стыках в несколько раз меньше, чем
+// при жёстком повороте. Раньше начало сгиба — щель возвращается, позже — сгиб слишком резкий.
+private const val BEND_FROM = 0.4f
+private const val BEND_TO = 1f
+
+// Клеток сетки на сторону. Конечность в слое — около 50 px, клетка выходит в 4–5 px:
+// мельче сгиб не отличить на глаз.
+private const val MESH_CELLS = 12
+
+/** Сетка поверх одной конечности. Слой обрезан до её пикселей, чтобы клетки не тратились на пустоту. */
+private class LimbMesh(layer: Bitmap, pivot: TransformOrigin) {
+    val side = layer.width.toFloat()
+    private val bitmap: Bitmap
+    private val px = pivot.pivotFractionX * layer.width
+    private val py = pivot.pivotFractionY * layer.height
+    private val rest = FloatArray((MESH_CELLS + 1) * (MESH_CELLS + 1) * 2)
+    private val weight = FloatArray(rest.size / 2)
+    private val verts = FloatArray(rest.size)
+    private val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+
+    init {
+        val w = layer.width
+        val h = layer.height
+        val pixels = IntArray(w * h).also { layer.getPixels(it, 0, w, 0, 0, w, h) }
+        var left = w
+        var top = h
+        var right = -1
+        var bottom = -1
+        var reach = 0f
+        for (y in 0 until h) for (x in 0 until w) {
+            if (pixels[y * w + x] ushr 24 == 0) continue
+            left = min(left, x); top = min(top, y); right = max(right, x); bottom = max(bottom, y)
+            reach = max(reach, hypot(x - px, y - py))
+        }
+        // Пиксель запаса по краю: без него билинейная выборка срезала бы сглаженный контур.
+        left = max(left - 1, 0); top = max(top - 1, 0)
+        right = min(right + 1, w - 1); bottom = min(bottom + 1, h - 1)
+        bitmap = Bitmap.createBitmap(layer, left, top, right - left + 1, bottom - top + 1)
+
+        for (j in 0..MESH_CELLS) for (i in 0..MESH_CELLS) {
+            val k = j * (MESH_CELLS + 1) + i
+            val x = left + bitmap.width * i / MESH_CELLS.toFloat()
+            val y = top + bitmap.height * j / MESH_CELLS.toFloat()
+            rest[2 * k] = x
+            rest[2 * k + 1] = y
+            val t = ((hypot(x - px, y - py) / reach - BEND_FROM) / (BEND_TO - BEND_FROM)).coerceIn(0f, 1f)
+            weight[k] = t * t * (3f - 2f * t)
+        }
+    }
+
+    /** [degrees] — как rotationZ: положительный угол по часовой. */
+    fun draw(canvas: android.graphics.Canvas, scale: Float, degrees: Float) {
+        val angle = Math.toRadians(degrees.toDouble()).toFloat()
+        for (k in weight.indices) {
+            val dx = rest[2 * k] - px
+            val dy = rest[2 * k + 1] - py
+            val a = angle * weight[k]
+            val c = cos(a)
+            val s = sin(a)
+            verts[2 * k] = px + dx * c - dy * s
+            verts[2 * k + 1] = py + dx * s + dy * c
+        }
+        canvas.save()
+        canvas.scale(scale, scale)
+        canvas.drawBitmapMesh(bitmap, MESH_CELLS, MESH_CELLS, verts, 0, null, 0, paint)
+        canvas.restore()
+    }
 }
