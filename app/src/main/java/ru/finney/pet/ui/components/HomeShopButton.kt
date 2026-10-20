@@ -65,6 +65,8 @@ internal fun HomeMoneyBadge(amount: Int, modifier: Modifier = Modifier) {
         Text(amount.toString(), color = FinneyInk,
             style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp, lineHeight = 28.sp),
             maxLines = 1, softWrap = false, modifier = Modifier.weight(1f, fill = false))
-        Image(painterResource(R.drawable.home_money_icon), null, Modifier.size(22.dp))
+        // В рисунке поле 8 px из 306 вокруг монеты: без него обводка упиралась в край
+        // холста и срезалась. 23 dp — чтобы сама монета осталась прежнего размера.
+        Image(painterResource(R.drawable.home_money_icon), null, Modifier.size(23.dp))
     }
 }
