@@ -182,6 +182,26 @@ def toy_rustle():
     return noise(260, 2500, 9000, seed=10) * hump(n, 0.3) * flutter * 0.6
 
 
+def pet_leap():
+    # Питомец прыжком уходит в соседнюю комнату — мультяшная свистулька вверх
+    # с дрожью и лёгкий «вжух» воздуха: уход за край экрана нарочно смешной.
+    t = np.arange(int(RATE * 0.26)) / RATE
+    freq = 320 + 700 * (t / t[-1]) ** 1.6 + 25 * np.sin(2 * np.pi * 18 * t)
+    whistle = np.sin(2 * np.pi * np.cumsum(freq) / RATE) * hump(len(t), 0.7) * 0.7
+    air = noise(260, 700, 3500, seed=11) * hump(len(t), 0.6) * 0.35
+    return mix(whistle, air)
+
+
+def pet_land():
+    # Впрыгнул в новую комнату — мягкий «пум» лапами о пол и маленькая пружинка.
+    thump = mix(tone(110, 190, decay=7, harmonics=(1.0, 0.5, 0.15)),
+                noise(30, 200, 1200, seed=12) * hump(int(RATE * 0.03), 0.1) * 0.4)
+    t = np.arange(int(RATE * 0.22)) / RATE
+    freq = 430 - 120 * (t / t[-1]) + 30 * np.sin(2 * np.pi * 14 * t)
+    spring = np.sin(2 * np.pi * np.cumsum(freq) / RATE) * np.exp(-6 * t / t[-1]) * 0.3
+    return mix(thump, seq(silence(30), spring))
+
+
 STUBS = {
     "sfx_coin": coin,
     "sfx_purchase": purchase,
@@ -197,6 +217,8 @@ STUBS = {
     "sfx_toy_pickup": toy_pickup,
     "sfx_toy_drop": toy_drop,
     "sfx_toy_bounce": toy_bounce,
+    "sfx_pet_leap": pet_leap,
+    "sfx_pet_land": pet_land,
     "sfx_toy_squeak": toy_squeak,
     "sfx_toy_click": toy_click,
     "sfx_toy_rustle": toy_rustle,

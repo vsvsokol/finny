@@ -36,9 +36,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import kotlinx.coroutines.launch
+import ru.finney.pet.ui.theme.FinneyInk
 
-// Игрушки в зале. Купленная игрушка лежит на полу; её можно взять пальцем и
+// Игрушки в игровой. Купленная игрушка лежит на полу; её можно взять пальцем и
 // положить в любое место пола — там она и останется. Рядом с питомцем он тянется
 // к ней и радуется. Кто кого заслоняет, решает глубина: игрушка ближе к зрителю,
 // чем ступни питомца, лежит перед ним, дальше — за ним. Тень у игрушки всегда
@@ -49,28 +53,45 @@ import kotlinx.coroutines.launch
 private const val TOY_SCREEN_SIZE = 0.155f
 
 /**
- * Низ игрушки на своём месте — доля высоты холста. Ступни питомца в зале — 0.70:
- * ряд чуть ближе к зрителю, чем он.
+ * Низ игрушки на своём месте — доля высоты холста: ряд чуть ближе к зрителю,
+ * чем ступни питомца ([PET_FEET]).
  */
-private const val TOY_BOTTOM = 0.72f
+private const val TOY_BOTTOM = 0.76f
 
 /**
- * Куда по глубине можно положить игрушку — её низ, доли высоты холста. Дальше —
- * основание капсулы (0.66), ближе — ряд кнопок комнат.
+ * Куда по глубине можно положить игрушку — её низ, доли высоты холста. Капсулы
+ * в игровой нет, и класть можно глубже, чем в спальне (там упирались в неё на 0.665).
+ * Дальше 0.60 игрушка той же величины, что у ног, выглядит великаншей. Ближе — ряд кнопок комнат.
  */
-private const val FLOOR_BACK = 0.665f
-private const val FLOOR_FRONT = 0.76f
+private const val FLOOR_BACK = 0.60f
+private const val FLOOR_FRONT = 0.78f
 
-/** Ступни питомца в зале: игрушка ниже этой линии — перед ним, выше — за ним. */
-private const val PET_FEET = 0.70f
+/** Ступни питомца в игровой: игрушка ниже этой линии — перед ним, выше — за ним. */
+private const val PET_FEET = Room.PLAY_PET_FEET
 
 /**
- * Места игрушек — середины, доли видимой ширины экрана. Сначала — перед капсулой
- * справа: там пол свободен, питомец стоит левее. Потом — слева, у торшера.
+ * Места игрушек — середины, доли видимой ширины экрана. Питомец стоит посередине,
+ * поэтому игрушки — по бокам от него, от краёв к середине, по очереди справа и слева.
  */
-private val ToyPlaces = listOf(0.64f, 0.88f, 0.76f, 0.09f, 0.21f, 0.52f)
+private val ToyPlaces = listOf(0.88f, 0.12f, 0.76f, 0.24f, 0.64f, 0.36f)
 
-/** Сколько игрушек помещается в зале. Магазин не продаёт больше (ContentTest). */
+/**
+ * Глаза у игрушки с мордой: середины её нарисованных глаз и их ширина — доли рисунка,
+ * сам рисунок — [artW] × [artH] пикселей. Промерено по тёмным пятнам в item_toy_*.webp.
+ */
+private class ToyEyes(val left: Offset, val right: Offset, val size: Float, val artW: Float, val artH: Float)
+
+/**
+ * У кого есть морда. Когда питомец прыжком уходит из игровой вправо, им на миг
+ * вырастают большие глаза и провожают его — игрушки будто живые. Шутка,
+ * а не подсказка: без звука и без влияния на игру.
+ */
+private val EyesByToy = mapOf(
+    "toy_bear" to ToyEyes(Offset(0.392f, 0.219f), Offset(0.604f, 0.219f), size = 0.065f, artW = 232f, artH = 256f),
+    "toy_duck" to ToyEyes(Offset(0.331f, 0.204f), Offset(0.666f, 0.204f), size = 0.10f, artW = 256f, artH = 242f),
+)
+
+/** Сколько игрушек помещается в игровой. Магазин не продаёт больше (ContentTest). */
 const val MAX_ROOM_TOYS = 6
 
 /** Как игрушка лежит на полу: тень под нижним краем рисунка. */
@@ -144,6 +165,10 @@ private fun clampToFloor(place: RelRect, shift: Offset, floor: ToyFloor): Offset
  * @param nudge сдвиг рисунка в пикселях, не трогая места: главный экран так показывает,
  *   что с игрушкой делать, и подбрасывает её, когда питомцу скучно. Читается при рисовании.
  * @param onPlaced где игрушка на экране — для руки-подсказки.
+ * @param watching смотрят ли игрушки вслед питомцу — у кого есть морда, вырастают глаза.
+ *   Читается на отрисовке.
+ * @param mirrored комната отражена (игровая): рисунок и сдвиги на экране разворачиваются
+ *   обратно, чтобы игрушка выглядела как в магазине, а рука несла её туда, куда надо.
  */
 @Composable
 internal fun RoomToy(
@@ -160,7 +185,10 @@ internal fun RoomToy(
     onDrop: (toyId: String) -> Unit,
     nudge: (toyId: String) -> Offset = { Offset.Zero },
     onPlaced: (toyId: String, bounds: Rect) -> Unit = { _, _ -> },
+    mirrored: Boolean = false,
+    watching: () -> Boolean = { false },
 ) {
+    val flip = if (mirrored) -1f else 1f
     val shift = clampToFloor(place, moves[toyId] ?: Offset.Zero, floor)
     val here = place.shiftedX(shift.x).shiftedY(shift.y)
     // Поднята ли игрушка: 0 — лежит, 1 — в руке.
@@ -188,7 +216,7 @@ internal fun RoomToy(
     val lifted = Modifier.graphicsLayer {
         val up = lift.value
         val n = nudge(toyId)
-        translationX = n.x
+        translationX = n.x * flip
         translationY = -size.height * HELD_LIFT * up + n.y
         val s = 1f + (HELD_SCALE - 1f) * up
         scaleX = s
@@ -215,7 +243,8 @@ internal fun RoomToy(
                         val now = moves[toyId] ?: Offset.Zero
                         val step = Offset(amount.x / canvasPx.width, amount.y / canvasPx.height)
                         moves[toyId] = clampToFloor(place, now + step, floor)
-                        move(toyId, bounds.center + amount, amount)
+                        val onScreen = Offset(amount.x * flip, amount.y)
+                        move(toyId, bounds.center + onScreen, onScreen)
                     },
                     onDragEnd = ::release,
                     onDragCancel = ::release,
@@ -223,26 +252,55 @@ internal fun RoomToy(
             },
     )
 
+    val depth = when {
+        held -> HELD_Z
+        here.bottom > PET_FEET -> FRONT_Z
+        else -> 0f
+    }
     LitBody(
         lighting = lighting,
         place = here,
         footing = ToyFooting,
         visibility = { 1f - HELD_SHADOW_FADE * lift.value },
-        modifier = box
-            .zIndex(
-                when {
-                    held -> HELD_Z
-                    here.bottom > PET_FEET -> FRONT_Z
-                    else -> 0f
-                },
-            )
-            .then(lifted),
+        modifier = box.zIndex(depth).then(lifted),
     ) {
-        Image(
-            painter = painterResource(art),
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxSize(),
-        )
+        Box(Modifier.fillMaxSize().graphicsLayer { scaleX = flip }) {
+            Image(
+                painter = painterResource(art),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize(),
+            )
+            // Глаза — в свете комнаты, как сама игрушка: ночью они тоже приглушены
+            // и не бросаются в глаза. Чисто белые 👀 пробовали — слишком заметно.
+            EyesByToy[toyId]?.let { eyes -> PeekingEyes(eyes, shown = { watching() && !held }) }
+        }
+    }
+}
+
+/**
+ * Большие глаза 👀 поверх нарисованных: белые, вытянутые, зрачки у правого края —
+ * туда, куда ускакал питомец. Видимость [shown] читается на отрисовке: вспышка
+ * не пересобирает игрушку.
+ */
+@Composable
+private fun PeekingEyes(eyes: ToyEyes, shown: () -> Boolean) {
+    Canvas(Modifier.fillMaxSize().graphicsLayer { alpha = if (shown()) 1f else 0f }) {
+        // Рисунок вписан в квадрат с полями (ContentScale.Fit): доли — от него, а не от квадрата.
+        val k = minOf(size.width / eyes.artW, size.height / eyes.artH)
+        val artW = eyes.artW * k
+        val artH = eyes.artH * k
+        val ox = (size.width - artW) / 2f
+        val oy = (size.height - artH) / 2f
+        val w = artW * eyes.size * 2.2f
+        val h = w * 1.35f
+        for (at in listOf(eyes.left, eyes.right)) {
+            val c = Offset(ox + artW * at.x, oy + artH * at.y)
+            val box = Size(w, h)
+            val topLeft = c - Offset(w / 2f, h / 2f)
+            drawOval(Color.White, topLeft, box)
+            drawOval(FinneyInk, topLeft, box, style = Stroke(w * 0.12f))
+            drawCircle(FinneyInk, radius = w * 0.24f, center = c + Offset(w * 0.2f, h * 0.06f))
+        }
     }
 }

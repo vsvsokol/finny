@@ -27,7 +27,7 @@ import ru.finney.pet.ui.motion.LocalAnimations
 import ru.finney.pet.ui.theme.FinneyTheme
 import java.io.File
 
-/** Три предупреждения независимы: выбранная комната и порог ухода не скрывают низкую шкалу. */
+/** Четыре предупреждения независимы: выбранная комната и порог ухода не скрывают низкую шкалу. */
 @RunWith(AndroidJUnit4::class)
 class HomeNeedAlertsTest {
     @get:Rule val compose = createComposeRule(effectContext = object : MotionDurationScale {
@@ -38,6 +38,7 @@ class HomeNeedAlertsTest {
         val ui = mutableStateOf(initialState())
         show { ui.value }
         for (label in listOf("Сон", "Покормить", "Помыть")) assertNeed(label, 39, true)
+        assertNeed("Радость", 70, false)
         shot("three-critical-needs-font130")
         compose.runOnIdle { ui.value = ui.value.copy(stats = ui.value.stats.copy(energy = 40)) }
         assertNeed("Сон", 40, false)
@@ -47,6 +48,9 @@ class HomeNeedAlertsTest {
         assertNeed("Покормить", 40, false)
         assertNeed("Помыть", 39, true)
         compose.runOnIdle { ui.value = ui.value.copy(stats = ui.value.stats.copy(hygiene = 40)) }
+        for (label in listOf("Сон", "Покормить", "Помыть")) assertNeed(label, 40, false)
+        compose.runOnIdle { ui.value = ui.value.copy(stats = ui.value.stats.copy(mood = 39)) }
+        assertNeed("Радость", 39, true)
         for (label in listOf("Сон", "Покормить", "Помыть")) assertNeed(label, 40, false)
     }
 

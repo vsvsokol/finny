@@ -7,6 +7,7 @@ import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
@@ -88,13 +89,35 @@ import kotlin.random.Random
 private val PetFooting = Footing(feetX = 0.5f, feetY = 0.87f)
 
 /**
- * Переход между комнатами — новая комната проступает поверх старой. Без
- * чёрного: затемнение во весь экран мигало. Ровно, без разгона и торможения.
+ * Переход между комнатами: питомец сам уходит в соседнюю. Комнаты стоят в ряд
+ * в порядке [RoomSpot] — как кнопки внизу, — и он прыжком уходит за край экрана
+ * в сторону нажатой кнопки, а из-за другого края впрыгивает уже в новую комнату.
+ * Сама комната не едет и не проступает: пробовали наплыв (все комнаты читались
+ * как одна, где переставили мебель) и съезд кадра вбок (питомец скользил отдельно
+ * от комнат, а две комнаты разом тормозили). Здесь движется только питомец,
+ * и понятно, почему комната сменилась, — он туда пошёл.
+ *
+ * Длина прыжка за край, мс: быстрее прогулки — это не прогулка, а переход.
  */
-private const val APPEAR_MS = 300
+private const val LEAP_MS = 300
 
 /**
- * Прогулка по залу: раз в несколько секунд питомец сам скачет в случайное место.
+ * С какой доли прыжка за край игрушки смотрят вслед питомцу (RoomToys.kt) — до смены
+ * комнаты остаётся около 0.13 с. Раньше глаза появлялись с толчка, и их видели сразу.
+ */
+private const val TOYS_WATCH_FROM = 0.55f
+
+/** Насколько за край экрана уходит питомец — доля ширины холста: квадрат с полями не торчит. */
+private const val LEAP_OVERSHOOT = 0.02f
+
+/**
+ * Насколько торшер в игровой уходит за правый край экрана — доля ширины холста.
+ * Так на концепте игровой (20.10): шар виден целиком, край стойки чуть срезан.
+ */
+private const val PLAY_LAMP_PEEK = 0.04f
+
+/**
+ * Прогулка по игровой: раз в несколько секунд питомец сам скачет в случайное место.
  * Пауза случайная — по часам его прыжков не ждут, и он выглядит живым, а не заведённым.
  */
 private val StrollPauseMs = 6_000L..14_000L
@@ -197,9 +220,9 @@ private val UfoPauseMs = 20_000L..45_000L
  * Если экран шире холста (планшет), холст подгоняется по ширине и срезается
  * сверху — пол, стол и ванна нужны целиком, а верх стены пустой.
  *
- * Комнаты три — зал, кухня, ванная, — и при переключении [spot] новая
- * проступает поверх старой. В каждой свой набор: в зале торшер, окно и капсула, на кухне стол
- * у окна без торшера, в ванной ванна под торшером без окна. Свет у каждой
+ * Комнат четыре — спальня, игровая, кухня, ванная, — и при переключении [spot] новая
+ * проступает поверх старой. В каждой свой набор: в спальне торшер, окно и капсула, в игровой
+ * окно и игрушки на полу, на кухне стол у окна без торшера, в ванной ванна под торшером без окна. Свет у каждой
  * комнаты свой, потому что источники в них разные.
  *
  * В комнате ночь (см. RoomLight.kt): светят торшер, окно и пролетающее НЛО.
@@ -214,10 +237,10 @@ private val UfoPauseMs = 20_000L..45_000L
  *   и выпрыгивает он на своё место, а не туда, где гулял.
  * @param pet встаёт туда, где ему положено быть в текущей комнате.
  * @param onTapItem нажатие по самому предмету: тому же, что делает нижняя кнопка.
- * @param wander гулять ли питомцу по залу самому. Выключается, пока с ним что-то
+ * @param wander гулять ли питомцу по игровой самому. Выключается, пока с ним что-то
  *   делают: во сне, в играх ухода, в других комнатах.
  * @param onHop питомец скакнул — запустить прыжок в его анимации: поза живёт снаружи.
- * @param toys купленные игрушки — лежат на полу зала, см. RoomToys.kt.
+ * @param toys купленные игрушки — лежат на полу игровой, см. RoomToys.kt.
  * @param toysEnabled можно ли их брать: во сне и в играх ухода нельзя.
  * @param onToyDrag игрушку тащат: где её середина на экране и на сколько сдвинули.
  * @param onToyDrop игрушку отпустили.
@@ -227,7 +250,7 @@ private val UfoPauseMs = 20_000L..45_000L
  *   с анимацией: стену прокатывает валик, окно схлопывается и раскрывается, торшер
  *   падает сверху и мигает, включаясь.
  * @param focus что показать крупно, пока выбирают интерьер ([focusOf]); null — обычный вид.
- * @param focusPet показать крупно питомца в зале, там, куда он отошёл. Важнее [focus].
+ * @param focusPet показать крупно питомца в спальне. Важнее [focus].
  * @param focusBottom сколько снизу закрыто панелью выбора: часть [focus] встаёт
  *   посередине того, что над ней осталось.
  */
@@ -253,7 +276,7 @@ fun RoomScene(
     focusBottom: Dp = 0.dp,
     pet: @Composable BoxScope.() -> Unit = {},
 ) {
-    // Где питомец в зале сейчас: сдвиг от его обычного места, доля ширины холста.
+    // Где питомец в игровой сейчас: сдвиг от его обычного места, доля ширины холста.
     val stroll = remember { Animatable(0f) }
     // Летун у окна свой у каждого интерьера: сменили окно — пролёт начинается заново.
     val flyer = remember(interior.window) { WindowFlyer(interior.window) }
@@ -330,43 +353,87 @@ fun RoomScene(
         // и сдвиг нулевой; выше экрана он бывает только на широких экранах.
         val shiftY = maxHeight - canvasH
 
+        // Видимая часть холста по ширине, доли его ширины.
+        val viewLeft = -shiftX / canvasW
+        val viewRight = (maxWidth - shiftX) / canvasW
+
+        // Игровая — зеркало спальни: торшер справа, окно слева. Отражается весь холст
+        // вместе со светом и тенями — иначе пришлось бы переставлять каждый источник.
+        // Раскладка — по концепту игровой: торшер у правого края почти целиком, окно
+        // слева уходит за край. Окно с торшером вместе шире экрана, целиком оба
+        // не помещаются, и концепт выбрал торшер. Не меньше половины видимого края:
+        // иначе на широком экране за отражённым холстом открылась бы пустота.
+        val lampLeft = interior.lamp.layer.rect.left
+        val mirrorAxis = maxOf((viewRight + lampLeft + PLAY_LAMP_PEEK) / 2f, viewRight / 2f)
+
         // Куда можно скакать: только в пределах видимой части холста, чтобы
-        // питомец не ушёл за край экрана.
-        val home = Room.petGround(RoomSpot.LIVING)
-        // Слева у края экрана шкала настроения: за неё питомец не заходит.
-        val visibleLeft = (-shiftX + 56.dp) / canvasW
-        val visibleRight = (maxWidth - shiftX) / canvasW
+        // питомец не ушёл за край экрана. Считается в холсте игровой до отражения —
+        // видимое на экране там лежит зеркально.
+        val home = Room.petGround(RoomSpot.PLAY)
+        val visibleLeft = 2f * mirrorAxis - viewRight
+        val visibleRight = 2f * mirrorAxis - viewLeft
         val strollMin = visibleLeft - home.left - home.width * PET_MARGIN
         val strollMax = visibleRight - home.right + home.width * PET_MARGIN
         // Игрушки — на полу по бокам видимой части комнаты, см. RoomToys.kt.
         val toyPlaces = toys.mapNotNull { id -> itemArt(id)?.let { id to it } }
-            .let { found -> found.zip(toySlots(found.size, -shiftX / canvasW, visibleRight)) }
-        val toyFloor = ToyFloor(left = -shiftX / canvasW, right = visibleRight)
+            .let { found -> found.zip(toySlots(found.size, visibleLeft, visibleRight)) }
+        val toyFloor = ToyFloor(left = visibleLeft, right = visibleRight)
         val toyMoves = rememberToyMoves()
-        // Какая комната на экране сейчас: во время перехода это ещё старая.
+        // Какая комната на экране сейчас: пока питомец уходит, это ещё старая.
         var shown by remember { mutableStateOf(spot) }
-        // Проступающая комната и насколько она уже видна. Пока она проступает,
-        // под ней остаётся старая, [shown].
-        var incoming by remember { mutableStateOf<RoomSpot?>(null) }
-        val appear = remember { Animatable(0f) }
+        // Где питомец на экране относительно своего места — доля ширины холста, вправо +.
+        // Для перехода, а не для прогулки: прогулка живёт в [stroll].
+        val travel = remember { Animatable(0f) }
+        // Игрушки смотрят вслед: питомец уже почти за краем — до смены комнаты.
+        var toysWatch by remember { mutableStateOf(false) }
+        // Края питомца на экране в комнате [room], пока он на своём месте: в игровой зеркально.
+        fun petOnScreen(room: RoomSpot): RelRect = when (room) {
+            RoomSpot.PLAY -> Room.petGround(room).shiftedX(stroll.value).mirrored(mirrorAxis)
+            else -> Room.petGround(room)
+        }
         LaunchedEffect(spot) {
-            // Передумали посреди перехода — недопроявленная комната становится основой.
-            incoming?.let { shown = it }
-            if (spot == shown) {
-                incoming = null
-                appear.snapTo(0f)
+            if (spot == shown && travel.value == 0f) return@LaunchedEffect
+            // Передумали посреди перехода, только что проснулись или анимации выключены —
+            // сразу на месте: ждать, пока он допрыгает, ребёнку незачем.
+            if (spot == shown || !animations || asleep || travel.value != 0f) {
+                shown = spot
+                toysWatch = false
+                stroll.snapTo(0f)
+                travel.snapTo(0f)
                 return@LaunchedEffect
             }
-            appear.snapTo(0f)
-            incoming = spot
-            appear.animateTo(1f, tween(APPEAR_MS, easing = LinearEasing))
+            val right = spot.ordinal > shown.ordinal
+            val from = petOnScreen(shown)
+            onHop()
+            delay(HOP_CROUCH_MS)
+            // Глаза — только в конце прыжка и на миг: заметить их должен не каждый.
+            val peek = launch {
+                delay((LEAP_MS * TOYS_WATCH_FROM).toLong())
+                toysWatch = right
+            }
+            // Без звука уход за край выглядел сбоем, а не шуткой.
+            sounds.play(Sfx.PetLeap)
+            travel.animateTo(
+                if (right) viewRight - from.left + LEAP_OVERSHOOT else viewLeft - from.right - LEAP_OVERSHOOT,
+                tween(LEAP_MS, easing = FastOutLinearInEasing),
+            )
+            // За краем его не видно — тут и меняется комната. В игровую он
+            // возвращается на своё место, а не туда, где гулял.
+            peek.cancel()
             shown = spot
-            incoming = null
-            appear.snapTo(0f)
+            toysWatch = false
+            stroll.snapTo(0f)
+            val to = petOnScreen(spot)
+            travel.snapTo(if (right) viewLeft - to.right - LEAP_OVERSHOOT else viewRight - to.left + LEAP_OVERSHOOT)
+            onHop()
+            delay(HOP_CROUCH_MS)
+            travel.animateTo(0f, tween(LEAP_MS, easing = LinearOutSlowInEasing))
+            sounds.play(Sfx.PetLand)
         }
 
-        // Без анимаций не гуляет: прыжки по залу стали бы телепортом с места на место.
-        val canWander = wander && spot == RoomSpot.LIVING && shown == RoomSpot.LIVING && !asleep && animations
+        // Без анимаций не гуляет: прыжки по игровой стали бы телепортом с места на место.
+        val canWander = wander && spot == RoomSpot.PLAY && shown == RoomSpot.PLAY && !asleep && animations &&
+            !travel.isRunning
         LaunchedEffect(canWander, strollMin, strollMax) {
             if (!canWander || strollMax <= strollMin) return@LaunchedEffect
             while (true) {
@@ -411,7 +478,7 @@ fun RoomScene(
         // Масштаб не меньше «холст во всю ширину» и сдвиг зажат, как у камеры сна:
         // за краем холста пусто, и показывать это нельзя.
         val edit = with(density) {
-            val target = (if (focusPet) home.shiftedX(stroll.value) else focus)?.let { rect ->
+            val target = (if (focusPet) Room.petGround(RoomSpot.LIVING) else focus)?.let { rect ->
                 val w = maxWidth.toPx()
                 val h = (maxHeight - focusBottom).toPx().coerceAtLeast(1f)
                 val left = shiftX.toPx()
@@ -460,8 +527,9 @@ fun RoomScene(
                     translationY = camera.y * z
                 },
         ) {
-        for (room in listOfNotNull(shown, incoming)) {
-            key(room) {
+        key(shown) {
+            val room = shown
+            run {
                 RoomCanvas(
                     room = room,
                     lighting = lights.getValue(room),
@@ -475,7 +543,9 @@ fun RoomScene(
                     flyer = flyer,
                     capsule = capsule,
                     walk = { walk.value },
-                    stroll = { stroll.value },
+                    // Сдвиг питомца в холсте комнаты: прогулка и переход. В отражённой
+                    // игровой экранное «вправо» в холсте — влево.
+                    stroll = { if (room == RoomSpot.PLAY) stroll.value - travel.value else travel.value },
                     door = { door.value },
                     onTapItem = onTapItem,
                     toys = toyPlaces,
@@ -487,11 +557,8 @@ fun RoomScene(
                     toyNudge = toyNudge,
                     onToyPlaced = onToyPlaced,
                     pet = pet,
-                    // Питомец в старой комнате тает, пока проступает новая: иначе
-                    // посреди перехода на экране два питомца разного размера.
-                    petVisibility = if (room == shown && incoming != null) ({ 1f - appear.value }) else ({ 1f }),
-                    // Прозрачность читается на отрисовке и не пересобирает комнату.
-                    modifier = if (room == incoming) Modifier.graphicsLayer { alpha = appear.value } else Modifier,
+                    mirrorAxis = mirrorAxis.takeIf { room == RoomSpot.PLAY },
+                    toysWatch = { toysWatch },
                 )
             }
         }
@@ -575,13 +642,21 @@ private fun RoomCanvas(
     pet: @Composable BoxScope.() -> Unit,
     modifier: Modifier = Modifier,
     petVisibility: () -> Float = { 1f },
+    mirrorAxis: Float? = null,
+    toysWatch: () -> Boolean = { false },
 ) {
     Box(modifier = modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
                 .wrapContentSize(Alignment.TopStart, unbounded = true)
                 .offset(shiftX, shiftY)
-                .requiredSize(canvasW, canvasH),
+                .requiredSize(canvasW, canvasH)
+                .then(
+                    if (mirrorAxis != null) Modifier.graphicsLayer {
+                        transformOrigin = TransformOrigin(mirrorAxis, 0.5f)
+                        scaleX = -1f
+                    } else Modifier,
+                ),
         ) {
             Box(modifier = Modifier.fillMaxSize().roomLight(lighting)) {
                 WallSwap(walls, canvasW, canvasH)
@@ -605,34 +680,41 @@ private fun RoomCanvas(
             SwapEffects(walls, windows.takeIf { room.hasWindow }, lamps.takeIf { room.hasLamp })
 
             val visibility = petVisibility
-            val ground = Room.petGround(room).let { if (room == RoomSpot.LIVING) it.shiftedX(stroll()) else it }
+            val ground = Room.petGround(room).shiftedX(stroll())
 
-            // Тень у питомца только в зале: за столом и в ванне она
+            // Тень у питомца только там, где он стоит на полу: за столом и в ванне она
             // упала бы на мебель, а мебель пола не знает.
             when (room) {
-                RoomSpot.LIVING -> {
-                    // Игрушки на полу: дальше ступней питомца — за ним, ближе — перед ним (RoomToys.kt).
-                    val toysOnFloor: @Composable () -> Unit = {
-                        for ((toy, place) in toys) {
-                            key(toy.first) {
-                                RoomToy(
-                                    toyId = toy.first,
-                                    art = toy.second,
-                                    place = place,
-                                    moves = toyMoves,
-                                    floor = toyFloor,
-                                    canvasW = canvasW,
-                                    canvasH = canvasH,
-                                    lighting = lighting,
-                                    enabled = toysEnabled,
-                                    onDrag = onToyDrag,
-                                    onDrop = onToyDrop,
-                                    nudge = toyNudge,
-                                    onPlaced = onToyPlaced,
-                                )
-                            }
+                // Игрушки на полу: дальше ступней питомца — за ним, ближе — перед ним (RoomToys.kt).
+                RoomSpot.PLAY -> {
+                    for ((toy, place) in toys) {
+                        key(toy.first) {
+                            RoomToy(
+                                toyId = toy.first,
+                                art = toy.second,
+                                place = place,
+                                moves = toyMoves,
+                                floor = toyFloor,
+                                canvasW = canvasW,
+                                canvasH = canvasH,
+                                lighting = lighting,
+                                enabled = toysEnabled,
+                                onDrag = onToyDrag,
+                                onDrop = onToyDrop,
+                                nudge = toyNudge,
+                                mirrored = mirrorAxis != null,
+                                watching = toysWatch,
+                                onPlaced = onToyPlaced,
+                            )
                         }
                     }
+                    // Комната отражена, а питомец — нет: левый и правый у него те же, что везде.
+                    Pet(ground, canvasW, canvasH, lighting, PetFooting, visibility, pet = {
+                        Box(Modifier.fillMaxSize().graphicsLayer { scaleX = -1f }) { pet() }
+                    })
+                }
+
+                RoomSpot.LIVING -> {
                     if (capsule) {
                         // Капсула в углу, питомец перед ней. Засыпая, он запрыгивает
                         // в капсулу по дуге и становится меньше — она дальше от зрителя.
@@ -640,14 +722,12 @@ private fun RoomCanvas(
                         // и спящего видно. Тень на полу — только пока он стоит на месте.
                         LitLayer(Room.Capsule, canvasW, canvasH, lighting, Solids.Capsule, visibility)
                         TapZone(Room.Capsule.rect, canvasW, canvasH, "Уложить спать", onTapItem)
-                        toysOnFloor()
                         val t = walk()
                         val footing = if (t == 0f) PetFooting else null
                         val arc = -CAPSULE_JUMP_ARC * 4f * t * (1f - t)
                         Pet(ground.lerp(Room.PetInCapsule, t).shiftedY(arc), canvasW, canvasH, lighting, footing, visibility, pet)
                         CapsuleDoor(canvasW, canvasH, lighting, shut = door)
                     } else {
-                        toysOnFloor()
                         Pet(ground, canvasW, canvasH, lighting, PetFooting, visibility, pet)
                     }
                 }
@@ -1175,6 +1255,14 @@ private fun RoomSceneKitchenPreview() {
 private fun RoomSceneBathPreview() {
     FinneyTheme {
         RoomScene(spot = RoomSpot.BATH, modifier = Modifier.size(360.dp, 740.dp))
+    }
+}
+
+@Preview(widthDp = 360, heightDp = 740)
+@Composable
+private fun RoomScenePlayPreview() {
+    FinneyTheme {
+        RoomScene(spot = RoomSpot.PLAY, modifier = Modifier.size(360.dp, 740.dp))
     }
 }
 

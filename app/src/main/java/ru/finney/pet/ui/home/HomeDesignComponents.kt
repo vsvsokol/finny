@@ -141,6 +141,8 @@ internal fun DesignerHomeButton(
                 R.drawable.home_sleep_icon -> 67 to 71
                 R.drawable.home_menu_icon -> 71 to 57
                 R.drawable.home_game_icon -> 92 to 69
+                // Смайлик нарисован целым кругом с обводкой — ложится на основу вровень.
+                R.drawable.home_smile_icon -> 155 to 155
                 else -> 90 to 81
             }
             Image(painterResource(icon), null,
@@ -203,64 +205,6 @@ internal fun HomeCareAction(
             onClick = { taps++; onClick() },
             ringModifier = buttonModifier,
         )
-    }
-}
-
-/** Спокойствие — мягкая улыбка: у самого питомца для CALM тоже используется счастливое лицо. */
-@Composable
-internal fun PetMoodHeart(
-    emotion: Emotion, value: Int, onClick: () -> Unit, modifier: Modifier = Modifier,
-    speaking: Boolean = false,
-) {
-    val sad = emotion.toMood() != ru.finney.pet.ui.pet.PetMood.HAPPY
-    val happy = emotion == Emotion.HAPPY
-    val animations = LocalAnimations.current
-    val source = remember { MutableInteractionSource() }
-    val pressed by source.collectIsPressedAsState()
-    val press by animateFloatAsState(if (pressed) 0.9f else 1f,
-        animationSpec = if (animations) spring(dampingRatio = 0.65f) else snap(), label = "heartPress")
-    val expression by animateFloatAsState(if (sad) -1f else if (happy) 1f else 0.45f,
-        animationSpec = if (animations) tween(260) else snap(), label = "heartExpression")
-    val beat = remember { Animatable(1f) }
-    LaunchedEffect(emotion, speaking, animations) {
-        beat.snapTo(1f)
-        if (animations && motionEnabled()) {
-            // Сердечко отзывается на речь и смену состояния; в покое не отвлекает от питомца.
-            beat.animateTo(1.14f, tween(130))
-            beat.animateTo(1f, spring(dampingRatio = 0.48f, stiffness = Spring.StiffnessMedium))
-        }
-    }
-    Canvas(modifier.size(48.dp).graphicsLayer {
-        scaleX = press * beat.value; scaleY = press * beat.value
-    }.clickable(interactionSource = source, indication = null, role = Role.Button,
-        onClickLabel = "Что нужно питомцу", onClick = onClick)
-        .semantics {
-            contentDescription = "Настроение питомца"
-            stateDescription = (if (sad) "Грустное" else if (happy) "Весёлое" else "Спокойное") + ". $value из 100"
-        }) {
-        val u = size.width / 48f
-        val heart = Path().apply {
-            moveTo(24*u, 42*u)
-            cubicTo(19*u, 37*u, 5*u, 28*u, 5*u, 16*u)
-            cubicTo(5*u, 5*u, 18*u, 3*u, 24*u, 12*u)
-            cubicTo(30*u, 3*u, 43*u, 5*u, 43*u, 16*u)
-            cubicTo(43*u, 28*u, 29*u, 37*u, 24*u, 42*u)
-            close()
-        }
-        drawPath(heart, FinneyYellow)
-        clipPath(heart) {
-            drawOval(FinneyPeach, Offset(0f, 30*u), Size(48*u, 21*u))
-            drawOval(Color.White, Offset(10*u, 10*u), Size(9*u, 5*u))
-        }
-        drawPath(heart, FinneyInk, style = Stroke(StrokeRegular.toPx()))
-        drawCircle(FinneyInk, 1.6f*u, Offset(17*u, 22*u))
-        drawCircle(FinneyInk, 1.6f*u, Offset(31*u, 22*u))
-        val ends = 28f - expression * 1.5f
-        val mouth = Path().apply {
-            moveTo(18*u, ends*u)
-            quadraticTo(24*u, (28f + expression * 7f)*u, 30*u, ends*u)
-        }
-        drawPath(mouth, FinneyInk, style = Stroke(StrokeThin.toPx(), cap = StrokeCap.Round))
     }
 }
 
