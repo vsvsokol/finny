@@ -30,6 +30,6 @@
   { "id": "glasses_3d",        "label": "3D-очки",        "price": 180, "category": "wants", "kind": "accessory", "slot": "eyes", "effect": { "mood": 25 } },
   { "id": "goggles_ski",       "label": "Лыжная маска",   "price": 210, "category": "wants", "kind": "accessory", "slot": "eyes", "effect": { "mood": 30 } },
   { "id": "hat_flowers", "label": "Шляпка с цветами", "price": 195, "category": "wants", "kind": "accessory", "effect": { "mood": 35 } },
-  { "id": "hat_sun",     "label": "Шляпа с бантом",   "price": 225, "category": "wants", "kind": "accessory", "effect": { "mood": 40 } },
-  { "id": "hat_top",     "label": "Цилиндр",          "price": 240, "category": "wants", "kind": "accessory", "effect": { "mood": 45 } }
+  { "id": "hat_sun",     "label": "Шляпа с бантом",   "price": 235, "category": "wants", "kind": "accessory", "effect": { "mood": 40 } },
+  { "id": "hat_top",     "label": "Цилиндр",          "price": 260, "category": "wants", "kind": "accessory", "effect": { "mood": 45 } }
 ]
