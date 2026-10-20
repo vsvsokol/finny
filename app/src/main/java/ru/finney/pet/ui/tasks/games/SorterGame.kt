@@ -1,6 +1,25 @@
 package ru.finney.pet.ui.tasks.games
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.lerp
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathFillType
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import ru.finney.pet.R
+import ru.finney.pet.ui.components.drawPointingHand
+import ru.finney.pet.ui.motion.LocalAnimations
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.spring
@@ -97,6 +116,11 @@ internal fun SorterGame(
     val item = task.items.getOrNull(index)
     val sounds = LocalSounds.current
     val pet = rememberPetAnimation()
+    // Показ рукой — один раз за попытку, до первого хода. Без анимаций не показываем:
+    // что делать, говорит строка над лентой.
+    var demo by rememberSaveable { mutableStateOf(true) }
+    val showDemo = demo && index == 0 && mistake == null && LocalAnimations.current
+    var belt by remember { mutableStateOf(Rect.Zero) }
 
     fun finishIfLast() {
         if (index == task.items.size) onSubmit(TaskInput.Sorting(answers.toMap()))
@@ -138,11 +162,10 @@ internal fun SorterGame(
             Spacer(Modifier.height(12.dp))
 
             // Лента выше всего остального: вещь, которую тянут вниз, рисуется поверх питомца и корзин.
-            Box(Modifier.zIndex(1f).bleed()) {
+            Box(Modifier.zIndex(1f).bleed().onGloballyPositioned { belt = it.boundsInRoot() }) {
                 Belt(
                     current = item?.takeIf { mistake == null },
                     upcoming = task.items.drop(index + 1).take(3),
-                    showHint = index == 0 && mistake == null,
                     bins = bins,
                     onDrop = ::choose,
                     // Пока вещь тянут, питомец тянется следом — к той корзине, над которой она.
@@ -153,21 +176,15 @@ internal fun SorterGame(
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 val wrong = mistake
                 // На низком экране места хватает только панели — питомца при ошибке тогда не видно.
-                val roomForPet = maxHeight >= 240.dp
+                val roomForPet = maxHeight >= 280.dp
                 if (wrong == null) {
                     // Вопрос «"Яблоко" — это что?» убран: вещь на ленте и две корзины понятны без слов.
-                    // По краям — стрелки к корзинам с подписью: куда какая зона (плейтест 02.10).
-                    if (item != null) Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        ZoneArrow(Category.NEEDS, Modifier.weight(1f))
-                        ScenePet(character, 96.dp, Modifier.width(96.dp), animation = pet)
-                        ZoneArrow(Category.WANTS, Modifier.weight(1f))
-                    }
+                    // Стрелки «↙ Нужное / Хочется ↘» по краям убраны (плейтест 20.10): что вещь
+                    // надо тащить, показывает рука в начале игры, а питомец стал крупнее.
+                    if (item != null) ScenePet(character, 180.dp, Modifier.width(180.dp), animation = pet)
                 } else {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (roomForPet) ScenePet(character, 72.dp, Modifier.width(72.dp), animation = pet)
+                        if (roomForPet) ScenePet(character, 100.dp, Modifier.width(100.dp), animation = pet)
                         MistakePanel(wrong, onMove = ::moveOver)
                     }
                 }
@@ -188,6 +205,17 @@ internal fun SorterGame(
                     )
                 }
             }
+        }
+        val needsBin = bins[Category.NEEDS]
+        if (showDemo && needsBin != null && belt != Rect.Zero) {
+            // Первая вещь на ленте: отступ ряда плюс половина плитки 64 dp, середина ленты 84 dp.
+            val from = with(LocalDensity.current) { Offset(belt.left + (SceneEdge * 2 + 44.dp).toPx(), belt.top + 42.dp.toPx()) }
+            DragDemo(
+                from = from,
+                to = needsBin,
+                onDone = { demo = false },
+                modifier = Modifier.matchParentSize().zIndex(2f),
+            )
         }
     }
 }
@@ -236,7 +264,6 @@ private fun Progress(items: List<SortItem>, done: Int, answers: Map<String, Cate
 private fun Belt(
     current: SortItem?,
     upcoming: List<SortItem>,
-    showHint: Boolean,
     bins: Map<Category, Rect>,
     onDrop: (Category) -> Unit,
     onLean: (Float) -> Unit,
@@ -276,8 +303,6 @@ private fun Belt(
             }
             upcoming.forEach { ItemPicture(it, it.label, 52.dp) }
         }
-        // Подсказка жестом, а не словами: прыгающая стрелка вниз, к корзинам.
-        if (showHint) BouncingArrow(Modifier.align(Alignment.BottomStart).offset(x = SceneEdge + 20.dp, y = 30.dp))
     }
 }
 
@@ -335,25 +360,54 @@ private fun leanTowards(x: Float, bins: Map<Category, Rect>): Float {
 }
 
 /**
- * Стрелка к корзине у края сцены, с подписью зоны. Корзины внизу, и пока вещь на ленте,
- * их подписи далеко — стрелка у питомца говорит, в какую сторону что.
- * Для TalkBack — одна подпись, стрелка сама по себе ничего не значит.
+ * Показ жестом в начале игры: экран темнеет, кроме корзины «Нужное», и рука переносит
+ * туда яблоко с ленты — два раза, потом гаснет. Касание закрывает раньше. Это только
+ * показ: в ответы не идёт, вещи на ленте ребёнок тащит сам. На плейтесте 20.10 стрелки
+ * у корзин не объясняли, что вещь надо тащить. Для TalkBack показа нет — там строка над лентой.
  */
 @Composable
-private fun ZoneArrow(category: Category, modifier: Modifier = Modifier) {
-    val needs = category == Category.NEEDS
-    Column(
-        modifier = modifier.semantics(mergeDescendants = true) {
-            contentDescription = "${if (needs) "Слева" else "Справа"} — «${categoryWord(category)}»"
-        },
-        horizontalAlignment = if (needs) Alignment.Start else Alignment.End,
+private fun DragDemo(from: Offset, to: Rect, onDone: () -> Unit, modifier: Modifier = Modifier) {
+    val t = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        repeat(2) {
+            t.snapTo(0f)
+            t.animateTo(1f, tween(2400, easing = LinearEasing))
+        }
+        onDone()
+    }
+    var origin by remember { mutableStateOf(Offset.Zero) }
+    val apple = painterResource(R.drawable.item_food_apple)
+    Canvas(
+        modifier
+            .onGloballyPositioned { origin = it.positionInRoot() }
+            .pointerInput(Unit) { detectTapGestures { onDone() } }
+            .clearAndSetSemantics {},
     ) {
-        OutlinedText(if (needs) "↙" else "↘", style = MaterialTheme.typography.headlineLarge)
-        OutlinedText(
-            if (needs) "Нужное" else "Хочется",
-            style = MaterialTheme.typography.titleMedium,
-            fill = Color.White,
-        )
+        val v = t.value
+        // Нажал на ленте (0–0.2), несёт (0.2–0.75), отпустил над корзиной, яблоко тает.
+        val carry = FastOutSlowInEasing.transform(((v - 0.2f) / 0.55f).coerceIn(0f, 1f))
+        val start = from - origin
+        val bin = to.translate(-origin)
+        val at = lerp(start, bin.center, carry)
+        val press = when {
+            v < 0.2f -> v / 0.2f
+            v < 0.75f -> 1f
+            else -> 0f
+        }
+        val fade = if (v < 0.8f) 1f else 1f - (v - 0.8f) / 0.2f
+
+        // Затемнение до краёв экрана, а не сцены: сцена с полями, рисуем с запасом.
+        val far = 4000f
+        val scrim = Path().apply {
+            fillType = PathFillType.EvenOdd
+            addRect(Rect(-far, -far, size.width + far, size.height + far))
+            addRoundRect(RoundRect(bin.inflate(6.dp.toPx()), CornerRadius(24.dp.toPx())))
+        }
+        drawPath(scrim, FinneyInk.copy(alpha = 0.45f))
+
+        val s = 56.dp.toPx()
+        translate(at.x - s / 2, at.y - s / 2) { with(apple) { draw(Size(s, s), alpha = fade) } }
+        if (fade > 0.5f) drawPointingHand(at, up = false, press = press)
     }
 }
 
