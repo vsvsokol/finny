@@ -625,6 +625,7 @@ class HomeViewModel(
             },
             hygiene = hygiene,
             clean = hygiene >= rule.cleanFrom,
+            enough = hygiene >= content.economy.pet.needsThreshold,
             canRinse = hygiene < rule.waterUpTo,
             full = hygiene >= PetRules.STAT_MAX,
         )
