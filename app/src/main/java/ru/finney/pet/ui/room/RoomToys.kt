@@ -156,6 +156,35 @@ private fun clampToFloor(place: RelRect, shift: Offset, floor: ToyFloor): Offset
     y = shift.y.coerceIn(FLOOR_BACK - place.bottom, FLOOR_FRONT - place.bottom),
 )
 
+/**
+ * На сколько сдвинуть по горизонтали игрушку [toy], чтобы она не пряталась за питомцем [pet]:
+ * 0 — если она перед ним (ниже ступней) или видна хотя бы наполовину. Сдвиг — к ближнему
+ * краю питомца, а если там кончается пол — к дальнему.
+ */
+internal fun outFromBehind(toy: RelRect, pet: RelRect, floor: ToyFloor): Float {
+    if (toy.bottom > PET_FEET) return 0f
+    // У рисунка питомца прозрачные поля: прячет игрушку только середина квадрата.
+    val left = pet.left + pet.width * PET_BODY_INSET
+    val right = pet.right - pet.width * PET_BODY_INSET
+    val hidden = minOf(toy.right, right) - maxOf(toy.left, left)
+    if (hidden <= toy.width * 0.5f) return 0f
+    val gap = toy.width * 0.1f
+    val toLeft = left - gap - toy.right
+    val toRight = right + gap - toy.left
+    val leftFits = toy.left + toLeft >= floor.left
+    val rightFits = toy.right + toRight <= floor.right
+    val nearLeft = -toLeft < toRight
+    return when {
+        nearLeft && leftFits -> toLeft
+        rightFits -> toRight
+        leftFits -> toLeft
+        else -> 0f
+    }
+}
+
+/** Насколько с каждого бока квадрата питомца — прозрачные поля, доля его ширины. */
+private const val PET_BODY_INSET = 0.18f
+
 /** Где игрушка с местом [place] лежит сейчас, с учётом сдвига из [moves]. */
 internal fun toyHere(toyId: String, place: RelRect, moves: Map<String, Offset>, floor: ToyFloor): RelRect {
     val shift = clampToFloor(place, moves[toyId] ?: Offset.Zero, floor)
@@ -201,6 +230,8 @@ internal fun RoomToy(
     onMoved: (toyId: String, here: RelRect) -> Unit = { _, _ -> },
     catch: (toyId: String, here: RelRect, lift: Float) -> Boolean = { _, _, _ -> false },
     onGone: (toyId: String) -> Unit = {},
+    /** Где сейчас питомец — доли холста. Игрушку, брошенную за него, он не прячет. */
+    petAt: (() -> RelRect)? = null,
 ) {
     val flip = if (mirrored) -1f else 1f
     val shift = clampToFloor(place, moves[toyId] ?: Offset.Zero, floor)
@@ -219,6 +250,7 @@ internal fun RoomToy(
     val gone by rememberUpdatedState(onGone)
     val currentPlace by rememberUpdatedState(place)
     val currentFloor by rememberUpdatedState(floor)
+    val currentPetAt by rememberUpdatedState(petAt)
     DisposableEffect(toyId) { onDispose { gone(toyId) } }
 
     // Где игрушка сейчас — по последнему сдвигу, а не по тому, что было при нажатии.
@@ -233,6 +265,18 @@ internal fun RoomToy(
         drop(toyId)
         if (caught(toyId, hereNow(), lift.value)) return
         scope.launch { lift.animateTo(0f, spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMediumLow)) }
+        // Брошенная за питомца игрушка пряталась за ним целиком: ни увидеть, ни достать,
+        // пока он не отойдёт. Такая отъезжает вбок, к ближнему краю питомца.
+        val pet = currentPetAt?.invoke() ?: return
+        val dx = outFromBehind(hereNow(), pet, currentFloor)
+        if (dx == 0f) return
+        val start = moves[toyId] ?: Offset.Zero
+        scope.launch {
+            val slide = Animatable(0f)
+            slide.animateTo(1f, spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow)) {
+                moves[toyId] = clampToFloor(currentPlace, start + Offset(dx * value, 0f), currentFloor)
+            }
+        }
     }
 
     // Рисунок лежит в своём слое, а ловит пальцы отдельная зона поверх всего:

@@ -907,6 +907,7 @@ private fun RoomCanvas(
                                 onMoved = { _, here -> toyBox.hover(toyBoxRect, here) },
                                 catch = { id, here, lift -> toyBox.catch(id, here, lift, toyBoxRect, animations) },
                                 onGone = onToyGone,
+                                petAt = ground,
                             )
                         }
                     }
