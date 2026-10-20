@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -120,21 +121,29 @@ internal fun ChangeGame(task: ChangeTask, character: PetCharacter, onClose: () -
                     verticalAlignment = Alignment.Bottom,
                 ) {
                     if (give) {
-                        Guest(customer, 120.dp, Modifier.width(120.dp))
-                        Column(Modifier.weight(1f), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Bubble(customerLine(current.target, tray.sum(), checked, paid = current.paid ?: 0), Tail.LEFT)
-                            Display(current.price, current.paid ?: 0, if (solved) current.target.toString() else "?")
-                            ItemPicture(current, current.label, 44.dp)
+                        Guest(customer, 140.dp, Modifier.width(140.dp))
+                        // Реплика и табло — наверху, товар — на прилавке: вплотную над товаром
+                        // табло с ценой и сдачей сливалось с ним (плейтест 20.10).
+                        Column(
+                            Modifier.weight(1f).fillMaxHeight(),
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Bubble(customerLine(current.target, tray.sum(), checked, paid = current.paid ?: 0), Tail.LEFT)
+                                Display(current.price, current.paid ?: 0, if (solved) current.target.toString() else "?")
+                            }
+                            ItemPicture(current, current.label, 64.dp)
                         }
                     } else {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                ItemPicture(current, current.label, 60.dp)
+                                ItemPicture(current, current.label, 76.dp)
                                 PriceTag(current.price.toString())
                             }
                             Bubble(ownLine(current.price, tray.sum(), checked), Tail.RIGHT)
                         }
-                        ScenePet(character, 110.dp, Modifier.width(110.dp))
+                        ScenePet(character, 140.dp, Modifier.width(140.dp))
                     }
                 }
 
