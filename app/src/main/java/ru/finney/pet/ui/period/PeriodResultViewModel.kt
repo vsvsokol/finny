@@ -19,8 +19,17 @@ import ru.finney.pet.domain.model.Plan
 import ru.finney.pet.domain.model.GameContent
 import ru.finney.pet.domain.model.ItemArt
 import ru.finney.pet.domain.model.SavedGame
+import ru.finney.pet.domain.progress.Progression
+import ru.finney.pet.ui.goals.rewardArt
 import ru.finney.pet.ui.progress.unlockLines
+import ru.finney.pet.ui.room.itemArt
 import ru.finney.pet.ui.tasks.games.taskIcon
+
+/** Где новое живёт на главном: туда и смотреть. */
+enum class NewPlace(val where: String) { SHOP("в магазине"), GAMES("в играх"), GOALS("в копилке") }
+
+/** Открытое на новом уровне: [art] — рисунок вещи или награды, [icon] — картинка игры. */
+data class NewThing(val label: String, val place: NewPlace, val art: Int? = null, val icon: ItemArt? = null)
 
 sealed interface PeriodResultUiState {
     data object Loading : PeriodResultUiState
@@ -68,6 +77,17 @@ sealed interface PeriodResultUiState {
         val growth: PeriodGrowth? = null,
         /** Только новые открытия этого перехода, с учётом демо и периода доступности игр. */
         val unlocks: List<String> = emptyList(),
+        /** Питомец как на главном — для тактов церемонии. null — профиля нет, рисовать некого. */
+        val character: PetCharacter? = null,
+        val coloring: String? = null,
+        val worn: List<String> = emptyList(),
+        /** Стадии роста до и после перехода: облик меняется не на каждой ([ru.finney.pet.ui.pet.lookFor]). */
+        val stageBefore: Int = 1,
+        val stageAfter: Int = 1,
+        /** Звание новой стадии: «Планировщик», «Копилкин». */
+        val stageTitle: String? = null,
+        /** Открытое этим переходом — картинкой и местом, где его искать. */
+        val newThings: List<NewThing> = emptyList(),
     ) : PeriodResultUiState {
         /** Перерасход по нужному и желаемому сверх плана; 0, если уложились. */
         val overspend: Int
@@ -102,6 +122,9 @@ class PeriodResultViewModel(
         val before = game.levelAfter(state, period.number - 1)
         val after = game.levelAfter(state, period.number)
         val levelTask = period.levelTaskId?.let { content.task(it) }
+        val character = saved.profile.appearance.character
+        val stageBefore = Progression.stage(before, content.economy)
+        val stageAfter = Progression.stage(after, content.economy)
         val growth = periodGrowth(content, before, after, period.number, state.isDemo,
             isLatest = state.currentPeriod.number == period.number + 1)
         return PeriodResultUiState.Ready(
@@ -127,7 +150,28 @@ class PeriodResultViewModel(
             income = game.levelIncome(state, period.number + 1),
             canPlanNext = state.currentPeriod.number == period.number + 1 &&
                 state.currentPeriod.phase == ru.finney.pet.domain.model.PeriodPhase.PLANNING,
+            character = character,
+            coloring = game.lookFor(state, character),
+            worn = state.worn,
+            stageBefore = stageBefore,
+            stageAfter = stageAfter,
+            stageTitle = content.economy.stageTitles.getOrNull(stageAfter - 1),
+            newThings = if (growth == null) emptyList() else newThings(growth, before, after, state.isDemo, character),
         )
+    }
+
+    /**
+     * Новое картинкой и местом: игры — с учётом периода доступности, как в [periodGrowth],
+     * вещи и цели — из [Game.unlocksBetween]. В демо вещи и цели открыты с начала. Звание
+     * сюда не входит: у него свой такт.
+     */
+    private fun newThings(growth: PeriodGrowth, before: Int, after: Int, isDemo: Boolean, character: PetCharacter): List<NewThing> {
+        val games = growth.newGames.map { NewThing(if (it.harder) "«${it.task.title}» сложнее" else "«${it.task.title}»", NewPlace.GAMES, icon = taskIcon(it.task)) }
+        if (isDemo) return games
+        val unlocks = game.unlocksBetween(before, after).map { it.forPet(character) }
+        val items = unlocks.flatMap { it.items }.map { NewThing(it.label, NewPlace.SHOP, art = itemArt(it.id)) }
+        val goals = unlocks.flatMap { it.goals }.map { NewThing(it.label, NewPlace.GOALS, art = it.rewardArt) }
+        return items + games + goals
     }
 
     /**

@@ -1,6 +1,7 @@
 package ru.finney.pet.ui.period
 
 import ru.finney.pet.domain.model.GameContent
+import ru.finney.pet.domain.model.TaskDefinition
 import ru.finney.pet.ui.progress.NextProgress
 import ru.finney.pet.ui.progress.nextProgress
 import ru.finney.pet.ui.progress.stageName
@@ -11,7 +12,11 @@ data class PeriodGrowth(
     val next: NextProgress?,
     /** Открытия игр отдельно, чтобы итог мог показать их вместе с вещами, целями и званием. */
     val games: List<String> = emptyList(),
+    /** Те же игры самими заданиями: такт «Новое» показывает их картинкой. [harder] — стала сложнее. */
+    val newGames: List<NewGame> = emptyList(),
 )
+
+data class NewGame(val task: TaskDefinition, val harder: Boolean)
 
 internal fun periodGrowth(
     content: GameContent,
@@ -23,6 +28,7 @@ internal fun periodGrowth(
 ): PeriodGrowth? {
     if (!isLatest || after <= before) return null
     val games = mutableListOf<String>()
+    val newGames = mutableListOf<NewGame>()
     val changes = buildList {
         content.economy.stageStartLevels.forEachIndexed { index, level ->
             if (level in (before + 1)..after) add("Новая стадия: ${stageName(index + 1)}.")
@@ -38,8 +44,9 @@ internal fun periodGrowth(
                 val line = "$label: «${current.title}»."
                 add(line)
                 games.add(line)
+                if (newGames.none { it.task.id == current.id }) newGames.add(NewGame(current, harder = wasAvailable))
             }
         }
     }.distinct()
-    return PeriodGrowth(changes, nextProgress(content, after, period + 1, isDemo), games.distinct())
+    return PeriodGrowth(changes, nextProgress(content, after, period + 1, isDemo), games.distinct(), newGames)
 }
