@@ -63,6 +63,7 @@ import ru.finney.pet.ui.tasks.games.Bubble
 import ru.finney.pet.ui.tasks.games.GameScene
 import ru.finney.pet.ui.tasks.games.LocalPlayerAccessory
 import ru.finney.pet.ui.tasks.games.PetAtRight
+import ru.finney.pet.ui.tasks.games.rememberPetReactions
 import ru.finney.pet.ui.tasks.games.PetOffers
 import ru.finney.pet.ui.tasks.games.PetSays
 import ru.finney.pet.ui.tasks.games.ResultBody
@@ -373,7 +374,10 @@ internal fun TaskResultScene(state: TaskUiState.Ready, onReplay: () -> Unit, onD
                     Modifier.fillMaxWidth(),
                     maxWidth = 600.dp,
                 )
-                PetAtRight(state.character, 110.dp, Modifier.padding(end = 8.dp))
+                // Итог: получилось — два прыжка и конфетти, не вышло — грустит и капля.
+                val pet = rememberPetReactions()
+                LaunchedEffect(success) { if (success) pet.win() else pet.fail() }
+                PetAtRight(state.character, 150.dp, Modifier.padding(end = 8.dp), reactions = pet)
             }
         }
         RewardCoins(flight)

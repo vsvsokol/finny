@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -85,6 +86,16 @@ internal fun ChangeGame(task: ChangeTask, character: PetCharacter, onClose: () -
     val customer = others[round % others.size]
     val sounds = LocalSounds.current
 
+    // Покупатель — это питомец: верная сумма — радуется, нет — «?» до следующей попытки.
+    val pet = rememberPetReactions()
+    LaunchedEffect(checked) {
+        when (checked) {
+            null -> pet.calm()
+            0 -> pet.right()
+            else -> pet.oops()
+        }
+    }
+
     fun check() {
         if (firsts.size == round) firsts = firsts + listOf(tray)
         checked = TaskEngines.changeDiff(current, tray)
@@ -143,7 +154,7 @@ internal fun ChangeGame(task: ChangeTask, character: PetCharacter, onClose: () -
                             }
                             Bubble(ownLine(current.price, tray.sum(), checked), Tail.RIGHT)
                         }
-                        ScenePet(character, 140.dp, Modifier.width(140.dp))
+                        ScenePet(character, 140.dp, Modifier.width(140.dp), reactions = pet)
                     }
                 }
 

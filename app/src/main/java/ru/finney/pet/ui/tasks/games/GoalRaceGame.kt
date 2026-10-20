@@ -133,6 +133,7 @@ internal fun GoalRaceGame(
         decided = true
     }
 
+    val pet = rememberPetReactions()
     GameScene(backdrop = Backdrop.FIELD, onClose = onClose) {
         SceneBody(
             bottom = {
@@ -144,13 +145,15 @@ internal fun GoalRaceGame(
                     modifier = Modifier.pulse(decided && day == 1),
                     onClick = {
                         if (today > 0) sounds.play(Sfx.PiggyIn)
+                        // Отложил в копилку — фишка-питомец радуется.
+                        if (today > 0) pet.right()
                         val all = deposits + today
                         if (all.size == task.days) onSubmit(TaskInput.DailyDeposits(all)) else deposits = all
                     },
                 )
             },
         ) {
-            Road(task, deposits, day, character, sad = mood == 0)
+            Road(task, deposits, day, character, sad = mood == 0, pet = pet)
             // Пока выбирают соблазн, в банке нечего показывать заранее: монеты ещё не разложены.
             PiggyJarRow(task, saved = saved, pending = if (decided) today else 0, mood = mood, lastDeposit = deposits.lastOrNull(), depositCount = deposits.size)
             Spacer(Modifier.weight(1f))
@@ -613,7 +616,7 @@ private fun DrawScope.drawJarFace(top: Float, mood: Int, maxMood: Int) {
  * кружки и фишка крупнее, а соседние дни не налезают друг на друга.
  */
 @Composable
-private fun Road(task: GoalRaceTask, deposits: List<Int>, day: Int, character: PetCharacter, sad: Boolean) {
+private fun Road(task: GoalRaceTask, deposits: List<Int>, day: Int, character: PetCharacter, sad: Boolean, pet: PetReactions) {
     BoxWithConstraints(
         Modifier
             .fillMaxWidth()
@@ -685,6 +688,7 @@ private fun Road(task: GoalRaceTask, deposits: List<Int>, day: Int, character: P
             token,
             Modifier.width(token).offset(hereX - token / 2, hereY - circle / 2 - token + 8.dp),
             mood = if (sad) PetMood.SAD else PetMood.HAPPY,
+            reactions = pet,
         )
     }
 }

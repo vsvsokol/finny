@@ -385,22 +385,26 @@ private fun Rain(amount: () -> Float) {
  */
 internal val LocalPlayerAccessory = staticCompositionLocalOf<List<String>> { emptyList() }
 
-/** Питомец игрока в сцене: живой, дышит. */
+/**
+ * Питомец игрока в сцене — голова-смайлик с реакциями ([PetHead]): дышит, моргает,
+ * радуется верному ходу и задумывается над ошибкой.
+ */
 @Composable
 internal fun ScenePet(
     character: PetCharacter,
     size: Dp,
     modifier: Modifier = Modifier,
     mood: PetMood = PetMood.HAPPY,
-    // Снаружи — когда игра сама дёргает питомца: прыжок за верный ход в «Конвейере».
-    animation: PetAnimation = rememberPetAnimation(),
+    // Снаружи — когда игра сама дёргает питомца: прыжок за верный ход, «?» за ошибку.
+    reactions: PetReactions = rememberPetReactions(),
 ) {
-    PetView(
+    PetHead(
         character = character,
-        accessories = LocalPlayerAccessory.current,
+        size = size,
+        reactions = reactions,
         mood = mood,
-        pose = rememberPoseProvider(animation),
-        modifier = modifier.widthIn(max = size).fillMaxWidth(),
+        accessories = LocalPlayerAccessory.current,
+        modifier = modifier,
     )
 }
 
@@ -425,18 +429,25 @@ internal fun PetSays(
     modifier: Modifier = Modifier,
     petSize: Dp = 120.dp,
     mood: PetMood = PetMood.HAPPY,
+    reactions: PetReactions = rememberPetReactions(),
 ) {
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
         Bubble(text, Tail.RIGHT, Modifier.weight(1f, fill = false), maxWidth = 240.dp)
-        ScenePet(character, petSize, Modifier.width(petSize), mood = mood)
+        ScenePet(character, petSize, Modifier.width(petSize), mood = mood, reactions = reactions)
     }
 }
 
 /** Питомец сам по себе, у правого края сцены — там же, где он говорит в [PetSays]. */
 @Composable
-internal fun PetAtRight(character: PetCharacter, petSize: Dp, modifier: Modifier = Modifier, mood: PetMood = PetMood.HAPPY) {
+internal fun PetAtRight(
+    character: PetCharacter,
+    petSize: Dp,
+    modifier: Modifier = Modifier,
+    mood: PetMood = PetMood.HAPPY,
+    reactions: PetReactions = rememberPetReactions(),
+) {
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-        ScenePet(character, petSize, Modifier.width(petSize), mood = mood)
+        ScenePet(character, petSize, Modifier.width(petSize), mood = mood, reactions = reactions)
     }
 }
 

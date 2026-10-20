@@ -177,6 +177,8 @@ internal fun ReserveGame(
     val sounds = LocalSounds.current
     var today by remember { mutableIntStateOf(0) }
     val stopDay = remember(week, reserve) { stopDay(week, reserve) }
+    // Радость недели и сюрприз, оплаченный из запаса, — прыжок; запаса не хватило — «?».
+    val pet = rememberPetReactions()
     LaunchedEffect(Unit) {
         val animate = motionEnabled()
         for (d in 1..DAYS_IN_WEEK) {
@@ -188,6 +190,10 @@ internal fun ReserveGame(
                     day.surprise != null -> sounds.play(Sfx.Wrong)
                     day.joy != null -> sounds.play(Sfx.PetHappy)
                     else -> sounds.play(Sfx.Tap)
+                }
+                when {
+                    d == stopDay -> pet.oops()
+                    day.surprise != null || day.joy != null -> pet.right()
                 }
             }
             if (d == stopDay) break
@@ -266,7 +272,7 @@ internal fun ReserveGame(
             Spacer(Modifier.weight(1f))
             // Реплика «Хорошо, что был запас! / Желаемое купим потом…» повторяла объяснение
             // итога слово в слово — питомец просто стоит рядом. Лицо — по радостям недели.
-            PetAtRight(character, 100.dp, mood = if (today > 1 && joys == 0) PetMood.SAD else PetMood.HAPPY)
+            PetAtRight(character, 100.dp, mood = if (today > 1 && joys == 0) PetMood.SAD else PetMood.HAPPY, reactions = pet)
         }
     }
 }

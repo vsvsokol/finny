@@ -357,6 +357,9 @@ private fun Checkout(
         }
         Spacer(Modifier.weight(1f))
         // Реплика «Что-то подождёт… / Всё по списку? Платим!» повторяла «Не хватает N» и кнопку «Оплатить».
-        PetAtRight(character, 100.dp)
+        // Не хватает — «?», пока ребёнок не уберёт лишнее.
+        val pet = rememberPetReactions()
+        LaunchedEffect(shortage) { if (shortage != null) pet.oops() else pet.calm() }
+        PetAtRight(character, 100.dp, reactions = pet)
     }
 }

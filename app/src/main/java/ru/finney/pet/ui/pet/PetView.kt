@@ -82,12 +82,18 @@ fun PetView(
      * Окраска — id облика из ядра (`PetLooks`, `look_pushistik_1`); null — родной цвет рисунка.
      */
     coloring: String? = null,
+    /**
+     * Только голова, без туловища, рук и ног: в мини-играх питомец — голова-смайлик
+     * с реакциями (`ui/tasks/games/PetHead.kt`). Наклон и масштаб тогда идут от шеи, а не от ступней.
+     */
+    headOnly: Boolean = false,
 ) {
     val painted = coloring?.let { lookSkin(it, character.skin) }
     val skin = painted ?: character.skin
     val look = lookFor(stage)
     val body = skin.bodies[look - 1]
-    val lift = skin.headLift(stage)
+    val lift = if (headOnly) 0f else skin.headLift(stage)
+    val pivot = if (headOnly) TransformOrigin(0.5f, skin.neck) else skin.ground
     Box(
         modifier = modifier
             .aspectRatio(1f)
@@ -97,18 +103,20 @@ fun PetView(
                 scaleY = current.scaleY
                 translationY = current.offsetY.toPx()
                 rotationZ = current.tilt
-                transformOrigin = skin.ground
+                transformOrigin = pivot
             },
     ) {
-        Image(
-            painter = painterResource(body.torso),
-            contentDescription = null,
-            modifier = Modifier.matchParentSize(),
-        )
-        Limb(body.leftLeg, skin.grownPivot(skin.leftLegPivot, look)) { pose().leftLeg }
-        Limb(body.rightLeg, skin.grownPivot(skin.rightLegPivot, look)) { pose().rightLeg }
-        Limb(body.leftHand, skin.grownPivot(skin.leftHandPivot, look)) { pose().leftHand }
-        Limb(body.rightHand, skin.grownPivot(skin.rightHandPivot, look)) { pose().rightHand }
+        if (!headOnly) {
+            Image(
+                painter = painterResource(body.torso),
+                contentDescription = null,
+                modifier = Modifier.matchParentSize(),
+            )
+            Limb(body.leftLeg, skin.grownPivot(skin.leftLegPivot, look)) { pose().leftLeg }
+            Limb(body.rightLeg, skin.grownPivot(skin.rightLegPivot, look)) { pose().rightLeg }
+            Limb(body.leftHand, skin.grownPivot(skin.leftHandPivot, look)) { pose().leftHand }
+            Limb(body.rightHand, skin.grownPivot(skin.rightHandPivot, look)) { pose().rightHand }
+        }
 
         // Голова с лицом и тем, что на ней надето, — поднята на подросшее туловище.
         Box(modifier = Modifier.matchParentSize().graphicsLayer { translationY = -size.height * lift }) {

@@ -92,7 +92,6 @@ import ru.finney.pet.ui.theme.FinneyPeach
 import ru.finney.pet.ui.theme.FinneyPink
 import ru.finney.pet.ui.sound.LocalSounds
 import ru.finney.pet.ui.sound.Sfx
-import ru.finney.pet.ui.pet.rememberPetAnimation
 
 // «Конвейер», как «Food Drop» в Pou, но без спешки: лента ждёт, пока вещь не
 // смахнут вниз, в корзину «Нужное» или «Хочется». Кто не умеет смахивать,
@@ -115,7 +114,7 @@ internal fun SorterGame(
     val bins = remember { mutableStateMapOf<Category, Rect>() }
     val item = task.items.getOrNull(index)
     val sounds = LocalSounds.current
-    val pet = rememberPetAnimation()
+    val pet = rememberPetReactions()
     // Показ рукой — один раз за попытку, до первого хода. Без анимаций не показываем:
     // что делать, говорит строка над лентой.
     var demo by rememberSaveable { mutableStateOf(true) }
@@ -132,21 +131,20 @@ internal fun SorterGame(
         answers.putIfAbsent(current.id, category)
         if (category != current.category) {
             sounds.play(Sfx.Wrong)
-            // Не грустит (ТЗ п. 2.5.12), а тянется к корзине, куда вещь на самом деле.
-            pet.lookAt(if (current.category == Category.NEEDS) -1f else 1f)
+            // Не грустит (ТЗ п. 2.5.12): «?» над головой, тянется к корзине, куда вещь на самом деле.
+            pet.oops(if (current.category == Category.NEEDS) -1f else 1f)
             mistake = current
         } else {
             sounds.play(Sfx.Correct)
-            // Питомец радуется каждому верному ходу — видно, что ход засчитан.
-            pet.lookAt(0f)
-            pet.playJoy()
+            // Питомец радуется каждому верному ходу — прыжок и искры: видно, что ход засчитан.
+            pet.right()
             index++
             finishIfLast()
         }
     }
 
     fun moveOver() {
-        pet.lookAt(0f)
+        pet.calm()
         mistake = null
         index++
         finishIfLast()
@@ -169,7 +167,7 @@ internal fun SorterGame(
                     bins = bins,
                     onDrop = ::choose,
                     // Пока вещь тянут, питомец тянется следом — к той корзине, над которой она.
-                    onLean = pet::lookAt,
+                    onLean = pet.body::lookAt,
                 )
             }
 
@@ -181,10 +179,10 @@ internal fun SorterGame(
                     // Вопрос «"Яблоко" — это что?» убран: вещь на ленте и две корзины понятны без слов.
                     // Стрелки «↙ Нужное / Хочется ↘» по краям убраны (плейтест 20.10): что вещь
                     // надо тащить, показывает рука в начале игры, а питомец стал крупнее.
-                    if (item != null) ScenePet(character, 180.dp, Modifier.width(180.dp), animation = pet)
+                    if (item != null) ScenePet(character, 180.dp, Modifier.width(180.dp), reactions = pet)
                 } else {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (roomForPet) ScenePet(character, 100.dp, Modifier.width(100.dp), animation = pet)
+                        if (roomForPet) ScenePet(character, 100.dp, Modifier.width(100.dp), reactions = pet)
                         MistakePanel(wrong, onMove = ::moveOver)
                     }
                 }
