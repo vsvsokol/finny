@@ -31,9 +31,20 @@ data class PetSkin(
     @DrawableRes val mouth: Int,
     /** Туловище, руки и ноги в каждом облике роста: [0] — как нарисован, дальше крупнее (PetGrowth.kt). */
     val bodies: List<PetBody>,
-    /** Плечи и бёдра — там, где конечность прилегает к туловищу. */
+    /**
+     * Вокруг чего рука идёт вниз и внутрь. Плечо по правилу ниже (угол альфы) давало
+     * во вздохе светлую щель у воротника — точки сдвинуты на 8–12 px слоя 512, по рендеру.
+     */
     val leftHandPivot: TransformOrigin,
     val rightHandPivot: TransformOrigin,
+    /**
+     * Вокруг чего рука поворачивается вверх — глубже в рукаве, чем плечо. Вокруг плеча
+     * поднятая рука отходила от туловища, а под ней туловище не нарисовано: открывался
+     * белый клин. Подобрано перебором по рендеру всех обликов и окрасок до 25° — щелей
+     * без контура не осталось (Limb в PetView).
+     */
+    val leftHandRaised: TransformOrigin,
+    val rightHandRaised: TransformOrigin,
     val leftLegPivot: TransformOrigin,
     val rightLegPivot: TransformOrigin,
     /** Точка опоры: персонаж стоит на ногах, поэтому масштаб и наклон идут от ступней, а не от центра. */
@@ -92,9 +103,9 @@ private const val HEAD_DROP = 4f / BLINK_LAYER
 private const val ROGATIK_CANVAS = 2200f
 
 // Звёздочка, Бантик и Лучик рисовались по шаблону Рогатика, поэтому холст у них тот же.
-// Точки вращения не подбирались на глаз: плечи и бёдра — это верхний внутренний
-// угол альфы соответствующего слоя, точка опоры — низ силуэта. По Пушистику и Рогатику
-// правило сходится с тем, что уже стояло в коде, с точностью до пары пикселей.
+// Точки вращения не подбирались на глаз: бёдра — это верхний внутренний угол альфы
+// слоя ноги, точка опоры — низ силуэта. Точки рук сдвинуты от такого угла перебором
+// по рендеру — см. leftHandPivot и leftHandRaised.
 private const val ZVEZDOCHKA_CANVAS = 2200f
 private const val BANTIK_CANVAS = 2200f
 private const val LUCHIK_CANVAS = 2200f
@@ -113,8 +124,10 @@ private val PushistikSkin = PetSkin(
         PetBody(R.drawable.pushistik_torso_2, R.drawable.pushistik_left_hand_2, R.drawable.pushistik_right_hand_2, R.drawable.pushistik_left_leg_2, R.drawable.pushistik_right_leg_2),
         PetBody(R.drawable.pushistik_torso_3, R.drawable.pushistik_left_hand_3, R.drawable.pushistik_right_hand_3, R.drawable.pushistik_left_leg_3, R.drawable.pushistik_right_leg_3),
     ),
-    leftHandPivot = TransformOrigin(930f / PUSHISTIK_CANVAS, 1500f / PUSHISTIK_CANVAS),
-    rightHandPivot = TransformOrigin(1130f / PUSHISTIK_CANVAS, 1500f / PUSHISTIK_CANVAS),
+    leftHandPivot = TransformOrigin(898f / PUSHISTIK_CANVAS, 1500f / PUSHISTIK_CANVAS),
+    rightHandPivot = TransformOrigin(1162f / PUSHISTIK_CANVAS, 1500f / PUSHISTIK_CANVAS),
+    leftHandRaised = TransformOrigin(946f / PUSHISTIK_CANVAS, 1628f / PUSHISTIK_CANVAS),
+    rightHandRaised = TransformOrigin(1114f / PUSHISTIK_CANVAS, 1628f / PUSHISTIK_CANVAS),
     leftLegPivot = TransformOrigin(960f / PUSHISTIK_CANVAS, 1640f / PUSHISTIK_CANVAS),
     rightLegPivot = TransformOrigin(1100f / PUSHISTIK_CANVAS, 1640f / PUSHISTIK_CANVAS),
     ground = TransformOrigin(0.5f, 1828f / PUSHISTIK_CANVAS),
@@ -141,8 +154,10 @@ private val RogatikSkin = PetSkin(
         PetBody(R.drawable.rogatik_torso_2, R.drawable.rogatik_left_hand_2, R.drawable.rogatik_right_hand_2, R.drawable.rogatik_left_leg_2, R.drawable.rogatik_right_leg_2),
         PetBody(R.drawable.rogatik_torso_3, R.drawable.rogatik_left_hand_3, R.drawable.rogatik_right_hand_3, R.drawable.rogatik_left_leg_3, R.drawable.rogatik_right_leg_3),
     ),
-    leftHandPivot = TransformOrigin(1029f / ROGATIK_CANVAS, 1545f / ROGATIK_CANVAS),
-    rightHandPivot = TransformOrigin(1188f / ROGATIK_CANVAS, 1545f / ROGATIK_CANVAS),
+    leftHandPivot = TransformOrigin(995f / ROGATIK_CANVAS, 1562f / ROGATIK_CANVAS),
+    rightHandPivot = TransformOrigin(1222f / ROGATIK_CANVAS, 1562f / ROGATIK_CANVAS),
+    leftHandRaised = TransformOrigin(1029f / ROGATIK_CANVAS, 1700f / ROGATIK_CANVAS),
+    rightHandRaised = TransformOrigin(1188f / ROGATIK_CANVAS, 1700f / ROGATIK_CANVAS),
     leftLegPivot = TransformOrigin(1054f / ROGATIK_CANVAS, 1771f / ROGATIK_CANVAS),
     rightLegPivot = TransformOrigin(1168f / ROGATIK_CANVAS, 1771f / ROGATIK_CANVAS),
     ground = TransformOrigin(0.5f, 1898f / ROGATIK_CANVAS),
@@ -167,8 +182,10 @@ private val ZvezdochkaSkin = PetSkin(
         PetBody(R.drawable.zvezdochka_torso_2, R.drawable.zvezdochka_left_hand_2, R.drawable.zvezdochka_right_hand_2, R.drawable.zvezdochka_left_leg_2, R.drawable.zvezdochka_right_leg_2),
         PetBody(R.drawable.zvezdochka_torso_3, R.drawable.zvezdochka_left_hand_3, R.drawable.zvezdochka_right_hand_3, R.drawable.zvezdochka_left_leg_3, R.drawable.zvezdochka_right_leg_3),
     ),
-    leftHandPivot = TransformOrigin(1055f / ZVEZDOCHKA_CANVAS, 1530f / ZVEZDOCHKA_CANVAS),
-    rightHandPivot = TransformOrigin(1163f / ZVEZDOCHKA_CANVAS, 1530f / ZVEZDOCHKA_CANVAS),
+    leftHandPivot = TransformOrigin(1021f / ZVEZDOCHKA_CANVAS, 1530f / ZVEZDOCHKA_CANVAS),
+    rightHandPivot = TransformOrigin(1197f / ZVEZDOCHKA_CANVAS, 1530f / ZVEZDOCHKA_CANVAS),
+    leftHandRaised = TransformOrigin(1021f / ZVEZDOCHKA_CANVAS, 1668f / ZVEZDOCHKA_CANVAS),
+    rightHandRaised = TransformOrigin(1197f / ZVEZDOCHKA_CANVAS, 1668f / ZVEZDOCHKA_CANVAS),
     leftLegPivot = TransformOrigin(1060f / ZVEZDOCHKA_CANVAS, 1764f / ZVEZDOCHKA_CANVAS),
     rightLegPivot = TransformOrigin(1167f / ZVEZDOCHKA_CANVAS, 1765f / ZVEZDOCHKA_CANVAS),
     ground = TransformOrigin(0.5f, 1906f / ZVEZDOCHKA_CANVAS),
@@ -193,8 +210,10 @@ private val BantikSkin = PetSkin(
         PetBody(R.drawable.bantik_torso_2, R.drawable.bantik_left_hand_2, R.drawable.bantik_right_hand_2, R.drawable.bantik_left_leg_2, R.drawable.bantik_right_leg_2),
         PetBody(R.drawable.bantik_torso_3, R.drawable.bantik_left_hand_3, R.drawable.bantik_right_hand_3, R.drawable.bantik_left_leg_3, R.drawable.bantik_right_leg_3),
     ),
-    leftHandPivot = TransformOrigin(1044f / BANTIK_CANVAS, 1559f / BANTIK_CANVAS),
-    rightHandPivot = TransformOrigin(1179f / BANTIK_CANVAS, 1558f / BANTIK_CANVAS),
+    leftHandPivot = TransformOrigin(1061f / BANTIK_CANVAS, 1525f / BANTIK_CANVAS),
+    rightHandPivot = TransformOrigin(1162f / BANTIK_CANVAS, 1524f / BANTIK_CANVAS),
+    leftHandRaised = TransformOrigin(1044f / BANTIK_CANVAS, 1697f / BANTIK_CANVAS),
+    rightHandRaised = TransformOrigin(1179f / BANTIK_CANVAS, 1696f / BANTIK_CANVAS),
     leftLegPivot = TransformOrigin(1060f / BANTIK_CANVAS, 1791f / BANTIK_CANVAS),
     rightLegPivot = TransformOrigin(1156f / BANTIK_CANVAS, 1789f / BANTIK_CANVAS),
     ground = TransformOrigin(0.5f, 1902f / BANTIK_CANVAS),
@@ -219,8 +238,10 @@ private val LuchikSkin = PetSkin(
         PetBody(R.drawable.luchik_torso_2, R.drawable.luchik_left_hand_2, R.drawable.luchik_right_hand_2, R.drawable.luchik_left_leg_2, R.drawable.luchik_right_leg_2),
         PetBody(R.drawable.luchik_torso_3, R.drawable.luchik_left_hand_3, R.drawable.luchik_right_hand_3, R.drawable.luchik_left_leg_3, R.drawable.luchik_right_leg_3),
     ),
-    leftHandPivot = TransformOrigin(1055f / LUCHIK_CANVAS, 1547f / LUCHIK_CANVAS),
-    rightHandPivot = TransformOrigin(1148f / LUCHIK_CANVAS, 1547f / LUCHIK_CANVAS),
+    leftHandPivot = TransformOrigin(1021f / LUCHIK_CANVAS, 1530f / LUCHIK_CANVAS),
+    rightHandPivot = TransformOrigin(1182f / LUCHIK_CANVAS, 1530f / LUCHIK_CANVAS),
+    leftHandRaised = TransformOrigin(1055f / LUCHIK_CANVAS, 1702f / LUCHIK_CANVAS),
+    rightHandRaised = TransformOrigin(1148f / LUCHIK_CANVAS, 1702f / LUCHIK_CANVAS),
     leftLegPivot = TransformOrigin(1064f / LUCHIK_CANVAS, 1752f / LUCHIK_CANVAS),
     rightLegPivot = TransformOrigin(1158f / LUCHIK_CANVAS, 1754f / LUCHIK_CANVAS),
     ground = TransformOrigin(0.5f, 1913f / LUCHIK_CANVAS),

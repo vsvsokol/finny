@@ -383,8 +383,13 @@ private fun composePose(
         scaleY = 1f + breath * 0.016f - crouch * 0.10f + stretch * 0.055f - droop * 0.06f,
         offsetY = (-38f * lift + 8f * crouch + 4f * droop).dp,
         tilt = sway * 0.7f + wiggle * 5f + lean * 8f,
-        leftHand = sway * 3f - lift * 34f + droop * 14f,
-        rightHand = sway * 3f + lift * 34f - droop * 14f,
+        // Левая рука по часовой — вверх, правая — против. Знаки были наоборот: в прыжке
+        // руки шли вниз, к животу, а во вздохе поднимались. Выше 25° под поднятой рукой
+        // открывается не нарисованное туловище — см. Limb в PetView.
+        // Покачивание рук в прыжке гаснет: оно сдвигает обе руки в одну сторону,
+        // и вверху одна рука стояла на 6° выше другой.
+        leftHand = sway * 3f * (1f - lift) + lift * 25f - droop * 14f,
+        rightHand = sway * 3f * (1f - lift) - lift * 25f + droop * 14f,
         leftLeg = -lift * 8f,
         rightLeg = lift * 8f,
         lid = lid,
