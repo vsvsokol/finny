@@ -196,7 +196,7 @@ private fun ReceiptPaper(
         PlainRow("Итого", total)
         PlainRow("Дали", task.paid)
         CheckRow(mark = changeMark, description = "Сдача, ${task.change}", onToggle = onChange) {
-            Text("Сдача", style = Mono, color = FinneyInk)
+            Text("Сдача", style = MaterialTheme.typography.titleMedium, color = FinneyInk)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -266,7 +266,8 @@ private fun MarkBadge(mark: Mark) {
 @Composable
 private fun PlainRow(label: String, value: Int) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp)) {
-        Text(label, style = Mono, color = FinneyInk, modifier = Modifier.weight(1f))
+        // Подпись — тем же шрифтом, что названия товаров выше, число — моноширинным, как цены.
+        Text(label, style = MaterialTheme.typography.titleMedium, color = FinneyInk, modifier = Modifier.weight(1f))
         Text(value.toString(), style = Mono, color = FinneyInk)
         // Место под значок, чтобы числа стояли столбиком со строками выше.
         Box(Modifier.padding(start = 8.dp).size(width = 30.dp, height = 1.dp))
