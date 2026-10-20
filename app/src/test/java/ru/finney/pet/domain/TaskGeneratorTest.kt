@@ -13,6 +13,7 @@ import ru.finney.pet.content.ContentParser
 import ru.finney.pet.domain.game.Game
 import ru.finney.pet.domain.model.ChoresTask
 import ru.finney.pet.domain.model.ReserveTask
+import ru.finney.pet.domain.model.SorterTask
 import ru.finney.pet.domain.model.StandTask
 import ru.finney.pet.domain.model.TaskDefinition
 import ru.finney.pet.domain.model.TaskOutcome
@@ -57,6 +58,43 @@ class TaskGeneratorTest {
     @Test
     fun `одно зерно — одни и те же числа`() {
         (1L..50L).forEach { assertEquals(TaskGenerator.generate(stand, it), TaskGenerator.generate(stand, it)) }
+    }
+
+    /** «Конвейер» без разброса: вещи в контенте через одну — нужное, хочется, нужное. */
+    private val sorter = template(
+        """
+        {
+          "id": "sorter_x", "theme": "planning", "engine": "sorter", "title": "Конвейер",
+          "intro": "Разложи.", "explainOk": "Да.", "explainFail": "Попробуй ещё.", "minCorrect": 6,
+          "items": [
+            { "id": "a", "label": "Яблоко", "category": "needs", "why": "Еда." },
+            { "id": "b", "label": "Пончик", "category": "wants", "why": "Сладкое." },
+            { "id": "c", "label": "Мыло", "category": "needs", "why": "Чистота." },
+            { "id": "d", "label": "Мячик", "category": "wants", "why": "Игрушка." },
+            { "id": "e", "label": "Молоко", "category": "needs", "why": "Еда." },
+            { "id": "f", "label": "Леденец", "category": "wants", "why": "Сладкое." },
+            { "id": "g", "label": "Суп", "category": "needs", "why": "Еда." },
+            { "id": "h", "label": "Наклейки", "category": "wants", "why": "Игрушка." }
+          ]
+        }
+        """,
+    )
+
+    private fun sorterOrder(seed: Long) = (TaskGenerator.generate(sorter, seed) as SorterTask).items.map { it.id }
+
+    @Test
+    fun `конвейер — вещи перемешаны, одно зерно — один порядок`() {
+        val orders = (1L..50L).map(::sorterOrder)
+        // Те же вещи, только порядок другой.
+        orders.forEach { assertEquals(listOf("a", "b", "c", "d", "e", "f", "g", "h"), it.sorted()) }
+        (1L..50L).forEach { assertEquals(sorterOrder(it), sorterOrder(it)) }
+        assertTrue("порядков мало: ${orders.toSet().size}", orders.toSet().size > 40)
+        // Нет закономерности «через одну»: бывают две вещи одной корзины подряд.
+        val sorted = TaskGenerator.base(sorter) as SorterTask
+        val category = sorted.items.associate { it.id to it.category }
+        assertTrue(orders.any { order -> order.zipWithNext().any { (x, y) -> category[x] == category[y] } })
+        // Список игр по-прежнему показывает порядок из контента.
+        assertEquals(listOf("a", "b", "c", "d", "e", "f", "g", "h"), sorted.items.map { it.id })
     }
 
     @Test
@@ -164,6 +202,17 @@ class TaskGeneratorTest {
     @Test
     fun `в контенте есть игры с разбросом`() {
         assertTrue(content.taskTemplates.keys.containsAll(listOf("game_lemonade", "game_cashier", "game_rainy", "game_chores")))
+    }
+
+    @Test
+    fun `конвейеры из контента перемешиваются в игре`() {
+        val sorters = listOf("game_sorter", "game_sorter_2", "game_sorter_3")
+        assertTrue(content.taskTemplates.keys.containsAll(sorters))
+        for (id in sorters) {
+            val inFile = (content.task(id) as SorterTask).items.map { it.id }
+            val orders = (1L..20L).map { (TaskGenerator.generate(content.taskTemplates.getValue(id), it) as SorterTask).items.map { i -> i.id } }
+            assertTrue("$id: порядок не меняется", orders.any { it != inFile })
+        }
     }
 
     /** Каждое зерно даёт выигрываемую игру без недоставленных подстановок, и числа правда меняются. */

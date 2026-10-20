@@ -148,7 +148,7 @@ class PetReactions internal constructor(private val scope: CoroutineScope, val b
 }
 
 /** На сколько опустить голову в квадрате: низ головы на холсте — около 0.78 стороны. */
-private const val HEAD_DROP = 0.14f
+internal const val HEAD_DROP = 0.14f
 
 private const val RIGHT_MS = 900
 private const val OOPS_MS = 1100

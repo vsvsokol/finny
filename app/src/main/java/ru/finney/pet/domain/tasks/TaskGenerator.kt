@@ -8,6 +8,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.intOrNull
 import ru.finney.pet.domain.model.ReserveTask
+import ru.finney.pet.domain.model.SorterTask
 import ru.finney.pet.domain.model.TaskDefinition
 import kotlin.random.Random
 
@@ -24,6 +25,7 @@ import kotlin.random.Random
  *
  * [generate] превращает шаблон в обычное [TaskDefinition]: одно зерно — одни и те же
  * числа, поэтому попытку можно повторить и проверить. Экран получает готовые числа.
+ * Вещи «Конвейера» он ещё и перемешивает тем же зерном, даже если разброса в шаблоне нет.
  */
 object TaskGenerator {
 
@@ -55,7 +57,9 @@ object TaskGenerator {
      * выиграть), отбрасывается, и берутся следующие числа того же зерна. За [TRIES] попыток
      * не сложилось — [base].
      */
-    fun generate(template: JsonObject, seed: Long): TaskDefinition {
+    fun generate(template: JsonObject, seed: Long): TaskDefinition = shuffleOrder(numbers(template, seed), seed)
+
+    private fun numbers(template: JsonObject, seed: Long): TaskDefinition {
         if (!isRandom(template)) return base(template)
         val random = Random(seed)
         val base = base(template)
@@ -67,6 +71,19 @@ object TaskGenerator {
     }
 
     /**
+     * Порядок, который в контенте сложился сам собой, перемешивается зерном попытки.
+     * «Конвейер»: в tasks.json вещи записаны через одну — нужное, хочется, нужное, — и корзину
+     * угадывали по очереди, не думая (20.10). Одно зерно — один порядок; соль — чтобы порядок
+     * не зависел от того, сколько чисел зерно уже выдало на разброс.
+     */
+    private fun shuffleOrder(task: TaskDefinition, seed: Long): TaskDefinition = when (task) {
+        is SorterTask -> task.copy(items = task.items.shuffled(Random(seed xor ORDER_SALT)))
+        else -> task
+    }
+
+    private const val ORDER_SALT = 0x5EED_0F_50L
+
+    /**
      * Сюрпризы «Дождливого дня» с `chance` выпадают не все, а бонус — за запас на все сразу.
      * Сколько стоят все, знает только шаблон: берём их из [base], где выпадает каждый.
      */
@@ -74,6 +91,13 @@ object TaskGenerator {
         if (task is ReserveTask && base is ReserveTask) task.copy(worstCase = TaskEngines.surprisesTotal(base)) else task
 
     /** Есть ли в [element] хоть один разброс. Без разброса задание не зависит от зерна. */
+    /** Меняется ли задание от попытки к попытке: разброс в шаблоне или перемешанный порядок. */
+    fun varies(template: JsonObject): Boolean =
+        isRandom(template) || (template["engine"] as? JsonPrimitive)?.content in SHUFFLED_ENGINES
+
+    /** Движки, чей порядок [shuffleOrder] перемешивает зерном попытки. */
+    private val SHUFFLED_ENGINES = setOf("sorter")
+
     fun isRandom(element: JsonElement): Boolean = when (element) {
         is JsonObject -> spreadKind(element) != null || element.values.any(::isRandom)
         is JsonArray -> element.any(::isRandom)

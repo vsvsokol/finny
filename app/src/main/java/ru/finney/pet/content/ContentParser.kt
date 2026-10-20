@@ -33,7 +33,7 @@ object ContentParser {
             goals = decode<List<Goal>>(GOALS, read),
             tasks = templates.mapIndexed { i, template -> baseTask(template, i) },
             glossary = decode<Glossary>(GLOSSARY, read).terms,
-            taskTemplates = templates.filter(TaskGenerator::isRandom).associateBy { it.id.orEmpty() },
+            taskTemplates = templates.filter(TaskGenerator::varies).associateBy { it.id.orEmpty() },
         )
     }
 

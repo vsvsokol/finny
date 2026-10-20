@@ -35,6 +35,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
@@ -408,10 +409,23 @@ internal fun ScenePet(
     )
 }
 
-/** Другие питомцы — гости и покупатели. Стоят спокойно, одной позой на всех. */
+/**
+ * Другие питомцы — гости, покупатели, кассир. Стоят спокойно, одной позой на всех.
+ * Как и питомец игрока, в играх они — только голова ([PetHead]): с туловищем они
+ * выбивались из стиля голов.
+ */
 @Composable
 internal fun Guest(character: PetCharacter, size: Dp, modifier: Modifier = Modifier) {
-    PetView(character = character, mood = PetMood.HAPPY, pose = StillPose, modifier = modifier.widthIn(max = size).fillMaxWidth())
+    PetView(
+        character = character,
+        mood = PetMood.HAPPY,
+        pose = StillPose,
+        headOnly = true,
+        modifier = modifier
+            .widthIn(max = size)
+            .fillMaxWidth()
+            .graphicsLayer { translationY = this.size.height * HEAD_DROP },
+    )
 }
 
 private val StillPose: () -> PetPose = { PetPose() }
