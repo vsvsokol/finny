@@ -1,5 +1,6 @@
 package ru.finney.pet.ui.tasks.games
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -15,10 +16,12 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -38,6 +41,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.drawscope.translate
+import kotlin.math.cos
+import kotlin.math.sin
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.RoundRect
@@ -46,20 +54,23 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathOperation
+import androidx.compose.ui.graphics.addOutline
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.lerp
 import ru.finney.pet.domain.model.PetCharacter
 import ru.finney.pet.ui.components.Coin
-import ru.finney.pet.ui.components.CoinAmount
 import ru.finney.pet.ui.components.CloseButton
 import ru.finney.pet.ui.components.FinneyIconButton
 import ru.finney.pet.ui.components.MenuBackdrop
@@ -89,7 +100,13 @@ import ru.finney.pet.ui.theme.StrokeRegular
  * Где идёт игра. Всё нарисовано кодом. [DOTS] — кремовый с точками, как у экранов-дел:
  * раньше здесь стояла комната с главного, и на плейтесте (28.09) она отвлекала от игры.
  */
-enum class Backdrop { DOTS, DOTS_RAIN, SHOP, FIELD, SKY, SUNSET, STORE }
+enum class Backdrop {
+    DOTS, DOTS_RAIN, SHOP, FIELD, SKY, SUNSET, STORE,
+
+    // Фоны карточки перед игрой — свой у каждой игры, как в макете карточек (вариант A).
+    // У «Конвейера» карточка на тех же точках, что игра, — отдельного фона нет.
+    CARD_GREEN, CARD_LILAC, CARD_RAIN, CARD_LEMON, CARD_YELLOW, CARD_BLUE, CARD_PINK,
+}
 
 /**
  * Экран игры: фон, верхняя полоса и содержимое.
@@ -231,15 +248,25 @@ internal fun SceneBody(
 
 @Composable
 private fun MoneyPill(amount: Int, modifier: Modifier = Modifier) {
-    CoinAmount(
-        amount = amount,
-        coinSize = 30.dp,
+    // Белая плашка с тенью по низу, как в макете карточек: кошелёк выглядит
+    // выпуклой кнопкой-фишкой, а не полем.
+    // Плашка 40 dp, монетка 30 dp — с зазором до рамки и справа: вплотную к рамке
+    // она с ней сливалась. Число со строкой в свой кегль — по центру высоты.
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
         modifier = modifier
+            .height(40.dp)
             .clip(RoundedCornerShape(50))
-            .background(FinneyCream)
+            .background(Color.White)
+            .insetShade(RoundedCornerShape(50), PillShade, 5.dp)
             .border(StrokeRegular, FinneyInk, RoundedCornerShape(50))
-            .padding(horizontal = 12.dp, vertical = 4.dp),
-    )
+            .padding(start = 12.dp, end = 5.dp)
+            .clearAndSetSemantics { contentDescription = "$amount финок" },
+    ) {
+        OutlinedText("$amount", style = MaterialTheme.typography.headlineMedium.copy(fontSize = 26.sp, lineHeight = 26.sp))
+        Coin(size = 30.dp)
+    }
 }
 
 /**
@@ -254,9 +281,26 @@ private fun BackdropLayer(backdrop: Backdrop) {
         tween(DUSK_MS, easing = FastOutSlowInEasing),
         label = "dusk",
     )
+    // Карточка перед игрой и сама игра стоят на разных фонах: при «Играть» фон
+    // перетекает, а не сменяется рывком. Дождь и закат — не смена фона, а его
+    // состояние: они идут своей анимацией внутри того же фона.
+    Crossfade(targetState = backdrop.family(), animationSpec = tween(CROSSFADE_MS), label = "backdrop") { family ->
+        BackdropFamily(family, rain = { rain.value }, dusk = { dusk.value })
+    }
+}
+
+/** Дождь и закат — тот же фон, что без них. */
+private fun Backdrop.family(): Backdrop = when (this) {
+    Backdrop.DOTS_RAIN -> Backdrop.DOTS
+    Backdrop.SUNSET -> Backdrop.SKY
+    else -> this
+}
+
+@Composable
+private fun BackdropFamily(backdrop: Backdrop, rain: () -> Float, dusk: () -> Float) {
     when (backdrop) {
         Backdrop.DOTS, Backdrop.DOTS_RAIN -> Box(Modifier.fillMaxSize().menuBackdrop(MenuBackdrop.DOTS)) {
-            Rain { rain.value }
+            Rain(rain)
         }
         // Пол — под нижней полкой: полки прижаты к тележке, и стеллаж стоит на полу.
         Backdrop.SHOP -> Split(top = Color(0xFFF9E2B8), bottom = Color(0xFFC99A76), at = 0.85f, dots = true)
@@ -265,10 +309,83 @@ private fun BackdropLayer(backdrop: Backdrop) {
             drawCircle(Color(0xFF9BD8A2), size.width * 0.55f, Offset(size.width * 0.3f, size.height * 0.2f))
             drawCircle(Color(0xFF9BD8A2), size.width * 0.4f, Offset(size.width * 0.85f, size.height * 0.62f))
         }
-        Backdrop.SKY, Backdrop.SUNSET -> Meadow { dusk.value }
+        Backdrop.SKY, Backdrop.SUNSET -> Meadow(dusk)
         Backdrop.STORE -> Split(top = Color(0xFFCFE3F5), bottom = FinneyYellow, at = 0.42f, dots = true, desk = true)
+        Backdrop.CARD_GREEN -> Canvas(Modifier.fillMaxSize()) {
+            drawRect(Color(0xFFC9EAC1))
+            drawCircle(Color(0xFFB4E0AE), size.width * 0.52f, Offset(size.width * 1.05f, size.height * 0.7f))
+            drawCircle(Color(0xFFB4E0AE), size.width * 0.31f, Offset(size.width * 0.55f, -size.height * 0.06f))
+        }
+        Backdrop.CARD_LILAC -> Pattern(Color(0xFFDAD3F6), 80.dp, 80.dp) { tile ->
+            star(Offset(tile * 0.26f, tile * 0.22f), tile * 0.13f, Color(0xFFC6BBF0))
+            star(Offset(tile * 0.74f, tile * 0.65f), tile * 0.085f, Color(0xFFC6BBF0))
+        }
+        Backdrop.CARD_BLUE -> Pattern(Color(0xFFD3E8F7), 80.dp, 80.dp) { tile ->
+            star(Offset(tile * 0.26f, tile * 0.22f), tile * 0.13f, Color(0xFFB9D9F1))
+            drawCircle(Color(0xFFB9D9F1), tile * 0.043f, Offset(tile * 0.74f, tile * 0.66f))
+        }
+        Backdrop.CARD_RAIN -> Pattern(Color(0xFFDCE6F2), 64.dp, 74.dp) { tile ->
+            drop(Offset(tile * 0.25f, tile * 0.1f), tile * 0.09f, Color(0xFFC2D3E8))
+            drop(Offset(tile * 0.75f, tile * 0.64f), tile * 0.072f, Color(0xFFC2D3E8))
+        }
+        Backdrop.CARD_LEMON -> Pattern(Color(0xFFFFF4BF), 40.dp, 40.dp) { tile ->
+            drawCircle(Color(0xFFF6E08A), tile * 0.15f, Offset(tile * 0.24f, tile * 0.35f))
+        }
+        Backdrop.CARD_YELLOW -> Pattern(Color(0xFFFCE6A6), 24.dp, 24.dp) { tile ->
+            drawCircle(FinneyInk.copy(alpha = 0.10f), tile * 0.09f, Offset(tile / 2, tile / 2))
+        }
+        Backdrop.CARD_PINK -> Pattern(Color(0xFFFBDDE2), 24.dp, 24.dp) { tile ->
+            drawCircle(FinneyInk.copy(alpha = 0.08f), tile * 0.09f, Offset(tile / 2, tile / 2))
+        }
     }
 }
+
+/** Заливка [base] и узор [tile], повторённый плиткой [w] × [h] на весь экран. Узор получает ширину плитки в px. */
+@Composable
+private fun Pattern(base: Color, w: Dp, h: Dp, tile: DrawScope.(Float) -> Unit) {
+    Canvas(Modifier.fillMaxSize()) {
+        drawRect(base)
+        val tw = w.toPx()
+        val th = h.toPx()
+        var y = 0f
+        while (y < size.height) {
+            var x = 0f
+            while (x < size.width) {
+                translate(x, y) { tile(tw) }
+                x += tw
+            }
+            y += th
+        }
+    }
+}
+
+/** Пятиконечная звезда радиусом [r]. */
+private fun DrawScope.star(center: Offset, r: Float, color: Color) {
+    val path = Path()
+    for (i in 0 until 10) {
+        val rr = if (i % 2 == 0) r else r * 0.48f
+        val a = Math.toRadians(-90.0 + i * 36.0)
+        val p = Offset(center.x + rr * cos(a).toFloat(), center.y + rr * sin(a).toFloat())
+        if (i == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
+    }
+    path.close()
+    drawPath(path, color)
+}
+
+/** Капля: острый верх в [top], круглый низ радиусом [r]. */
+private fun DrawScope.drop(top: Offset, r: Float, color: Color) {
+    val c = Offset(top.x, top.y + r * 2.2f)
+    drawCircle(color, r, c)
+    val path = Path().apply {
+        moveTo(top.x, top.y)
+        lineTo(c.x + r * 0.92f, c.y - r * 0.4f)
+        lineTo(c.x - r * 0.92f, c.y - r * 0.4f)
+        close()
+    }
+    drawPath(path, color)
+}
+
+private const val CROSSFADE_MS = 450
 
 /**
  * Луг у лавки. [dusk] 0 — полдень, 1 — вечер: небо теплеет до золотистого, солнце
@@ -465,31 +582,6 @@ internal fun PetAtRight(
     }
 }
 
-/**
- * Питомец обещает награду: в пузыре монетка и «+15» вместо фразы «Получится — дам
- * 15 монет». Число и монетка читаются быстрее слов. Питомец справа, как в [PetSays].
- */
-@Composable
-internal fun PetOffers(character: PetCharacter, amount: Int, modifier: Modifier = Modifier, petSize: Dp = 180.dp) {
-    val tailSize = 12.dp
-    val shape = remember { BubbleShape(Tail.RIGHT, 16.dp, tailSize) }
-    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier
-                .background(Color.White, shape)
-                .border(StrokeRegular, FinneyInk, shape)
-                .padding(start = 14.dp, end = 12.dp + tailSize, top = 8.dp, bottom = 8.dp)
-                .semantics(mergeDescendants = true) { contentDescription = "Получится — дам $amount монет" },
-        ) {
-            OutlinedText("+$amount", style = MaterialTheme.typography.headlineMedium)
-            Coin(size = 30.dp)
-        }
-        ScenePet(character, petSize, Modifier.width(petSize))
-    }
-}
-
 /** Куда смотрит хвостик реплики — в сторону того, кто говорит. */
 enum class Tail { LEFT, RIGHT, DOWN_LEFT, DOWN_RIGHT }
 
@@ -553,22 +645,41 @@ internal fun ScenePanel(
     title: String?,
     modifier: Modifier = Modifier,
     badge: (@Composable () -> Unit)? = null,
+    /** Цветной флажок на рамке справа — у окон карточки перед игрой. */
+    flag: Color? = null,
+    /** Тень по низу внутри рамки: панель выглядит выпуклой плашкой, как в макете карточек. */
+    raised: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     // Над рамкой — место под всю верхнюю половину заголовка. Было 18 dp при сдвиге
     // заголовка на 22: верх букв с обводкой выходил за панель, и прокрутка сцены
     // срезала его — «Готово!» в итоге игры было обрезано сверху.
+    // Выпуклое окно карточки скруглено сильнее, как в референсе: 30 против 22.
+    val shape = RoundedCornerShape(if (raised) 30.dp else 22.dp)
     Box(modifier = modifier.padding(top = if (title != null) PanelTitleRise else 0.dp)) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(22.dp))
+                .clip(shape)
                 .background(FinneyCream)
-                .border(4.dp, FinneyInk, RoundedCornerShape(22.dp))
-                .padding(start = 14.dp, end = 14.dp, bottom = 14.dp, top = if (title != null) 26.dp else 14.dp),
+                .then(if (raised) Modifier.insetShade(shape, PanelShade, 9.dp, border = 4.dp) else Modifier)
+                .border(4.dp, FinneyInk, shape)
+                .padding(start = 14.dp, end = 14.dp, bottom = if (raised) 18.dp else 14.dp, top = if (title != null) 26.dp else 14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             content = content,
         )
+        if (flag != null) {
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = (-18).dp, y = (-14).dp)
+                    .rotate(12f)
+                    .size(width = 34.dp, height = 22.dp)
+                    .clip(RoundedCornerShape(7.dp))
+                    .background(flag)
+                    .border(StrokeRegular, FinneyInk, RoundedCornerShape(7.dp)),
+            )
+        }
         if (title != null) {
             // Заголовок садится на рамку: половина над ней, половина — внутри.
             Row(
@@ -582,6 +693,27 @@ internal fun ScenePanel(
         }
     }
 }
+
+/**
+ * Тень по низу внутри рамки — «объём» плашек, кружков и окон, как `inset` тень
+ * в макете карточек: форма минус та же форма, поднятая на [depth]. Поэтому у кружка
+ * тень — серп, а у плашки она загибается вверх по скруглениям. Полоса считается
+ * от внутреннего края рамки [border]: прямая полоса той же высоты почти вся
+ * уходила под рамку. Ставится после фона и до рамки.
+ */
+internal fun Modifier.insetShade(shape: Shape, color: Color, depth: Dp, border: Dp = StrokeRegular): Modifier = drawBehind {
+    val outline = Path().apply { addOutline(shape.createOutline(size, layoutDirection, this@drawBehind)) }
+    val lifted = Path().apply {
+        addPath(outline, Offset(0f, -(depth + border).toPx()))
+    }
+    drawPath(Path().apply { op(outline, lifted, PathOperation.Difference) }, color)
+}
+
+/** Тень белых плашек — светло-сиреневая. */
+internal val PillShade = Color(0xFFEDE6FF)
+
+/** Тень кремовых окон — тёплая, тон кремового потемнее. */
+private val PanelShade = Color(0xFFFBDDB4)
 
 /** На сколько заголовок [ScenePanel] поднимается над рамкой — ровно столько места над ней и оставляем. */
 private val PanelTitleRise = 22.dp

@@ -62,6 +62,10 @@ sealed interface TaskUiState {
         val result: TaskOutcomeUi?,
         val inputError: TaskInputError?,
         val isLevelGame: Boolean = false,
+        /** Номер уровня — на плашке «Это игра уровня» у карточки игры. */
+        val level: Int = 1,
+        /** Сколько условий уровня выполнено, 0..1, — дуга на плашке уровня. Считается как дуга у значка уровня на главном. */
+        val levelProgress: Float = 0f,
         /** Игру уровня нужно пройти, чтобы закрыть уровень (в демо — нет). */
         val levelGameRequired: Boolean = false,
         /** Игра уровня уже пройдена в этом уровне. */
@@ -146,6 +150,8 @@ class TaskViewModel(
             result = local.result,
             inputError = local.inputError,
             isLevelGame = isLevelGame,
+            level = game.level(state),
+            levelProgress = check?.let { (it.met + if (it.gamePassed) 1 else 0) / (LevelConditions + 1f) } ?: 0f,
             levelGameRequired = check?.gameRequired == true,
             levelGamePassed = check?.gamePassed == true,
             firstTry = state.attempts.none { it.taskId == taskId },
@@ -162,3 +168,6 @@ class TaskViewModel(
         }
     }
 }
+
+/** Условий уровня без игры: покрыть нужное, уложиться в план, отложить в копилку. */
+private const val LevelConditions = 3
