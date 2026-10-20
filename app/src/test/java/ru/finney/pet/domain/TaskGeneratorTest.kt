@@ -12,6 +12,7 @@ import ru.finney.pet.content.ContentException
 import ru.finney.pet.content.ContentParser
 import ru.finney.pet.domain.game.Game
 import ru.finney.pet.domain.model.ChoresTask
+import ru.finney.pet.domain.model.ReceiptTask
 import ru.finney.pet.domain.model.ReserveTask
 import ru.finney.pet.domain.model.SorterTask
 import ru.finney.pet.domain.model.StandTask
@@ -213,6 +214,30 @@ class TaskGeneratorTest {
             val orders = (1L..20L).map { (TaskGenerator.generate(content.taskTemplates.getValue(id), it) as SorterTask).items.map { i -> i.id } }
             assertTrue("$id: порядок не меняется", orders.any { it != inFile })
         }
+    }
+
+    @Test
+    fun `чеки из контента перемешиваются, а ошибки остаются теми же`() {
+        val receipts = listOf("game_receipt", "game_receipt_2", "game_receipt_3")
+        assertTrue(content.taskTemplates.keys.containsAll(receipts))
+        for (id in receipts) {
+            val inFile = content.task(id) as ReceiptTask
+            val shuffled = (1L..20L).map { TaskGenerator.generate(content.taskTemplates.getValue(id), it) as ReceiptTask }
+            assertTrue("$id: порядок строк не меняется", shuffled.any { it.lines != inFile.lines })
+            shuffled.forEach { task ->
+                assertEquals(inFile.lines.toSet(), task.lines.toSet())
+                assertEquals(inFile.cart.toSet(), task.cart.toSet())
+                // Из двух одинаковых строк лишней считается та, что ниже, поэтому сверяем
+                // не id строк, а товары с ошибкой, и сдачу.
+                assertEquals(errorItems(inFile), errorItems(task))
+            }
+        }
+    }
+
+    private fun errorItems(task: ReceiptTask): List<Any> {
+        val errors = TaskEngines.receiptErrors(task, emptySet())
+        val items = task.lines.filter { it.id in errors.lines }.map { it.item }.sorted()
+        return listOf(items, errors.changeShort, errors.changeEither)
     }
 
     /** Каждое зерно даёт выигрываемую игру без недоставленных подстановок, и числа правда меняются. */

@@ -71,6 +71,12 @@ import ru.finney.pet.ui.sound.Sfx
 /** Где на экране прилавок — доля высоты, как в фоне [Backdrop.STORE]. */
 private const val DESK_AT = 0.42f
 
+/**
+ * Голова над прилавком — одна на всех: и покупатель, и свой питомец. Раньше покупатель
+ * был 140, а свой — 210, и рядом со своим все гости казались маленькими (20.10).
+ */
+private val HeadSize = 176.dp
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ChangeGame(task: ChangeTask, character: PetCharacter, onClose: () -> Unit, onSubmit: (TaskInput) -> Unit) {
@@ -132,7 +138,7 @@ internal fun ChangeGame(task: ChangeTask, character: PetCharacter, onClose: () -
                     verticalAlignment = Alignment.Bottom,
                 ) {
                     if (give) {
-                        Guest(customer, 140.dp, Modifier.width(140.dp))
+                        Guest(customer, HeadSize, Modifier.width(HeadSize))
                         // Реплика и табло — наверху, товар — на прилавке: вплотную над товаром
                         // табло с ценой и сдачей сливалось с ним (плейтест 20.10).
                         Column(
@@ -154,7 +160,7 @@ internal fun ChangeGame(task: ChangeTask, character: PetCharacter, onClose: () -
                             }
                             Bubble(ownLine(current.price, tray.sum(), checked), Tail.RIGHT)
                         }
-                        ScenePet(character, 210.dp, Modifier.width(210.dp), reactions = pet)
+                        ScenePet(character, HeadSize, Modifier.width(HeadSize), reactions = pet)
                     }
                 }
 
