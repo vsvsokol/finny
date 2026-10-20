@@ -65,6 +65,20 @@ class HomeDesignerLayoutTest {
         compose.onNodeWithContentDescription("«Проверь чек», по желанию, пройдена").assertIsDisplayed().assertHasClickAction()
     }
 
+    @Test fun repeatedGameRoomTapsDoNotOpenShop() {
+        var shops = 0
+        show({ initialState().copy(toys = emptyList()) }, onShop = { shops++ })
+        val play = compose.onNodeWithContentDescription("Радость")
+        play.performTouchInput { doubleClick() }
+        compose.onNodeWithContentDescription("Покормить").performClick()
+        play.performTouchInput { doubleClick() }
+        play.performClick()
+        compose.runOnIdle { assertEquals(0, shops) }
+
+        compose.onNodeWithContentDescription("Магазин").performClick()
+        compose.runOnIdle { assertEquals(1, shops) }
+    }
+
     @Test fun completedGoalAndAllGamesHaveIndependentReadyStatesAtFont130() {
         val state = mutableStateOf(initialState())
         show({ state.value }, large = true)
