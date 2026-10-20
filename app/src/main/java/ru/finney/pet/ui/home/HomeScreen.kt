@@ -331,6 +331,16 @@ private fun emotionReason(emotion: Emotion, hasToys: Boolean): String? = when (e
     Emotion.CALM -> null
 }
 
+/** Значок у реплики — тот же, что на кнопке, которая поможет. Весёлому и спокойному значок не нужен. */
+@DrawableRes
+private fun emotionIcon(emotion: Emotion): Int? = when (emotion) {
+    Emotion.HUNGRY -> R.drawable.home_eat_icon
+    Emotion.DIRTY -> R.drawable.home_wash_icon
+    Emotion.TIRED -> R.drawable.home_sleep_icon
+    Emotion.SAD -> R.drawable.home_smile_icon
+    Emotion.HAPPY, Emotion.CALM -> null
+}
+
 @Composable
 internal fun HomeContent(
     state: HomeUiState.Ready,
@@ -1077,6 +1087,7 @@ internal fun HomeContent(
             PetSpeechBubble(
                 visible = speechVisible, tailAbove = speechBelow,
                 text = speechNote ?: emotionReason(state.emotion, state.toys.isNotEmpty()) ?: "Мне хорошо!",
+                icon = if (speechNote == null) emotionIcon(state.emotion) else null,
                 onClick = {
                     speechVisible = false
                     if (speechNote == null) when (state.emotion) {
