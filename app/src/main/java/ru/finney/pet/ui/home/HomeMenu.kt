@@ -107,6 +107,7 @@ internal fun HomeMenu(
     onOpenHelp: () -> Unit,
     onOpenGlossary: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenProgress: () -> Unit,
 ) {
     val animations = LocalAnimations.current
     AnimatedVisibility(
@@ -119,6 +120,8 @@ internal fun HomeMenu(
         val entries = listOf(
             MenuEntry("План расходов", { FinneyIcon(FinneyIcons.Plan, size = it) }, onOpenBudget),
             // Раньше «Гардероб», но в панели не только одежда: окрас и комната тоже.
+            // Карта уровней — и здесь, и мини-дорожкой в панели уровня: кнопку «Итоги и история» не находили.
+            MenuEntry("Мой путь", { FinneyIcon(FinneyIcons.Trophy, size = it) }, onOpenProgress),
             MenuEntry("Украсить", { FinneyIcon(FinneyIcons.Brush, size = it) }, onDecorate),
             // Знакомство в режиме подсказки: в конце «Понятно» и назад, без «Создать питомца».
             MenuEntry("Как играть", { FinneyIcon(FinneyIcons.Help, size = it) }, onOpenHelp),

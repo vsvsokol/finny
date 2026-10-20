@@ -198,6 +198,8 @@ sealed interface HomeUiState {
         val criticalThreshold: Int = 30,
         val title: String? = null,
         val upcoming: NextProgress? = null,
+        /** Кусок карты «Мой путь» вокруг текущего уровня — для панели уровня. */
+        val path: List<ru.finney.pet.ui.progress.LevelNode> = emptyList(),
         val upcomingFood: ShopItem? = null,
     ) : HomeUiState {
         /** Уровень завершается только после подтверждения плана. */
@@ -455,6 +457,7 @@ class HomeViewModel(
             level = level,
             title = game.title(state),
             upcoming = homeUnlocks(game, content, state, saved.profile.appearance.character),
+            path = miniPathWindow(ru.finney.pet.ui.progress.levelNodes(game, content, state, saved.profile.appearance.character)),
             upcomingFood = content.forSale.filter { it.effect.satiety > 0 && !game.isUnlocked(state, it) }
                 .minByOrNull { it.unlockLevel },
             check = check,
