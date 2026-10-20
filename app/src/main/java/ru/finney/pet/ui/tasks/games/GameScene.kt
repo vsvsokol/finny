@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.SideEffect
@@ -34,6 +35,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -157,6 +159,39 @@ internal fun Modifier.bleed(): Modifier = layout { measurable, constraints ->
     layout(constraints.maxWidth, placeable.height) { placeable.place(-extra / 2, 0) }
 }
 
+/** Высота видимой части [SceneBody] без кнопок: по ней содержимое решает, сколько места свободно. */
+internal val LocalSceneViewport = compositionLocalOf { Dp.Unspecified }
+
+/**
+ * Питомец внизу [SceneBody] на всё свободное место: от [min] до [max]. Места меньше [min] —
+ * заходит на то, что выше, не больше чем на [maxLift], а дальше прокрутка. [above] — высота
+ * всего, что стоит выше, вместе с промежутками между этим. На плейтесте 20.10 питомец
+ * в играх был мелким, хотя под ним пустовало место.
+ */
+@Composable
+internal fun ColumnScope.PetInFreeSpace(
+    above: Dp,
+    min: Dp,
+    max: Dp,
+    maxLift: Dp = 32.dp,
+    pet: @Composable (size: Dp, modifier: Modifier) -> Unit,
+) {
+    val viewport = LocalSceneViewport.current
+    // Два промежутка колонки: до распорки и после неё.
+    val room = if (viewport == Dp.Unspecified) min else viewport - above - 24.dp
+    val size = (room + maxLift).coerceIn(min, max)
+    val lift = (size - room).coerceIn(0.dp, maxLift)
+    Spacer(Modifier.weight(1f))
+    pet(
+        size,
+        Modifier.layout { measurable, constraints ->
+            val placeable = measurable.measure(constraints)
+            val up = lift.roundToPx()
+            layout(placeable.width, (placeable.height - up).coerceAtLeast(0)) { placeable.place(0, -up) }
+        },
+    )
+}
+
 /** Высота верхней полосы: содержимое сцены начинается ниже, чтобы не залезть под крестик. */
 internal val HudHeight: Dp = 60.dp
 
@@ -177,15 +212,17 @@ internal fun SceneBody(
 ) {
     Column(modifier.fillMaxSize().padding(top = HudHeight), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .fadingScroll(rememberScrollState())
-                    .heightIn(min = maxHeight),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                horizontalAlignment = horizontalAlignment,
-                content = content,
-            )
+            CompositionLocalProvider(LocalSceneViewport provides maxHeight) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .fadingScroll(rememberScrollState())
+                        .heightIn(min = maxHeight),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalAlignment = horizontalAlignment,
+                    content = content,
+                )
+            }
         }
         bottom()
     }

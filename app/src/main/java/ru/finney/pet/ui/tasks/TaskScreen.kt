@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -42,6 +43,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import ru.finney.pet.ui.tasks.games.PetInFreeSpace
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ru.finney.pet.domain.model.TaskOutcome
@@ -155,13 +157,21 @@ internal fun TaskIntro(state: TaskUiState.Ready, onStart: () -> Unit, onBack: ()
                 }
             },
         ) {
-            OutlinedText(state.task.title, style = MaterialTheme.typography.headlineLarge, textAlign = TextAlign.Center)
+            val density = LocalDensity.current
+            var titleHeight by remember { mutableStateOf(0.dp) }
+            var cardHeight by remember { mutableStateOf(0.dp) }
+            OutlinedText(
+                state.task.title,
+                style = MaterialTheme.typography.headlineLarge,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.onSizeChanged { titleHeight = with(density) { it.height.toDp() } },
+            )
             // Без заголовка на рамке: персиковое «Что делать» стояло вплотную к панели и
             // спорило с названием игры того же цвета (плейтест 29.09). Что это правила,
             // говорят номера шагов. Тема ребёнку ничего не говорит — она у взрослого.
             // Карточка «Ты — … · Сделай … · Получишь …» (плейтест 02.10): ребёнок не понимал,
             // кто он в игре и зачем играть. Поэтому видно и то, что игра даёт уровню.
-            ScenePanel(title = null, modifier = Modifier.fillMaxWidth()) {
+            ScenePanel(title = null, modifier = Modifier.fillMaxWidth().onSizeChanged { cardHeight = with(density) { it.height.toDp() } }) {
                 Text(gameHelp(state.task).role, style = MaterialTheme.typography.titleMedium, color = FinneyInk)
                 CardLabel("Сделай")
                 IntroSteps(state.task.intro)
@@ -174,12 +184,14 @@ internal fun TaskIntro(state: TaskUiState.Ready, onStart: () -> Unit, onBack: ()
                     color = FinneyInk,
                 )
             }
-            Spacer(Modifier.weight(1f))
             // Сколько дадут — монеткой в пузыре, а не фразой. Уже пройдено — просто «ещё?».
-            if (state.completed) {
-                PetSays(state.character, "Сыграем ещё?", petSize = 128.dp)
-            } else {
-                PetOffers(state.character, state.reward.success, petSize = 128.dp)
+            // У короткой карточки питомец до 200 dp, у длинной заходит на её угол.
+            PetInFreeSpace(above = titleHeight + cardHeight + 12.dp, min = 128.dp, max = 200.dp) { size, modifier ->
+                if (state.completed) {
+                    PetSays(state.character, "Сыграем ещё?", modifier, petSize = size)
+                } else {
+                    PetOffers(state.character, state.reward.success, modifier, petSize = size)
+                }
             }
             if (state.available && state.needsPlan) {
                 ScenePanel(title = null, modifier = Modifier.fillMaxWidth()) {
