@@ -81,7 +81,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import ru.finney.pet.R
-import ru.finney.pet.domain.model.BodyColor
 import ru.finney.pet.domain.model.PetCharacter
 import ru.finney.pet.ui.components.FinneyButton
 import ru.finney.pet.ui.components.FinneyIcon
@@ -136,10 +135,9 @@ data class Outfit(val id: String, val label: String, val owned: Boolean)
 /** Как выглядит питомец сейчас — для карточек «Окрас» и «Одежда». */
 data class PetLook(
     val character: PetCharacter,
-    val bodyColor: BodyColor,
     val worn: List<String>,
     val outfit: List<Outfit>,
-    /** Надетая окраска; null — цвет [bodyColor]. */
+    /** Надетая окраска; null — родной цвет. */
     val coloring: String? = null,
     val colorings: List<Coloring> = emptyList(),
 )
@@ -165,8 +163,7 @@ fun InteriorPicker(
     onTab: (EditTab) -> Unit,
     onPick: (InteriorPart, RoomInterior) -> Unit,
     onTakeAll: (RoomInterior) -> Unit,
-    onColour: (BodyColor) -> Unit,
-    /** Надеть окраску; null — снять и вернуться к цвету. */
+    /** Надеть окраску; null — снять и вернуться к родному цвету. */
     onColoring: (String?) -> Unit = {},
     onWear: (String) -> Unit,
     onTakeOff: (String) -> Unit,
@@ -243,32 +240,28 @@ fun InteriorPicker(
                 ) {
                     when (tab) {
                         EditTab.COLOUR -> {
-                          // Только родной цвет: оттенки «тёплый» и «свежий» (сдвиг тона тех же слоёв)
-                          // сменили настоящие окраски от дизайнеров — их убрали и из знакомства.
-                          items(listOf(BodyColor.A), key = { it.name }) { colour ->
-                            val chosen = look.coloring == null && look.bodyColor == colour
+                          // Первая карточка — родной цвет: ею окраску снимают.
+                          item(key = "native") {
+                            val chosen = look.coloring == null
                             PickCard(
-                                description = "Окрас: ${BodyColorLabels.getValue(colour)}",
+                                description = "Окрас: родной",
                                 selected = chosen,
                                 animate = animations,
                                 onClick = {
                                     if (chosen) return@PickCard
                                     sounds.play(Sfx.Tap)
-                                    // Цвет из профиля — значит, окраску снимаем.
-                                    if (look.coloring != null) onColoring(null)
-                                    if (look.bodyColor != colour) onColour(colour)
+                                    onColoring(null)
                                 },
                             ) {
                                 PetView(
                                     character = look.character,
-                                    bodyColor = colour,
                                     mood = PetMood.HAPPY,
                                     pose = StillPose,
                                     modifier = Modifier.padding(top = 6.dp).size(80.dp),
                                 )
                             }
                           }
-                          // Окраски — следом за цветами, тем же рядом: это тоже «как выглядит Финни».
+                          // Окраски — следом за родным, тем же рядом: это тоже «как выглядит Финни».
                           // Неполученные — бледные с замком, как вещи: их копят в копилке.
                           items(look.colorings, key = { it.id }) { coloring ->
                             val chosen = look.coloring == coloring.id
@@ -361,7 +354,7 @@ fun InteriorPicker(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 SideTab("Финни", selected = tab.pet, onClick = { onTab(lastPet) }) {
-                    PetView(look.character, PetMood.HAPPY, StillPose, Modifier.size(32.dp), bodyColor = look.bodyColor, coloring = look.coloring)
+                    PetView(look.character, PetMood.HAPPY, StillPose, Modifier.size(32.dp), coloring = look.coloring)
                 }
                 SideTab("Комната", selected = !tab.pet, onClick = { onTab(lastRoom) }) {
                     Canvas(Modifier.size(26.dp)) { houseIcon() }
@@ -377,12 +370,6 @@ fun InteriorPicker(
 private val PanelShape = RoundedCornerShape(topStart = 36.dp, topEnd = 36.dp)
 
 private val StillPose: () -> PetPose = { PetPose() }
-
-private val BodyColorLabels = mapOf(
-    BodyColor.A to "родной",
-    BodyColor.B to "тёплый",
-    BodyColor.C to "свежий",
-)
 
 /** Половина панели на рамке: «Финни» или «Комната». Выбранная — как основная кнопка кита. */
 @Composable
@@ -826,12 +813,11 @@ private fun InteriorPickerPreview() {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
             InteriorPicker(
                 interior = Interiors.Default.withPart(InteriorPart.WINDOW, Interiors.Circus),
-                look = PetLook(PetCharacter.PUSHISTIK, BodyColor.B, listOf("hat_pirate"), listOf(Outfit("hat_pirate", "Пиратская шляпа", true))),
+                look = PetLook(PetCharacter.PUSHISTIK, listOf("hat_pirate"), listOf(Outfit("hat_pirate", "Пиратская шляпа", true))),
                 tab = EditTab.WINDOW,
                 onTab = {},
                 onPick = { _, _ -> },
                 onTakeAll = {},
-                onColour = {},
                 onWear = {},
                 onTakeOff = {},
                 onLocked = {},

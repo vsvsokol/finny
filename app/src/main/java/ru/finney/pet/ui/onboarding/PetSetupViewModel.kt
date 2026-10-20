@@ -78,8 +78,6 @@ class PetSetupViewModel(
     fun setCharacter(character: PetCharacter) =
         _uiState.update { it.copy(appearance = it.appearance.copy(character = character)) }
 
-    fun setBodyColor(color: BodyColor) = _uiState.update { it.copy(appearance = it.appearance.copy(bodyColor = color)) }
-
     fun setEyes(eyes: EyesVariant) = _uiState.update { it.copy(appearance = it.appearance.copy(eyes = eyes)) }
 
     fun save() {

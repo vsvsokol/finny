@@ -37,14 +37,13 @@ class PetSetupViewModelTest : ViewModelTest() {
 
         viewModel.setName(" Финни ")
         viewModel.setCharacter(PetCharacter.ROGATIK)
-        viewModel.setBodyColor(BodyColor.C)
         viewModel.setEyes(EyesVariant.SLY)
         viewModel.save()
 
         assertEquals(PetSetupEvent.Saved, viewModel.events.first())
         val profile = session.activeGame.first()!!.profile
         assertEquals("Финни", profile.petName)
-        assertEquals(PetAppearance(PetCharacter.ROGATIK, BodyColor.C, EyesVariant.SLY), profile.appearance)
+        assertEquals(PetAppearance(PetCharacter.ROGATIK, BodyColor.A, EyesVariant.SLY), profile.appearance)
     }
 
     @Test

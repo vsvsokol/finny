@@ -60,7 +60,6 @@ import ru.finney.pet.ui.components.OutlinedText
 import ru.finney.pet.ui.tasks.games.Bubble
 import ru.finney.pet.ui.tasks.games.GameScene
 import ru.finney.pet.ui.tasks.games.LocalPlayerAccessory
-import ru.finney.pet.ui.tasks.games.LocalPlayerBodyColor
 import ru.finney.pet.ui.tasks.games.PetAtRight
 import ru.finney.pet.ui.tasks.games.PetOffers
 import ru.finney.pet.ui.tasks.games.PetSays
@@ -107,7 +106,6 @@ fun TaskScreen(
         }
 
         is TaskUiState.Ready -> CompositionLocalProvider(
-            LocalPlayerBodyColor provides s.bodyColor,
             LocalPlayerAccessory provides s.worn,
         ) {
             // Фон один на вступление, игру и итог — меняется плавно, а не с каждым экраном.
