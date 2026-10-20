@@ -1,6 +1,11 @@
 package ru.finney.pet.ui.tasks.games
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
+import ru.finney.pet.ui.components.fadingScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.height
@@ -110,46 +115,62 @@ internal fun ReceiptGame(task: ReceiptTask, character: PetCharacter, onClose: ()
         val rowTop = with(density) { WindowInsets.systemBars.getTop(this).toDp() } + 8.dp + HudHeight
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val screenWidth = maxWidth + SceneEdge * 2
-            SceneBody(
-                bottom = {
-                    if (solved) {
-                        FinneyButton(text = "Готово", onClick = { onSubmit(first ?: TaskInput.Flags(lines, change)) })
-                    } else {
-                        FinneyButton(text = "Проверить", onClick = {
-                            if (first == null) first = TaskInput.Flags(lines, change)
-                            checked = true
-                            sounds.play(if (right) Sfx.Correct else Sfx.Wrong)
-                        })
-                    }
-                },
-            ) {
+            // Прокручивается только чек: кассир, прилавок и кнопка стоят на месте. Раньше
+            // уезжал весь экран, и кассир с прилавком съезжали с нарисованного фона.
+            Column(Modifier.fillMaxSize().padding(top = HudHeight), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 // Кассир с репликой стоит за прилавком фона, покупки лежат на прилавке рядом,
                 // как товар у «Сдачи», а чек — под прилавком, на сиреневом: так в макете кассы.
                 // Отдельным окном «Пакет» покупки не помещались: чек уходил за низ экрана.
                 // Прилавок нарисован в единицах макета от верха экрана, поэтому и место
                 // над ним считается от верха экрана.
                 val unit = designUnit(screenWidth)
-                val stand = (unit * DESK_TOP - rowTop).coerceAtLeast(MinStand)
+                // Реплика сверху, под ней кассир и покупки. Много покупок — два ряда, и
+                // место над прилавком растёт: иначе верхний ряд прятался под реплику.
+                var bubbleHeight by remember { mutableStateOf(0.dp) }
+                var goodsHeight by remember { mutableStateOf(0.dp) }
+                val stand = maxOf(unit * DESK_TOP - rowTop, bubbleHeight + 8.dp + goodsHeight, MinStand)
+                SideEffect { DeskTop.floatValue = maxOf(DESK_TOP, (rowTop + stand) / unit) }
+                DisposableEffect(Unit) { onDispose { DeskTop.floatValue = DESK_TOP } }
                 Box(Modifier.fillMaxWidth().height(stand)) {
                     Guest(cashier, CashierSize, Modifier.align(Alignment.BottomStart).width(CashierSize))
-                    Bag(task.cart, Modifier.align(Alignment.BottomEnd).padding(start = CashierSize - 16.dp))
+                    Bag(
+                        task.cart,
+                        Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(start = CashierSize - 16.dp)
+                            .onSizeChanged { goodsHeight = with(density) { it.height.toDp() } },
+                    )
                     SpeechBubble(
                         cashierLine(checked, solved, details),
                         Tail.DOWN,
-                        Modifier.align(Alignment.TopStart).widthIn(max = 250.dp),
+                        Modifier
+                            .align(Alignment.TopStart)
+                            .widthIn(max = 250.dp)
+                            .onSizeChanged { bubbleHeight = with(density) { it.height.toDp() } },
                         tailAt = 0.3f,
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
                 // Два промежутка колонки по 12 dp уже есть: до прилавка и после него.
-                Spacer(Modifier.height((unit * (DESK_BOTTOM - DESK_TOP) - 16.dp).coerceAtLeast(0.dp)))
-                ReceiptPaper(
-                    task = task,
-                    markOf = { id -> mark(id in lines, id in errors.lines) },
-                    changeMark = mark(change, changeWrong || (change && errors.changeEither)),
-                    onLine = { id -> edit { lines = if (id in lines) lines - id else lines + id } },
-                    onChange = { edit { change = !change } },
-                )
+                Spacer(Modifier.height((unit * DESK_HEIGHT - 16.dp).coerceAtLeast(0.dp)))
+                Column(Modifier.weight(1f).fillMaxWidth().fadingScroll(rememberScrollState())) {
+                    ReceiptPaper(
+                        task = task,
+                        markOf = { id -> mark(id in lines, id in errors.lines) },
+                        changeMark = mark(change, changeWrong || (change && errors.changeEither)),
+                        onLine = { id -> edit { lines = if (id in lines) lines - id else lines + id } },
+                        onChange = { edit { change = !change } },
+                    )
+                }
+                if (solved) {
+                    FinneyButton(text = "Готово", onClick = { onSubmit(first ?: TaskInput.Flags(lines, change)) })
+                } else {
+                    FinneyButton(text = "Проверить", onClick = {
+                        if (first == null) first = TaskInput.Flags(lines, change)
+                        checked = true
+                        sounds.play(if (right) Sfx.Correct else Sfx.Wrong)
+                    })
+                }
             }
         }
     }
@@ -158,7 +179,7 @@ internal fun ReceiptGame(task: ReceiptTask, character: PetCharacter, onClose: ()
 /** Кассир за прилавком — крупно, как покупатель у «Сдачи». */
 private val CashierSize = 124.dp
 
-/** Меньше места над прилавком не бывает: на низком экране кассир не сжимается, а сцена прокручивается. */
+/** Меньше места над прилавком не бывает: на низком экране кассир не сжимается, а чек прокручивается. */
 private val MinStand = 160.dp
 
 /** Кассир вежливый: ошибся случайно, после проверки подсказывает, а не ругает. */

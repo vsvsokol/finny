@@ -39,6 +39,11 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import ru.finney.pet.ui.tasks.games.ScenePet
+import ru.finney.pet.ui.tasks.games.LocalSceneViewport
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ru.finney.pet.domain.model.TaskOutcome
@@ -299,46 +304,84 @@ internal fun TaskResultScene(state: TaskUiState.Ready, onReplay: () -> Unit, onD
                     }
                 },
             ) {
-                // Итог — значком на рамке, крупно: «✓» или «!» видно раньше, чем прочитано слово.
-                // Цвет здесь — итог действия ребёнка, как и велит правило цвета, и не единственный признак.
-                ScenePanel(
-                    title = if (success) "Готово!" else "Почти!",
-                    modifier = Modifier.fillMaxWidth(),
-                    badge = { if (success) CheckBadge(size = 44.dp) else AlertBadge(size = 44.dp) },
+                // Сколько занято над питомцем: по этим высотам он выбирает размер и место.
+                var aboveHeight by remember { mutableStateOf(0.dp) }
+                var bubbleHeight by remember { mutableStateOf(0.dp) }
+                Column(
+                    Modifier.onSizeChanged { aboveHeight = with(density) { it.height.toDp() } },
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    ResultBody(state.task, result.details, result.input, result.bonus)
+                    // Итог — значком на рамке, крупно: «✓» или «!» видно раньше, чем прочитано слово.
+                    // Цвет здесь — итог действия ребёнка, как и велит правило цвета, и не единственный признак.
+                    ScenePanel(
+                        title = if (success) "Готово!" else "Почти!",
+                        modifier = Modifier.fillMaxWidth(),
+                        badge = { if (success) CheckBadge(size = 44.dp) else AlertBadge(size = 44.dp) },
+                    ) {
+                        ResultBody(state.task, result.details, result.input, result.bonus)
+                    }
+                    // Награды нет — нет и плашки: «награда уже получена» была лишней строкой
+                    // в и без того длинном итоге (редизайн 28.09).
+                    if (result.reward > 0) RewardChip(
+                        result.reward,
+                        Modifier
+                            .align(Alignment.CenterHorizontally)
+                            .onGloballyPositioned { flight.from = it.boundsInRoot().center }
+                            .graphicsLayer {
+                                scaleX = flight.chipPop.value
+                                scaleY = flight.chipPop.value
+                            },
+                    )
                 }
-                // Награды нет — нет и плашки: «награда уже получена» была лишней строкой
-                // в и без того длинном итоге (редизайн 28.09).
-                if (result.reward > 0) RewardChip(
-                    result.reward,
-                    Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .onGloballyPositioned { flight.from = it.boundsInRoot().center }
-                        .graphicsLayer {
-                            scaleX = flight.chipPop.value
-                            scaleY = flight.chipPop.value
-                        },
-                )
                 Spacer(Modifier.weight(1f))
-                // Объяснение — репликой питомца во всю ширину, хвостиком к нему: так оно
-                // отделено от пунктов и читается как совет, а не как ещё один абзац.
-                SpeechBubble(
-                    TaskEngines.explanation(state.task, result.outcome, result.details),
-                    Tail.DOWN,
-                    Modifier.fillMaxWidth(),
-                    tailAt = 0.8f,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                // Питомец не уходит под край прокрутки: раньше он стоял в 225 dp при любом
+                // разборе, и при двух-трёх ошибках или на коротком экране от него торчала
+                // только макушка. Места под репликой меньше [ResultPetMin] — питомец стоит
+                // рядом с репликой, мельче.
+                val viewport = LocalSceneViewport.current
+                val free = if (viewport == Dp.Unspecified) ResultPetMax
+                    else viewport - aboveHeight - bubbleHeight - ResultGaps
+                val explanation = TaskEngines.explanation(state.task, result.outcome, result.details)
                 // Итог: получилось — два прыжка и конфетти, не вышло — грустит и капля.
                 val pet = rememberPetReactions()
                 LaunchedEffect(success) { if (success) pet.win() else pet.fail() }
-                PetAtRight(state.character, 225.dp, Modifier.padding(end = 8.dp), reactions = pet)
+                if (free >= ResultPetMin) {
+                    // Объяснение — репликой питомца во всю ширину, хвостиком к нему: так оно
+                    // отделено от пунктов и читается как совет, а не как ещё один абзац.
+                    SpeechBubble(
+                        explanation,
+                        Tail.DOWN,
+                        Modifier.fillMaxWidth().onSizeChanged { bubbleHeight = with(density) { it.height.toDp() } },
+                        tailAt = 0.8f,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    PetAtRight(state.character, free.coerceAtMost(ResultPetMax), Modifier.padding(end = 8.dp), reactions = pet)
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        SpeechBubble(
+                            explanation,
+                            Tail.RIGHT,
+                            Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        ScenePet(state.character, ResultPetSide, Modifier.width(ResultPetSide), reactions = pet)
+                    }
+                }
             }
         }
         RewardCoins(flight)
     }
 }
+
+/** Питомец в итоге: крупнее не нужен, мельче под репликой — уже не виден, ставим рядом. */
+private val ResultPetMax = 225.dp
+private val ResultPetMin = 150.dp
+
+/** Питомец рядом с репликой, когда под ней мало места. */
+private val ResultPetSide = 110.dp
+
+/** Промежутки колонки между пунктами, распоркой, репликой и питомцем. */
+private val ResultGaps = 36.dp
 
 /** Награда плашкой: монетка и «+15». Показывается, только когда награда есть. */
 @Composable

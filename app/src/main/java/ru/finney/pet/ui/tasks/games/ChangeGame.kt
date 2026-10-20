@@ -60,6 +60,12 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.em
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ru.finney.pet.domain.model.ChangeMode
@@ -184,30 +190,48 @@ internal fun ChangeGame(task: ChangeTask, character: PetCharacter, onClose: () -
         BoxWithConstraints(Modifier.fillMaxSize()) {
             // Низ верхней половины — ровно на стыке фона: прилавок стоит на границе стены и кассы.
             val screen = maxHeight + barsTop + barsBottom + 16.dp
+            val sceneWidth = maxWidth
+            val sceneHeight = maxHeight
             val aboveDesk = (screen * TILL_SPLIT_AT - barsTop - 8.dp).coerceAtLeast(HudHeight + 260.dp)
             val line = nudge ?: if (give) customerLine(current.target, coins.sum(), checked, paid = current.paid ?: 0)
             else ownLine(current.price, coins.sum(), checked)
 
             Column(Modifier.fillMaxSize()) {
                 Box(Modifier.fillMaxWidth().height(aboveDesk)) {
+                    // Чек справа сверху, под ним на прилавке — товар. На узком и низком экране
+                    // реплика наезжала на чек, а чек закрывал товар: реплика сужается до чека,
+                    // товар мельчает до места между чеком и прилавком.
+                    var checkBottom by remember { mutableStateOf(0.dp) }
+                    val itemSize = (aboveDesk - checkBottom - 30.dp - 8.dp).coerceIn(48.dp, 84.dp)
+                    val sayWidth = minOf(228.dp, sceneWidth - CheckWidth - 12.dp)
                     val speaker = Modifier.align(Alignment.BottomStart).padding(bottom = 36.dp).offset(x = (-4).dp).width(190.dp)
                     Jolting(jolt, speaker) { m ->
                         if (give) Guest(customer, 190.dp, m) else ScenePet(character, 190.dp, m, reactions = pet)
                     }
                     ItemPicture(
-                        current, current.label, 84.dp,
+                        current, current.label, itemSize,
                         Modifier.align(Alignment.BottomEnd).padding(end = 24.dp, bottom = 30.dp),
                     )
                     Counter(Modifier.align(Alignment.BottomCenter))
-                    Say(line, Modifier.align(Alignment.TopStart).padding(start = 4.dp, top = 92.dp).width(228.dp))
+                    Say(line, Modifier.align(Alignment.TopStart).padding(start = 4.dp, top = 92.dp).width(sayWidth))
                     Check(
                         give, current.price, current.paid ?: 0, current.target, solved,
-                        Modifier.align(Alignment.TopEnd).padding(end = 4.dp, top = 92.dp).width(142.dp),
+                        Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(end = 4.dp, top = 92.dp)
+                            .width(CheckWidth)
+                            .onGloballyPositioned { c ->
+                                checkBottom = with(density) { (c.positionInParent().y + c.size.height).toDp() }
+                            },
                     )
                 }
+                // Низ экрана: лоток, ящик, кнопка. На коротком экране ящик ниже: иначе
+                // лотку оставалось меньше монеты, и прокрутка срезала монетам низ.
+                val lower = sceneHeight - aboveDesk
+                val compact = lower < CompactBelow
                 Column(
                     Modifier.weight(1f).padding(start = 4.dp, end = 4.dp, top = 34.dp, bottom = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(if (compact) 10.dp else 14.dp),
                 ) {
                     Tray(
                         title = if (give) "Отсчитай сдачу" else "Заплати ровно",
@@ -224,7 +248,7 @@ internal fun ChangeGame(task: ChangeTask, character: PetCharacter, onClose: () -
                             nudge = null
                         },
                     )
-                    if (give) Drawer(task.coins, enabled = !solved, onTake = ::put)
+                    if (give) Drawer(task.coins, enabled = !solved, compact = compact, onTake = ::put)
                     else Wallet(current.wallet, coins, enabled = !solved, onTake = ::put)
                     FinneyButton(
                         text = when {
@@ -241,6 +265,12 @@ internal fun ChangeGame(task: ChangeTask, character: PetCharacter, onClose: () -
         }
     }
 }
+
+/** Ширина чека справа сверху. */
+private val CheckWidth = 142.dp
+
+/** Ниже этой высоты под прилавком ящик кассы становится ниже: лотку нужно место под монеты. */
+private val CompactBelow = 400.dp
 
 /** Круглые кнопки верхней полосы — 54, как в макете кассы. */
 internal val RoundButtonSize = 54.dp
@@ -523,16 +553,22 @@ private fun Tray(
                 .padding(start = 14.dp, end = 14.dp, top = 26.dp, bottom = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 if (coins.isEmpty()) {
-                    Text(
+                    // На коротком экране лоток низкий: подсказка мельчает, а не срезается.
+                    BasicText(
                         hint,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 19.sp, lineHeight = 24.sp),
-                        color = FinneyInk.copy(alpha = 0.6f),
-                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = 19.sp, lineHeight = 1.25.em,
+                            color = FinneyInk.copy(alpha = 0.6f), textAlign = TextAlign.Center,
+                        ),
+                        autoSize = TextAutoSize.StepBased(minFontSize = 12.sp, maxFontSize = 19.sp),
                         modifier = Modifier.padding(horizontal = 20.dp),
                     )
                 } else {
+                    // Высота лотка зависит от экрана: на коротком монеты в 52 dp не влезали,
+                    // и прокрутка срезала им низ. Монеты мельчают, пока все ряды не встанут целиком.
+                    val coinSize = trayCoinSize(coins.size, maxWidth, maxHeight)
                     // Прокрутка режет всё, что за её краем, а минус торчит над монетой на 6 dp:
                     // без поля сверху его срезало.
                     FlowRow(
@@ -541,7 +577,7 @@ private fun Tray(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         coins.forEach { coin ->
-                            key(coin.id) { TrayCoinView(coin, enabled) { onRemove(coin.id) } }
+                            key(coin.id) { TrayCoinView(coin, coinSize, enabled) { onRemove(coin.id) } }
                         }
                     }
                 }
@@ -582,9 +618,28 @@ private fun Sum(total: Int) {
     )
 }
 
+/**
+ * Самая крупная монета лотка (не больше 52 dp, не меньше 34), при которой все [count] монет
+ * встают рядами в [width] × [height]. Поля как у ряда: 10 dp между монетами, 12 между
+ * рядами, сверху 8 под минус и 2 снизу; минус выступает справа на 6 dp.
+ */
+private fun trayCoinSize(count: Int, width: Dp, height: Dp): Dp {
+    var size = TrayCoinMax
+    while (size > TrayCoinMin) {
+        val perRow = ((width - 6.dp + 10.dp) / (size + 10.dp)).toInt().coerceAtLeast(1)
+        val rows = (count + perRow - 1) / perRow
+        if (size * rows + 12.dp * (rows - 1) + 10.dp <= height) return size
+        size -= 2.dp
+    }
+    return TrayCoinMin
+}
+
+private val TrayCoinMax = 52.dp
+private val TrayCoinMin = 30.dp
+
 /** Монета на лотке: падает сверху, когда её положили; нажатие убирает. */
 @Composable
-private fun TrayCoinView(coin: TrayCoin, enabled: Boolean, onRemove: () -> Unit) {
+private fun TrayCoinView(coin: TrayCoin, size: Dp, enabled: Boolean, onRemove: () -> Unit) {
     val drop = remember { Animatable(0f) }
     val animate = LocalAnimations.current
     LaunchedEffect(Unit) {
@@ -601,7 +656,7 @@ private fun TrayCoinView(coin: TrayCoin, enabled: Boolean, onRemove: () -> Unit)
             }
             .clickable(enabled = enabled, role = Role.Button, onClickLabel = "Убрать монету ${coin.value}", onClick = onRemove),
     ) {
-        DenominationCoin(coin.value)
+        DenominationCoin(coin.value, size = size)
         Box(
             Modifier
                 .align(Alignment.TopEnd)
@@ -619,7 +674,7 @@ private fun TrayCoinView(coin: TrayCoin, enabled: Boolean, onRemove: () -> Unit)
 
 /** Ящик кассы: деревянный, по ячейке на номинал, монет сколько угодно. */
 @Composable
-private fun Drawer(coins: List<Int>, enabled: Boolean, onTake: (Int) -> Unit) {
+private fun Drawer(coins: List<Int>, enabled: Boolean, compact: Boolean, onTake: (Int) -> Unit) {
     val shape = RoundedCornerShape(24.dp)
     Row(
         Modifier
@@ -634,19 +689,19 @@ private fun Drawer(coins: List<Int>, enabled: Boolean, onTake: (Int) -> Unit) {
             .padding(10.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        coins.forEach { coin -> Slot(coin, enabled, Modifier.weight(1f)) { onTake(coin) } }
+        coins.forEach { coin -> Slot(coin, enabled, compact, Modifier.weight(1f)) { onTake(coin) } }
     }
 }
 
 @Composable
-private fun Slot(coin: Int, enabled: Boolean, modifier: Modifier, onTake: () -> Unit) {
+private fun Slot(coin: Int, enabled: Boolean, compact: Boolean, modifier: Modifier, onTake: () -> Unit) {
     val shape = RoundedCornerShape(16.dp)
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val press by animateFloatAsState(if (pressed) 1f else 0f, tween(100), label = "slot")
     Box(
         modifier
-            .height(84.dp)
+            .height(if (compact) 64.dp else 84.dp)
             .clip(shape)
             .background(WoodDeep)
             .drawBehind { drawRect(Color(0x38140A28), size = size.copy(height = 10.dp.toPx())) }
@@ -655,7 +710,7 @@ private fun Slot(coin: Int, enabled: Boolean, modifier: Modifier, onTake: () -> 
         contentAlignment = Alignment.Center,
     ) {
         DenominationCoin(
-            coin, size = 62.dp,
+            coin, size = if (compact) 48.dp else 62.dp,
             modifier = Modifier.graphicsLayer {
                 translationY = press * 3.dp.toPx()
                 scaleX = 1f - 0.05f * press

@@ -3,6 +3,7 @@ package ru.finney.pet.ui.tasks.games
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -383,7 +384,7 @@ private val ShelfBrackets = svgPath("M86,40 L132,40 L86,86 Z M766,40 L720,40 L76
 @Composable
 internal fun CashDesk() {
     DesignCanvas { h ->
-        val d = DESK_TOP - 832f
+        val d = DeskTop.floatValue - 832f
         val wall = Rect(0f, 0f, DESIGN_W, 860f + d)
         drawRect(DeskWall, wall.topLeft, wall.size)
         tiles(wall, 150f, DeskWallLayer1, DeskWallPattern)
@@ -397,14 +398,21 @@ internal fun CashDesk() {
             outlinedRect(x, 892f + d, 260f, 142f, DeskPanel, 5f, r = 20f)
             drawRoundRect(DeskPanelLight, Offset(x + 14f, 904f + d), Size(232f, 10f), CornerRadius(5f, 5f))
         }
-        outlinedRect(-10f, DESK_TOP, 920f, 36f, DeskTop, 7f, r = 6f)
+        outlinedRect(-10f, 832f + d, 920f, 36f, DeskTopWood, 7f, r = 6f)
         drawRect(DeskTopLight, Offset(0f, 842f + d), Size(DESIGN_W, 8f))
     }
 }
 
-/** Верх столешницы и низ прилавка кассы на холсте макета: по ним «Чек» ставит кассира и пакет. */
+/** Обычный верх столешницы кассы и высота прилавка на холсте макета. */
 internal const val DESK_TOP = 700f
-internal const val DESK_BOTTOM = DESK_TOP + 230f
+internal const val DESK_HEIGHT = 230f
+
+/**
+ * Где сейчас верх столешницы кассы «Чека», в единицах холста. Обычно [DESK_TOP]; когда
+ * покупок много и они встают в два ряда, игра опускает прилавок, чтобы покупки
+ * не прятались под реплику кассира. Читается только на отрисовке фона.
+ */
+internal val DeskTop = mutableFloatStateOf(DESK_TOP)
 
 /** Сколько dp в единице холста макета на экране шириной [screenWidth]. */
 internal fun designUnit(screenWidth: Dp): Dp = screenWidth / DESIGN_W
@@ -416,7 +424,7 @@ private val DeskLowPattern = Color(0xFFD7CDF7)
 private val DeskFront = Color(0xFF9C6B53)
 private val DeskPanel = Color(0xFFA9775E)
 private val DeskPanelLight = Color(0xFFB88468)
-private val DeskTop = Color(0xFFC08A6C)
+private val DeskTopWood = Color(0xFFC08A6C)
 private val DeskTopLight = Color(0xFFD4A385)
 
 private val DeskWallLayer1 = listOf(
