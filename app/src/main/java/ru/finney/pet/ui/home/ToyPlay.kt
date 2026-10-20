@@ -139,38 +139,3 @@ fun HeartBurstLayer(burst: HeartBurst) {
         }
     }
 }
-
-/**
- * Подсказка к шкале радости: игрушка, конфета, шляпа поднимают сердечко. Это ровно
- * то, что растит радость в игре: игра с игрушкой, «хочется» из магазина и шляпы
- * (покупка и цель). Зачем радость нужна, здесь не пишем: бонус за неё ещё не решён.
- *
- * Плейтест 28.09: «вылезает плашка, из которой ничего не понятно» — картинки были
- * мелкие, стрелки тонкие, и плашка сама пропадала через 5 секунд, пока ребёнок
- * разглядывал. Теперь картинки крупнее, сверху подпись одной строкой, и плашка
- * висит, пока её не закроют крестиком или касанием мимо (ТЗ п. 8.1 — не торопить).
- */
-@Composable
-fun MoodHint(onClose: () -> Unit, playLeft: Int = 0, hasToys: Boolean = false) {
-    androidx.compose.ui.window.Dialog(onDismissRequest = onClose) {
-        Column(Modifier.verticalScroll(rememberScrollState())) {
-            FinneyPanel(title = "Радость", onClose = onClose) {
-                Text("Радость — настроение Финни: от 0 до 100.",
-                    style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    for (art in listOf(R.drawable.item_toy_ball, R.drawable.item_treat_candy, R.drawable.acc_hat_cowboy)) {
-                        Image(painterResource(art), contentDescription = null, modifier = Modifier.size(48.dp))
-                    }
-                }
-                Text("Поиграй игрушкой в зале или купи сладость в магазине. Сладость действует один раз.",
-                    style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
-                if (hasToys) Text(
-                    if (playLeft > 0) "Игрушки дадут ещё до $playLeft радости на этом уровне."
-                    else "Финни уже наигрался. Новая радость от игрушек — на следующем уровне.",
-                    style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
-                Text("Сытость и чистоту поднимай отдельно: едой и ванной.",
-                    style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
-            }
-        }
-    }
-}

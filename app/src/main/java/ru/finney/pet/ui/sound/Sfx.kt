@@ -40,6 +40,9 @@ enum class Sfx(@RawRes val res: Int) {
 
     // Комната
     CapsuleDoor(R.raw.sfx_capsule_door),
+    /** Питомец прыжком уходит в соседнюю комнату и впрыгивает в неё (RoomScene). */
+    PetLeap(R.raw.sfx_pet_leap),
+    PetLand(R.raw.sfx_pet_land),
     Ufo(R.raw.sfx_ufo),
 
     // Игрушки: взял, уронил и у каждой своя встряска (см. toyShakeSound в ToyPlay.kt)

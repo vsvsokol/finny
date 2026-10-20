@@ -22,10 +22,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import ru.finney.pet.domain.model.Category
 import ru.finney.pet.ui.theme.FinneyInk
-import ru.finney.pet.ui.theme.FinneyPeach
-import ru.finney.pet.ui.theme.FinneyYellow
 import ru.finney.pet.ui.theme.StrokeRegular
 import ru.finney.pet.ui.theme.StrokeThin
 import kotlin.math.cos
@@ -38,15 +35,8 @@ import kotlin.math.sin
 /** Пустая часть круга — ещё не разложено. Светлее кремового, как пустые шкалы. */
 private val Unplanned = Color(0xFFFFF7EA)
 
-/**
- * Части различаются значком на дуге и чертой между ними, а цвет только помогает
- * глазу (ТЗ п. 3.6, правило цвета по плейтесту 28.09): нужное и копилка жёлтые — деньги, желаемое
- * персиковое, чтобы соседние дуги не слились. Смысла в оттенке нет — он в значке.
- */
-private fun partColor(index: Int): Color = if (index == 1) FinneyPeach else FinneyYellow
-
-/** Дуга уже этого угла — значок на ней не помещается, его не ставим: часть видна в строке ниже. */
-private const val MinIconSweep = 34f
+/** Порядок частей на круге — по часовой от верха. */
+private val Parts = listOf(PlanPart.NEEDS, PlanPart.WANTS, PlanPart.SAVINGS)
 
 /**
  * Круг плана: [needs], [wants], [savings] из [budget]. Остаток — пустая дуга.
@@ -71,7 +61,8 @@ fun PlanDonut(
     val wantsSweep by animateFloatAsState(360f * wants / total, label = "wants")
     val savingsSweep by animateFloatAsState(360f * savings / total, label = "savings")
     val sweeps = listOf(needsSweep, wantsSweep, savingsSweep)
-    val icons = listOf(categoryIcon(Category.NEEDS), categoryIcon(Category.WANTS), SavingsIcon)
+    // Часть узнаётся по узору дуги и значку на ней, а не по цвету (ТЗ п. 3.6) — см. PartPatterns.kt.
+    val brushes = Parts.map { rememberPartBrush(it) }
 
     val ring = diameter * 0.24f
     Box(
@@ -91,7 +82,7 @@ fun PlanDonut(
             var start = -90f
             sweeps.forEachIndexed { i, sweep ->
                 if (sweep > 0.5f) {
-                    drawArc(partColor(i), start, sweep, useCenter = false, topLeft = topLeft, size = arcSize, style = Stroke(width))
+                    drawArc(brushes[i], start, sweep, useCenter = false, topLeft = topLeft, size = arcSize, style = Stroke(width))
                 }
                 start += sweep
             }
@@ -116,12 +107,13 @@ fun PlanDonut(
             drawCircle(FinneyInk, radius - width / 2f, style = Stroke(stroke))
         }
 
-        // Значок части — посередине её дуги, в белом кружке: так он читается и на жёлтом, и на персиковом.
+        // Значок части — посередине её дуги, в белом кружке: так он читается на любом узоре.
+        // Стоит у каждой части, даже узкой: по нему ребёнок и связывает дугу с частью.
         val iconSize = ring * 0.78f
         val orbit = (diameter - ring) / 2f
         var start = -90f
         sweeps.forEachIndexed { i, sweep ->
-            if (sweep >= MinIconSweep) {
+            if (sweep > 0.5f) {
                 val mid = Math.toRadians((start + sweep / 2f).toDouble())
                 Box(
                     modifier = Modifier
@@ -132,7 +124,7 @@ fun PlanDonut(
                         .border(StrokeThin, FinneyInk, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
-                    FinneyIcon(icons[i], size = iconSize * 0.72f)
+                    FinneyIcon(partIcon(Parts[i]), size = iconSize * 0.72f)
                 }
             }
             start += sweep

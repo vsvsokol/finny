@@ -80,6 +80,15 @@ enum class FinneyIcons {
 
     /** Шестерёнка — настройки. */
     Gear,
+
+    /** Кисточка — «Украсить»: окрас, одежда и комната. */
+    Brush,
+
+    /** Корзинка — нужное. */
+    Basket,
+
+    /** Воздушный шарик — желаемое. */
+    Balloon,
 }
 
 /**
@@ -111,6 +120,9 @@ fun FinneyIcon(
             FinneyIcons.Lock -> drawLock(tint)
             FinneyIcons.Hanger -> drawHanger(tint)
             FinneyIcons.Gear -> drawGear(tint)
+            FinneyIcons.Brush -> drawBrush(tint)
+            FinneyIcons.Basket -> drawBasket(tint)
+            FinneyIcons.Balloon -> drawBalloon(tint)
         }
     }
 }
@@ -336,6 +348,50 @@ private fun DrawScope.drawPiggy(tint: Color) {
     )
 }
 
+// Корзинка — нужное. Была вилка с ножом: на доске частей плана (20.10) её сочли нелепой,
+// а «нужное» — не только еда. Корзинка с ручками: с ней ходят за обычными покупками.
+// Прорези вырезаются, как у свинки, — под значком бывает узор.
+private fun DrawScope.drawBasket(tint: Color) {
+    val s = size.minDimension
+    val handle = Stroke(width = s * 0.09f, cap = StrokeCap.Round)
+    drawLine(tint, Offset(s * 0.30f, s * 0.40f), Offset(s * 0.45f, s * 0.12f), handle.width, StrokeCap.Round)
+    drawLine(tint, Offset(s * 0.70f, s * 0.40f), Offset(s * 0.55f, s * 0.12f), handle.width, StrokeCap.Round)
+    val body = Path().apply {
+        addRoundRect(RoundRect(s * 0.05f, s * 0.36f, s * 0.95f, s * 0.50f, CornerRadius(s * 0.05f)))
+        moveTo(s * 0.11f, s * 0.46f)
+        lineTo(s * 0.89f, s * 0.46f)
+        lineTo(s * 0.79f, s * 0.90f)
+        lineTo(s * 0.21f, s * 0.90f)
+        close()
+    }
+    val slits = Path().apply {
+        addRoundRect(RoundRect(s * 0.33f, s * 0.58f, s * 0.41f, s * 0.78f, CornerRadius(s * 0.04f)))
+        addRoundRect(RoundRect(s * 0.59f, s * 0.58f, s * 0.67f, s * 0.78f, CornerRadius(s * 0.04f)))
+    }
+    drawPath(Path().apply { op(body, slits, PathOperation.Difference) }, tint)
+}
+
+// Воздушный шарик — желаемое. Звезда стояла тут раньше, но звёздочка зовёт «купи»;
+// шарик — приятная мелочь, без которой можно обойтись. Блик вырезан.
+private fun DrawScope.drawBalloon(tint: Color) {
+    val s = size.minDimension
+    val ball = Path().apply {
+        addOval(Rect(s * 0.22f, s * 0.04f, s * 0.78f, s * 0.70f))
+        // Узелок под шариком.
+        moveTo(s * 0.50f, s * 0.66f)
+        lineTo(s * 0.58f, s * 0.78f)
+        lineTo(s * 0.42f, s * 0.78f)
+        close()
+    }
+    val shine = Path().apply { addOval(Rect(s * 0.32f, s * 0.16f, s * 0.42f, s * 0.32f)) }
+    drawPath(Path().apply { op(ball, shine, PathOperation.Difference) }, tint)
+    val string = Path().apply {
+        moveTo(s * 0.50f, s * 0.78f)
+        quadraticTo(s * 0.40f, s * 0.86f, s * 0.50f, s * 0.97f)
+    }
+    drawPath(string, tint, style = Stroke(width = s * 0.06f, cap = StrokeCap.Round))
+}
+
 // Звезда о пяти лучах.
 private fun DrawScope.drawStar(tint: Color) {
     val s = size.minDimension
@@ -463,6 +519,22 @@ private fun DrawScope.drawHanger(tint: Color) {
     }
     drawPath(shoulders, tint, style = Stroke(width = line, join = androidx.compose.ui.graphics.StrokeJoin.Round))
     drawLine(tint, Offset(s * 0.50f, s * 0.30f), Offset(s * 0.50f, s * 0.38f), line, StrokeCap.Round)
+}
+
+// Кисточка: ручка наискось, толстый обжим и мазок-капля с хвостиком влево вниз.
+// Как и прочие значки кита — плотные формы и толстые линии, без тонких штрихов.
+private fun DrawScope.drawBrush(tint: Color) {
+    val s = size.minDimension
+    drawLine(tint, Offset(s * 0.86f, s * 0.14f), Offset(s * 0.56f, s * 0.44f), s * 0.11f, StrokeCap.Round)
+    drawLine(tint, Offset(s * 0.58f, s * 0.42f), Offset(s * 0.48f, s * 0.52f), s * 0.20f, StrokeCap.Butt)
+    drawCircle(tint, radius = s * 0.17f, center = Offset(s * 0.35f, s * 0.65f))
+    val flick = Path().apply {
+        moveTo(s * 0.20f, s * 0.58f)
+        lineTo(s * 0.08f, s * 0.92f)
+        lineTo(s * 0.42f, s * 0.80f)
+        close()
+    }
+    drawPath(flick, tint)
 }
 
 // Шестерёнка: восемь зубцов вокруг круга и дырка посередине. Дырка вырезается,

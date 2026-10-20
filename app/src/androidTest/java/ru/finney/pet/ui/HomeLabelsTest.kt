@@ -105,6 +105,8 @@ class HomeLabelsTest {
         compose.onNodeWithContentDescription("Копилка").performTouchInput { click() }
         compose.runOnIdle { assertEquals(1, goalOpens) }
         compose.onNodeWithContentDescription("Магазин").assertIsDisplayed().performTouchInput { click() }
+        // Главный открывается в игровой: первое нажатие — спальня, второе — уложить спать.
+        compose.onNodeWithContentDescription("Сон").performTouchInput { click() }
         compose.onNodeWithContentDescription("Сон").performTouchInput { click() }
         compose.runOnIdle { assertEquals(1, shops); assertEquals(1, sleeps) }
         // Первое нажатие переводит в другую комнату, покупок при этом нет.
