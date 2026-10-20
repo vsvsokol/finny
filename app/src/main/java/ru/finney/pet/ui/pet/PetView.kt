@@ -114,22 +114,15 @@ fun PetView(
         if (!headOnly) {
             // Ноги под туловищем: край рубашки ложится на штаны, и когда ноги расходятся
             // в прыжке, стык прикрыт. Поверх туловища между ними открывалась щель.
-            Limb(body.leftLeg, skin.grownPivot(skin.leftLegPivot, look), { pose().leftLeg })
-            Limb(body.rightLeg, skin.grownPivot(skin.rightLegPivot, look), { pose().rightLeg })
+            Limb(body.leftLeg, skin.grownPivot(skin.leftLegPivot, look)) { pose().leftLeg }
+            Limb(body.rightLeg, skin.grownPivot(skin.rightLegPivot, look)) { pose().rightLeg }
             Image(
                 painter = painterResource(body.torso),
                 contentDescription = null,
                 modifier = Modifier.matchParentSize(),
             )
-            // Наружу (вверх) левая рука поворачивается по часовой, правая — против.
-            Limb(
-                body.leftHand, skin.grownPivot(skin.leftHandPivot, look), { pose().leftHand },
-                raised = skin.grownPivot(skin.leftHandRaised, look), outward = 1f,
-            )
-            Limb(
-                body.rightHand, skin.grownPivot(skin.rightHandPivot, look), { pose().rightHand },
-                raised = skin.grownPivot(skin.rightHandRaised, look), outward = -1f,
-            )
+            Limb(body.leftHand, skin.grownPivot(skin.leftHandPivot, look)) { pose().leftHand }
+            Limb(body.rightHand, skin.grownPivot(skin.rightHandPivot, look)) { pose().rightHand }
         }
 
         // Голова с лицом и тем, что на ней надето, — поднята на подросшее туловище.
@@ -268,23 +261,12 @@ private fun Modifier.eyelid(skin: PetSkin, lid: () -> Float): Modifier = this
         }
     }
 
-/**
- * Конечность поворачивается целиком вокруг [pivot] — плеча или бедра. Рука, идущая
- * вверх (наружу, знак [outward]), поворачивается вокруг [raised]: глубже в рукаве.
- * Вокруг нарисованного плеча поднятая рука отходила от туловища, и в стыке открывался
- * клин фона — туловище под рукой не нарисовано. Вниз и внутрь рука идёт вокруг плеча:
- * там глубокая точка, наоборот, выворачивала верх рукава наружу. В нуле обе точки дают
- * одну и ту же картинку, так что смена на покачивании не видна.
- *
- * Поворот читается на отрисовке, как и поза в [PetView].
- */
+/** Конечность поворачивается целиком вокруг плеча или бедра. Поворот читается на отрисовке, как и поза в [PetView]. */
 @Composable
 private fun BoxScope.Limb(
     @DrawableRes res: Int,
     pivot: TransformOrigin,
     rotation: () -> Float,
-    raised: TransformOrigin = pivot,
-    outward: Float = 0f,
 ) {
     Image(
         painter = painterResource(res),
@@ -292,9 +274,8 @@ private fun BoxScope.Limb(
         modifier = Modifier
             .matchParentSize()
             .graphicsLayer {
-                val angle = rotation()
-                transformOrigin = if (angle * outward > 0f) raised else pivot
-                rotationZ = angle
+                transformOrigin = pivot
+                rotationZ = rotation()
             },
     )
 }
