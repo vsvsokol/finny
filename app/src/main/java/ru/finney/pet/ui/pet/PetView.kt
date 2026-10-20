@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.ClipOp
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
@@ -119,7 +122,12 @@ fun PetView(
         }
 
         // Голова с лицом и тем, что на ней надето, — поднята на подросшее туловище.
-        Box(modifier = Modifier.matchParentSize().graphicsLayer { translationY = -size.height * lift }) {
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .graphicsLayer { translationY = -size.height * lift }
+                .then(if (headOnly) Modifier.withoutNeck() else Modifier),
+        ) {
 
         Crossfade(
             targetState = skin.face(mood),
@@ -181,6 +189,27 @@ fun PetView(
 private const val MOUTH_SHOWN = 0.02f
 private const val MOUTH_STRETCH_X = 0.12f
 private const val MOUTH_STRETCH_Y = 0.3f
+
+/**
+ * Без туловища под подбородком видны обрывки контура шеи и складки одежды: у Пушистика
+ * (и его окрасок) они нарисованы в базовом слое поверх туловища, см. tools/split_pet_base.py.
+ * В режиме «только голова» эта полоса не рисуется. У остальных питомцев там пусто —
+ * проверено по всем слоям лица, так что вырез общий.
+ */
+private fun Modifier.withoutNeck(): Modifier = drawWithContent {
+    clipRect(
+        left = size.width * NECK_CUT_LEFT,
+        top = size.height * NECK_CUT_TOP,
+        right = size.width * NECK_CUT_RIGHT,
+        bottom = size.height,
+        clipOp = ClipOp.Difference,
+    ) { this@drawWithContent.drawContent() }
+}
+
+// Полоса туловища под подбородком: ниже лица Пушистика (0.758) и в ширину туловища с запасом.
+private const val NECK_CUT_TOP = 0.762f
+private const val NECK_CUT_LEFT = 0.43f
+private const val NECK_CUT_RIGHT = 0.57f
 
 // Мягкость края века в долях стороны. Жёсткий край на полпути выглядит разрезом
 // глаза, а не веком.
