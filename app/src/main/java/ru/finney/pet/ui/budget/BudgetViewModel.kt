@@ -70,6 +70,10 @@ sealed interface BudgetUiState {
         val needsHelp: String? = null,
         val wantsHelp: String? = null,
         val savingsHelp: String? = null,
+        /** Питомец — он сам объясняет части плана, головой с репликой. */
+        val character: PetCharacter? = null,
+        val coloring: String? = null,
+        val worn: List<String> = emptyList(),
     ) : BudgetUiState {
         val planned: Int get() = needs + wants + savings
         val remainder: Int get() = budget - planned
@@ -215,7 +219,9 @@ class BudgetViewModel(
             needsHint = game.needsHint(state),
             goalLabel = if (reserveMode) "Запас" else goal?.label,
             goals = if (state.activeGoalId == null) {
-                content.goals.filter { it.fitsPet(saved.profile.appearance.character) && !state.isGoalCompleted(it.id) }
+                content.goals.filter {
+                    it.fitsPet(saved.profile.appearance.character) && !state.isGoalCompleted(it.id) && game.isUnlocked(state, it)
+                }
             } else {
                 emptyList()
             },
@@ -230,6 +236,9 @@ class BudgetViewModel(
             needsHelp = helpText("needs"),
             wantsHelp = helpText("wants"),
             savingsHelp = helpText("savings"),
+            character = saved.profile.appearance.character,
+            coloring = game.lookFor(state, saved.profile.appearance.character),
+            worn = state.worn,
         )
     }
 

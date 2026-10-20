@@ -78,6 +78,9 @@ import ru.finney.pet.ui.components.FinneyButton
 import ru.finney.pet.ui.components.FinneyIcon
 import ru.finney.pet.ui.components.FinneyIcons
 import ru.finney.pet.ui.components.FinneyQuietButton
+import ru.finney.pet.ui.components.FinniSays
+import ru.finney.pet.ui.components.silhouetteShadow
+import ru.finney.pet.ui.components.speech
 import ru.finney.pet.ui.components.LevelBadge
 import ru.finney.pet.ui.components.MenuBackdrop
 import ru.finney.pet.ui.components.OutlinedText
@@ -541,7 +544,7 @@ private fun StageRuler(
                     translationX = -30.dp.toPx()
                     translationY = (h * (1f - level()) - 23.dp).toPx()
                 }
-                .petShadow(),
+                .silhouetteShadow(),
         )
     }
 }
@@ -740,16 +743,14 @@ private fun CoinsBeat(state: PeriodResultUiState.Ready, nextLabel: String, onNex
                     translationY = -t * size.height * 9f
                 })
             }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                state.character?.let { character ->
-                    PetView(character, PetMood.HAPPY, pose = { ru.finney.pet.ui.pet.PetPose() }, coloring = state.coloring,
-                        accessories = state.worn, headOnly = true, modifier = Modifier.size(84.dp).petShadow())
-                }
-                SpeechBubble(
-                    if (state.canPlanNext) "Новые монетки! Разложим по банкам?" else "Новые монетки уже в кошельке.",
-                    Modifier.weight(1f),
-                )
-            }
+            FinniSays(
+                character = state.character,
+                text = speech(null, if (state.canPlanNext) "Новые монетки! Разложим по банкам?" else "Новые монетки уже в кошельке."),
+                coloring = state.coloring,
+                accessories = state.worn,
+                headSize = 84.dp,
+                modifier = Modifier.fillMaxWidth(),
+            )
             FinneyButton(text = nextLabel, onClick = onNext)
         }
     }
@@ -827,49 +828,6 @@ private object RibbonShape : Shape {
             moveTo(0f, 0f); lineTo(size.width, 0f); lineTo(size.width - notch, size.height / 2f)
             lineTo(size.width, size.height); lineTo(0f, size.height); lineTo(notch, size.height / 2f); close()
         })
-    }
-}
-
-/** Реплика Финни — белый пузырь с хвостиком слева, как на карточке игры. */
-@Composable
-private fun SpeechBubble(text: String, modifier: Modifier = Modifier) {
-    val shape = remember { LeftTailBubble }
-    Text(
-        text,
-        style = MaterialTheme.typography.titleMedium,
-        color = FinneyInk,
-        modifier = modifier
-            .clip(shape)
-            .background(Color.White)
-            .border(StrokeRegular, FinneyInk, shape)
-            .padding(start = 30.dp, end = 14.dp, top = 10.dp, bottom = 13.dp),
-    )
-}
-
-/** Пузырь с хвостиком слева посередине: тело и хвостик — одна фигура, рамка без шва. */
-private object LeftTailBubble : Shape {
-    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
-        val r = with(density) { 22.dp.toPx() }
-        val t = with(density) { 16.dp.toPx() }
-        val h = with(density) { 12.5.dp.toPx() }
-        val mid = size.height / 2
-        val body = Path().apply { addRoundRect(androidx.compose.ui.geometry.RoundRect(t, 0f, size.width, size.height, androidx.compose.ui.geometry.CornerRadius(r))) }
-        val tip = Path().apply { moveTo(t + r / 2, mid - h); lineTo(0f, mid); lineTo(t + r / 2, mid + h); close() }
-        return Outline.Generic(Path().apply { op(body, tip, androidx.compose.ui.graphics.PathOperation.Union) })
-    }
-}
-
-/** Тень по силуэту — то же содержимое, залитое полупрозрачным ink и сдвинутое вниз, как у голов в играх. */
-@Composable
-private fun Modifier.petShadow(): Modifier {
-    val body = rememberGraphicsLayer()
-    val shadow = rememberGraphicsLayer()
-    return drawWithContent {
-        body.record { this@drawWithContent.drawContent() }
-        shadow.colorFilter = ColorFilter.tint(FinneyInk.copy(alpha = 0.15f), BlendMode.SrcIn)
-        shadow.record { drawLayer(body) }
-        translate(top = 4.dp.toPx()) { drawLayer(shadow) }
-        drawLayer(body)
     }
 }
 

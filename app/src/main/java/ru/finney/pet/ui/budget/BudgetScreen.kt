@@ -60,6 +60,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -148,20 +149,30 @@ fun BudgetScreen(
         }
     }
 
+    // План подтверждён здесь — сразу в комнату: «План и факт» с пустыми банками сравнивать
+    // было нечего (разбор 20.10). Он открывается позже — плиткой «По плану» в панели уровня.
+    var confirmedHere by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(state) {
+        if (confirmedHere && state is BudgetUiState.Active) {
+            confirmedHere = false
+            onBack()
+        }
+    }
+
     when (val s = state) {
         BudgetUiState.Loading -> FinneyScreen {
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = FinneyInk)
             }
         }
-        is BudgetUiState.Planning -> PlanningContent(
-            state = s,
+        is BudgetUiState.Planning -> PlanningJars(
+            planning = s,
             onNeedsChange = viewModel::setNeeds,
             onWantsChange = viewModel::setWants,
             onSavingsChange = viewModel::setSavings,
             onSelectGoal = viewModel::selectGoal,
             onRepeatLast = viewModel::repeatLastPlan,
-            onConfirm = viewModel::confirm,
+            onConfirm = { confirmedHere = true; viewModel.confirm() },
             onBack = onBack,
         )
         is BudgetUiState.Active -> ActiveContent(state = s, onBack = onBack,
@@ -552,7 +563,7 @@ private fun RemainderNote(remainder: Int) {
 
 /** Отказ домена, переведённый на детский язык. Тексты потом заменит feedback.json @vsvsokol. */
 @Composable
-private fun RejectionNote(rejection: Rejection) {
+internal fun RejectionNote(rejection: Rejection) {
     val text = when (rejection) {
         is Rejection.PlanExceedsBudget ->
             "Ты разделил ${rejection.planned}, а есть только ${rejection.budget}. Убавь что-нибудь."
