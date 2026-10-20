@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -22,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -31,6 +34,7 @@ import ru.finney.pet.ui.components.AlertBadge
 import ru.finney.pet.ui.components.CheckBadge
 import ru.finney.pet.ui.components.FillBar
 import ru.finney.pet.ui.components.fadingScroll
+import ru.finney.pet.ui.home.LEVEL_CONDITIONS
 import ru.finney.pet.ui.tasks.games.plural
 import ru.finney.pet.ui.theme.FinneyCream
 import ru.finney.pet.ui.theme.FinneyInk
@@ -76,12 +80,18 @@ internal fun CurrentLevelPanel(
             if (expanded) GoalLines(current, reserveMode, reserveSaved)
             return@Column
         }
-        CoreLines(current)
+        // Свёрнутая — три строки, которые читаются с одного взгляда: сколько условий нужно,
+        // какие уже есть, и одно дело на сейчас. Раньше тут был столбик фраз про план,
+        // игру по желанию и «0 из 1 нужного условия» — его не читали (плейтест 20.10).
+        ConditionChips(current)
+        nextAction(current)?.let { NextAction(it) }
         if (expanded) {
             Column(
                 modifier = Modifier.heightIn(max = 260.dp).fadingScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
+                StatusLine(current.planConfirmed, if (current.planConfirmed) "План составлен" else "Составь план")
+                GameLine(current)
                 ConditionLines(current)
                 AmountLines(current)
                 GoalLines(current, reserveMode, reserveSaved)
@@ -90,18 +100,69 @@ internal fun CurrentLevelPanel(
     }
 }
 
+/** «Выполни 1 из 3» и три условия фишками: «✓» есть, «!» нет. Фишка плоская — отметка, не кнопка. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ConditionChips(current: CurrentLevel) {
+    val done = current.met >= current.toPass
+    Text(
+        if (done) "Условий хватает!" else "Выполни ${current.toPass} из $LEVEL_CONDITIONS:",
+        style = MaterialTheme.typography.titleMedium,
+        color = FinneyInk,
+    )
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        ConditionChip(current.needsCovered, "Уход", "Уход: сыт, чист и выспался")
+        ConditionChip(current.planMatched, "По плану", "Траты по плану")
+        ConditionChip(current.savingsAdded, "Копилка", "Отложено в копилку")
+    }
+}
+
+@Composable
+private fun ConditionChip(done: Boolean, label: String, description: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier
+            .heightIn(min = 36.dp)
+            .clip(RoundedCornerShape(50))
+            .background(Color.White)
+            .padding(start = 6.dp, end = 12.dp)
+            .clearAndSetSemantics {
+                contentDescription = description
+                stateDescription = if (done) "выполнено" else "не выполнено"
+            },
+    ) {
+        if (done) CheckBadge(size = 22.dp) else AlertBadge(size = 22.dp)
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = FinneyInk)
+    }
+}
+
+/**
+ * Одно дело на сейчас — то, без чего уровень не сдвинется. null — подсказывать нечего:
+ * чего не хватает, видно по фишкам.
+ */
+private fun nextAction(current: CurrentLevel): String? = when {
+    !current.planConfirmed -> "Сначала составь план"
+    current.gameTitle != null && current.gameRequired && !current.gamePassed -> "Пройди игру «${current.gameTitle}»"
+    current.ready && current.asleep -> "Разбуди ${current.petName} — и можно завершать"
+    current.asleep -> "${current.petName} спит"
+    current.ready -> "Готово! Заверши уровень на главном"
+    else -> null
+}
+
+@Composable
+private fun NextAction(text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("→", style = MaterialTheme.typography.titleMedium, color = FinneyInk, modifier = Modifier.clearAndSetSemantics { })
+        Text(text, style = MaterialTheme.typography.titleMedium, color = FinneyInk)
+    }
+}
+
 /** План, игра уровня, счёт условий и что мешает завершить. Общие для панели и окна текущего уровня. */
 @Composable
 internal fun CoreLines(current: CurrentLevel) {
     StatusLine(current.planConfirmed, if (current.planConfirmed) "План составлен" else "Составь план")
-    current.gameTitle?.let { title ->
-        val text = when {
-            current.gamePassed -> "Игра уровня «$title» пройдена"
-            current.gameRequired -> "Пройди «$title»"
-            else -> "«$title» — по желанию"
-        }
-        StatusLine(current.gamePassed || !current.gameRequired, text)
-    }
+    GameLine(current)
     val conditions = if (current.toPass == 1) "нужного условия" else "нужных условий"
     Body("Выполнено ${minOf(current.met, current.toPass)} из ${current.toPass} $conditions")
     when {
@@ -109,6 +170,18 @@ internal fun CoreLines(current: CurrentLevel) {
         current.asleep -> Body("${current.petName} спит. Завершить уровень можно, когда он проснётся.")
         current.ready -> Body("Готово! Завершить уровень можно на главном экране.")
     }
+}
+
+/** Игра уровня: пройдена, нужна или по желанию. */
+@Composable
+private fun GameLine(current: CurrentLevel) {
+    val title = current.gameTitle ?: return
+    val text = when {
+        current.gamePassed -> "Игра уровня «$title» пройдена"
+        current.gameRequired -> "Пройди «$title»"
+        else -> "«$title» — по желанию"
+    }
+    StatusLine(current.gamePassed || !current.gameRequired, text)
 }
 
 @Composable
