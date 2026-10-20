@@ -125,7 +125,7 @@ private fun Shelves(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 val hint = if (task.shelf.any { it.qty > 1 }) "Где больше за монету?" else "Сначала — по списку!"
                 Bubble(hint, Tail.DOWN_LEFT, maxWidth = 130.dp)
-                ScenePet(character, 90.dp, Modifier.width(90.dp))
+                ScenePet(character, 120.dp, Modifier.width(120.dp))
             }
         }
 

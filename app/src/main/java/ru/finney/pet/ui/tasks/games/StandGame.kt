@@ -187,7 +187,7 @@ private fun Morning(
                 if (inputError != null) Note(inputErrorText(inputError), color = FinneyPeach)
             }
             Spacer(Modifier.weight(1f))
-            PetSays(character, "Сколько взять, чтобы хватило всем гостям?", petSize = 120.dp)
+            PetSays(character, "Сколько взять, чтобы хватило всем гостям?", petSize = 150.dp)
         }
     }
 }
@@ -435,7 +435,7 @@ private fun CupStrip(cups: Int, poured: Int) {
 /** Лавка: полосатый навес с фестонами, столбики, питомец за прилавком. */
 @Composable
 private fun Stall(character: PetCharacter, cupPrice: Int) {
-    Box(Modifier.fillMaxWidth(0.85f).height(230.dp)) {
+    Box(Modifier.fillMaxWidth(0.85f).height(260.dp)) {
         Canvas(Modifier.fillMaxSize()) {
             val awning = 44.dp.toPx()
             val stripe = 26.dp.toPx()
@@ -461,7 +461,7 @@ private fun Stall(character: PetCharacter, cupPrice: Int) {
             }
             drawRect(FinneyInk, Offset.Zero, Size(size.width, awning), style = Stroke(stroke))
         }
-        ScenePet(character, 120.dp, Modifier.width(120.dp).align(Alignment.Center).offset(y = 10.dp))
+        ScenePet(character, 150.dp, Modifier.width(150.dp).align(Alignment.BottomCenter).offset(y = (-30).dp))
         Box(
             Modifier
                 .align(Alignment.BottomCenter)

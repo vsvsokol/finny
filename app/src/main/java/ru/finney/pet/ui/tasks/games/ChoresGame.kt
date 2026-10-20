@@ -95,10 +95,11 @@ internal fun ChoresGame(task: ChoresTask, character: PetCharacter, onClose: () -
         ) {
             // Условия, дни и дела — в один экран 360 × 740 dp без прокрутки: на плейтесте,
             // чтобы понять задачу, пришлось листать вниз. Поэтому здесь теснее, чем в сцене
-            // обычно, дни стоят одним рядом, а питомец меньше.
+            // обычно, дни стоят одним рядом. Питомец 88 dp: в 56 его было не разглядеть
+            // (плейтест 20.10), дни и дела ради него сдвинуты ниже.
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 GoalCard(task, earned, rest)
-                PetSays(character, petLine(task, earned, rest, pay.tiredLoss), petSize = 56.dp)
+                PetSays(character, petLine(task, earned, rest, pay.tiredLoss), petSize = 88.dp)
 
                 // Все дни одним рядом: вторым рядом неделя не влезала в экран.
                 Row(horizontalArrangement = Arrangement.spacedBy(DayGap), modifier = Modifier.fillMaxWidth()) {
