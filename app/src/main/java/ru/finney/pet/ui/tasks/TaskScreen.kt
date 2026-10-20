@@ -1,5 +1,6 @@
 package ru.finney.pet.ui.tasks
 
+import ru.finney.pet.domain.model.ChangeTask
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -56,6 +57,8 @@ import ru.finney.pet.ui.components.FinneyQuietButton
 import ru.finney.pet.ui.components.FinneyScreen
 import ru.finney.pet.ui.components.OutlinedText
 import ru.finney.pet.ui.tasks.games.GameScene
+import ru.finney.pet.ui.tasks.games.RoundButtonSize
+import ru.finney.pet.ui.tasks.games.SceneEdge
 import ru.finney.pet.ui.tasks.games.LocalPlayerAccessory
 import ru.finney.pet.ui.tasks.games.PetAtRight
 import ru.finney.pet.ui.tasks.games.rememberPetReactions
@@ -125,8 +128,11 @@ internal fun TaskPlay(state: TaskUiState.Ready, onInputSeen: () -> Unit,
     var helpOpen by rememberSaveable { mutableStateOf(false) }
     Box(Modifier.fillMaxSize()) {
         TaskGame(state.task, state.character, state.balance, state.inputError, onInputSeen, onBack, onSubmit)
-        FinneyIconButton(onClick = { helpOpen = true }, contentDescription = "Как играть", size = 48.dp,
-            modifier = Modifier.align(Alignment.TopCenter).systemBarsPadding().padding(top = 8.dp)) {
+        // У кассы «?» стоит справа рядом с крестиком, как в её макете: слева там покупатели кружками.
+        val till = state.task is ChangeTask
+        FinneyIconButton(onClick = { helpOpen = true }, contentDescription = "Как играть", size = if (till) RoundButtonSize else 48.dp,
+            modifier = Modifier.align(if (till) Alignment.TopEnd else Alignment.TopCenter).systemBarsPadding()
+                .padding(top = 8.dp, end = if (till) SceneEdge + RoundButtonSize + 10.dp else 0.dp)) {
             FinneyIcon(FinneyIcons.Help, size = 24.dp)
         }
     }

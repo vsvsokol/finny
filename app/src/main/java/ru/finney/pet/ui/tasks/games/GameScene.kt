@@ -45,6 +45,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.StrokeCap
@@ -100,6 +101,9 @@ import ru.finney.pet.ui.theme.StrokeRegular
 enum class Backdrop {
     DOTS, DOTS_RAIN, SHOP, FIELD, SKY, SUNSET, STORE,
 
+    /** Касса: мятная стена магазина и сиреневая зона кассы, обе с узором из двух плиток. */
+    TILL,
+
     // Фоны карточки перед игрой — свой у каждой игры, как в макете карточек (вариант A).
     // У «Конвейера» карточка на тех же точках, что игра, — отдельного фона нет.
     CARD_GREEN, CARD_LILAC, CARD_RAIN, CARD_LEMON, CARD_YELLOW, CARD_BLUE, CARD_PINK,
@@ -121,6 +125,9 @@ internal fun GameScene(
     modifier: Modifier = Modifier,
     money: Int? = null,
     moneyModifier: Modifier = Modifier,
+    /** Что стоит слева в верхней полосе вместо кошелька: у кассы — покупатели кружками. */
+    lead: (@Composable () -> Unit)? = null,
+    closeSize: Dp = 48.dp,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val stage = LocalStageBackdrop.current
@@ -134,8 +141,9 @@ internal fun GameScene(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (money != null) MoneyPill(money, moneyModifier)
+                lead?.invoke()
                 Box(Modifier.weight(1f))
-                CloseButton(onClose, description = "Закрыть игру")
+                CloseButton(onClose, description = "Закрыть игру", size = closeSize)
             }
         }
     }
@@ -308,6 +316,7 @@ private fun BackdropFamily(backdrop: Backdrop, rain: () -> Float, dusk: () -> Fl
         }
         Backdrop.SKY, Backdrop.SUNSET -> Meadow(dusk)
         Backdrop.STORE -> Split(top = Color(0xFFCFE3F5), bottom = FinneyYellow, at = 0.42f, dots = true, desk = true)
+        Backdrop.TILL -> Till()
         Backdrop.CARD_GREEN -> Canvas(Modifier.fillMaxSize()) {
             drawRect(Color(0xFFC9EAC1))
             drawCircle(Color(0xFFB4E0AE), size.width * 0.52f, Offset(size.width * 1.05f, size.height * 0.7f))
@@ -554,6 +563,103 @@ private fun Split(top: Color, bottom: Color, at: Float, dots: Boolean, desk: Boo
             val h = 22.dp.toPx()
             drawRect(FinneyInk, topLeft = Offset(0f, line - 4.dp.toPx()), size = size.copy(height = h + 8.dp.toPx()))
             drawRect(Color(0xFFA0715A), topLeft = Offset(0f, line), size = size.copy(height = h))
+        }
+    }
+}
+
+/** Где у кассы кончается стена и начинается зона кассы — доля высоты: 452 из 912 в макете. */
+internal const val TILL_SPLIT_AT = 452f / 912f
+
+/**
+ * Фон кассы по макету «Касса Финни»: стена мятная со звёздочками, искорками и монетками,
+ * зона кассы сиреневая, к ним добавлены сердечки. Узор каждой половины — из двух плиток
+ * разного размера со сдвигом, поэтому он не складывается в сетку.
+ */
+@Composable
+private fun Till() {
+    Canvas(Modifier.fillMaxSize()) {
+        val line = size.height * TILL_SPLIT_AT
+        drawRect(Color(0xFFD4EEDB), size = size.copy(height = line))
+        drawRect(Color(0xFFE7E1FB), topLeft = Offset(0f, line), size = size.copy(height = size.height - line))
+        clipRect(bottom = line) {
+            glyphTiles(0f, 150f, Offset.Zero, WallTileSmall, WallGlyph)
+            glyphTiles(0f, 236f, Offset(61f, 37f), WallTileLarge, WallGlyph)
+        }
+        clipRect(top = line) {
+            glyphTiles(line, 140f, Offset.Zero, TillTileSmall, TillGlyph)
+            glyphTiles(line, 220f, Offset(61f, 37f), TillTileLarge, TillGlyph)
+        }
+    }
+}
+
+private val WallGlyph = Color(0xFFBCE2C7)
+private val TillGlyph = Color(0xFFD7CDF7)
+
+private enum class Glyph { STAR, SPARKLE, COIN, HEART }
+
+/** Значок плитки: центр в единицах dp плитки, поворот и масштаб от квадрата 24 × 24. */
+private class Placed(val glyph: Glyph, val x: Float, val y: Float, val rotation: Float, val scale: Float)
+
+private val WallTileSmall = listOf(
+    Placed(Glyph.STAR, 26f, 28f, -12f, 0.9f), Placed(Glyph.SPARKLE, 104f, 24f, 0f, 0.65f),
+    Placed(Glyph.COIN, 74f, 84f, 0f, 0.95f), Placed(Glyph.STAR, 124f, 114f, 18f, 0.6f),
+    Placed(Glyph.SPARKLE, 28f, 120f, 0f, 0.5f),
+)
+private val WallTileLarge = listOf(
+    Placed(Glyph.SPARKLE, 170f, 180f, 0f, 0.85f), Placed(Glyph.STAR, 52f, 196f, 30f, 0.7f),
+    Placed(Glyph.COIN, 196f, 56f, 0f, 0.7f), Placed(Glyph.SPARKLE, 110f, 118f, 0f, 0.35f),
+)
+private val TillTileSmall = listOf(
+    Placed(Glyph.SPARKLE, 22f, 26f, 0f, 0.75f), Placed(Glyph.COIN, 100f, 36f, 0f, 0.85f),
+    Placed(Glyph.HEART, 66f, 92f, -10f, 0.75f), Placed(Glyph.SPARKLE, 122f, 118f, 0f, 0.45f),
+    Placed(Glyph.STAR, 24f, 114f, 12f, 0.55f),
+)
+private val TillTileLarge = listOf(
+    Placed(Glyph.STAR, 160f, 154f, -20f, 0.85f), Placed(Glyph.HEART, 56f, 176f, 14f, 0.55f),
+    Placed(Glyph.SPARKLE, 170f, 40f, 0f, 0.6f),
+)
+
+private val GlyphStar = svgPath("M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.6L12 17.4l-5.9 3.2 1.2-6.6L2.5 9.4l6.6-.9z")
+private val GlyphSparkle = svgPath("M12 0c1.1 6.4 4.6 10.9 12 12-7.4 1.1-10.9 5.6-12 12-1.1-6.4-4.6-10.9-12-12 7.4-1.1 10.9-5.6 12-12z")
+private val GlyphHeart = svgPath(
+    "M12 21.5S3 16 2.2 10.2C1.6 6.6 4 4 7.2 4c2 0 3.6 1.1 4.8 2.9C13.2 5.1 14.8 4 16.8 4 20 4 22.4 6.6 21.8 10.2 21 16 12 21.5 12 21.5z",
+)
+
+/** Плитка [tile] dp со значками [glyphs], повторённая от [top] вниз и со сдвигом [shift]. */
+private fun DrawScope.glyphTiles(top: Float, tile: Float, shift: Offset, glyphs: List<Placed>, color: Color) {
+    val u = 1.dp.toPx()
+    val t = tile * u
+    var y = top + shift.y * u - t
+    while (y < size.height) {
+        var x = shift.x * u - t
+        while (x < size.width) {
+            glyphs.forEach { g ->
+                withTransform({
+                    translate(x + g.x * u, y + g.y * u)
+                    rotate(g.rotation, Offset.Zero)
+                    scale(g.scale * u, g.scale * u, Offset.Zero)
+                    translate(-12f, -12f)
+                }) { glyph(g.glyph, color) }
+            }
+            x += t
+        }
+        y += t
+    }
+}
+
+/** Значок в квадрате 24 × 24, как в svg макета. */
+private fun DrawScope.glyph(glyph: Glyph, color: Color) {
+    when (glyph) {
+        Glyph.STAR -> {
+            drawPath(GlyphStar, color)
+            drawPath(GlyphStar, color, style = Stroke(2f, join = StrokeJoin.Round))
+        }
+        Glyph.SPARKLE -> drawPath(GlyphSparkle, color)
+        Glyph.HEART -> drawPath(GlyphHeart, color)
+        Glyph.COIN -> {
+            drawCircle(color, 9.5f, Offset(12f, 12f), style = Stroke(3.2f))
+            drawOval(color, Offset(12f - 4.2f, 12f - 3.2f), Size(8.4f, 6.4f), style = Stroke(2.6f))
+            drawLine(color, Offset(12f, 6.5f), Offset(12f, 17.5f), 2.6f, StrokeCap.Round)
         }
     }
 }
