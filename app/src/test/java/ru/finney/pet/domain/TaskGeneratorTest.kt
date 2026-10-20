@@ -216,28 +216,34 @@ class TaskGeneratorTest {
         }
     }
 
+    /** Ошибки кассира — сколько их, на каких товарах и есть ли недодача — без одного решения на все попытки. */
     @Test
-    fun `чеки из контента перемешиваются, а ошибки остаются теми же`() {
+    fun `в чеках из контента ошибки каждый раз другие`() {
         val receipts = listOf("game_receipt", "game_receipt_2", "game_receipt_3")
         assertTrue(content.taskTemplates.keys.containsAll(receipts))
         for (id in receipts) {
-            val inFile = content.task(id) as ReceiptTask
-            val shuffled = (1L..20L).map { TaskGenerator.generate(content.taskTemplates.getValue(id), it) as ReceiptTask }
-            assertTrue("$id: порядок строк не меняется", shuffled.any { it.lines != inFile.lines })
-            shuffled.forEach { task ->
-                assertEquals(inFile.lines.toSet(), task.lines.toSet())
-                assertEquals(inFile.cart.toSet(), task.cart.toSet())
-                // Из двух одинаковых строк лишней считается та, что ниже, поэтому сверяем
-                // не id строк, а товары с ошибкой, и сдачу.
-                assertEquals(errorItems(inFile), errorItems(task))
+            val tasks = (1L..200L).map { TaskGenerator.generate(content.taskTemplates.getValue(id), it) as ReceiptTask }
+            val errors = tasks.map { TaskEngines.receiptErrors(it) }
+            tasks.zip(errors).forEach { (task, e) ->
+                val count = task.lines.filter { it.id in e.lines }.map { it.item }.distinct().size + if (e.changeShort > 0) 1 else 0
+                assertTrue("$id: ошибок $count, а mistakes ${task.mistakes}", count in 1..3)
+                assertFalse("$id: в итоге осталась общая фраза", task.explainFail.startsWith("Сверяй"))
             }
+            // Ни один способ не решает все попытки: ни «только сдача», ни один и тот же товар.
+            val onlyChange = tasks.count { (TaskEngines.evaluate(it, TaskInput.Flags(emptySet(), change = true)) as TaskEvaluation.Done).outcome == TaskOutcome.SUCCESS }
+            assertTrue("$id: «только сдача» выигрывает $onlyChange из ${tasks.size}", onlyChange < tasks.size / 2)
+            assertTrue("$id: сдачу всегда недодают", errors.any { it.changeShort == 0 })
+            assertTrue("$id: сдачу никогда не недодают", errors.any { it.changeShort > 0 })
+            val wrongItems = tasks.zip(errors).map { (t, e) -> t.lines.filter { it.id in e.lines }.map { it.item }.toSet() }
+            assertTrue("$id: ошибка всегда на одних товарах", wrongItems.toSet().size > 5)
+            assertTrue("$id: одни и те же покупки", tasks.map { t -> t.cart.map { it.id }.toSet() }.toSet().size > 1)
         }
     }
 
-    private fun errorItems(task: ReceiptTask): List<Any> {
-        val errors = TaskEngines.receiptErrors(task, emptySet())
-        val items = task.lines.filter { it.id in errors.lines }.map { it.item }.sorted()
-        return listOf(items, errors.changeShort, errors.changeEither)
+    @Test
+    fun `чек с mistakes — одно зерно, одни ошибки`() {
+        val template = content.taskTemplates.getValue("game_receipt_3")
+        (1L..20L).forEach { assertEquals(TaskGenerator.generate(template, it), TaskGenerator.generate(template, it)) }
     }
 
     /** Каждое зерно даёт выигрываемую игру без недоставленных подстановок, и числа правда меняются. */

@@ -62,7 +62,7 @@ object TaskGenerator {
     fun generate(template: JsonObject, seed: Long): TaskDefinition = shuffleOrder(numbers(template, seed), seed)
 
     private fun numbers(template: JsonObject, seed: Long): TaskDefinition {
-        if (!isRandom(template)) return base(template)
+        if (!isRandom(template) && !makesMistakes(template)) return base(template)
         val random = Random(seed)
         val base = base(template)
         repeat(TRIES) {
@@ -115,8 +115,13 @@ object TaskGenerator {
     private fun build(template: JsonObject, random: Random?): TaskDefinition {
         val resolved = resolve(template, random) as JsonObject
         val facts = TaskEngines.facts(json.decodeFromJsonElement<TaskDefinition>(resolved))
-        return json.decodeFromJsonElement<TaskDefinition>(substitute(resolved, resolved, facts))
+        val task = json.decodeFromJsonElement<TaskDefinition>(substitute(resolved, resolved, facts))
+        // Ошибки чека — не разброс одного числа, их пишет ReceiptMaker; у base — одни и те же.
+        return if (task is ReceiptTask) ReceiptMaker.make(task, random ?: Random(0)) else task
     }
+
+    /** Чек, ошибки в котором придумываются на каждую попытку: он меняется и без разброса. */
+    private fun makesMistakes(template: JsonObject): Boolean = template["mistakes"] != null
 
     // ---------- Разброс ----------
 
