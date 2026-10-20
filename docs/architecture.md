@@ -221,8 +221,8 @@ fun ShopScreen(onBack: () -> Unit, viewModel: ShopViewModel = viewModel(factory 
 
 | Таблица | Ключ | Что хранит |
 |---|---|---|
-| `profiles` | `id` | имя питомца, персонаж (значения `PetCharacter`), цвет тела (`A/B/C`), глаза (`ROUND/OVAL/SLY`), активная цель, `isDemo`, дата создания |
-| `pet_state` | `profileId` | сытость, чистота, настроение |
+| `profiles` | `id` | имя питомца, персонаж (значения `PetCharacter`), цвет тела (`A/B/C`), глаза (`ROUND/OVAL/SLY`), активная цель, `isDemo`, дата создания; слоты шляпы и очков, `wornLook`, `roomWall`, `roomWindow`, `roomLamp`, `roomRug` |
+| `pet_state` | `profileId` | сытость, чистота, настроение, энергия, начало сна и сессия игры с игрушками |
 | `periods` | `profileId + number` | номер, стадия, фаза; план (бюджет и три направления) после подтверждения; итоги (факт, незапланированный доход, флаги, очки) после закрытия |
 | `ledger` | `id` | операции: тип, Δ баланса, Δ копилки, категория, товар, цель, задание, `unplanned`, время |
 | `task_attempts` | `id` | попытки заданий: период, задание, исход, награда, время, зерно чисел игры |
@@ -239,7 +239,7 @@ fun ShopScreen(onBack: () -> Unit, viewModel: ShopViewModel = viewModel(factory 
 | Баланс | Σ `balanceDelta` |
 | Копилка цели | Σ `savingsDelta` по `goalId` |
 | Факт периода | Σ операций периода по типу и категории |
-| Очки, уровень, стадия | Σ `periods.pointsEarned` |
+| Уровень и стадия | число успешно пройденных периодов и пороги роста (`Game.levelAfter`, `Progression`); очки периода — отдельный итог |
 | Купленные аксессуары | операции `PURCHASE` с `itemId` аксессуара |
 | Завершённые задания | `task_attempts` с `outcome = SUCCESS` |
 | Полка расходников (еда и ванна) | `PURCHASE` товара × `uses` минус `portions` из `item_uses` товара |
@@ -247,7 +247,7 @@ fun ShopScreen(onBack: () -> Unit, viewModel: ShopViewModel = viewModel(factory 
 | Подпись операции для ребёнка | `type` + название товара, цели или задания из контента, ТЗ п. 2.5.4 |
 
 **Меняешь entity — поднимаешь `version` в `FinneyDatabase` и пишешь миграцию.** Сейчас
-версия 13; с версии 3 изменения переносятся миграциями `MIGRATION_3_4` … `MIGRATION_12_13`,
+версия 15; с версии 3 изменения переносятся миграциями `MIGRATION_3_4` … `MIGRATION_14_15`,
 и прогресс переживает обновление. Базы версий 1–2 пересоздаются с нуля
 (`fallbackToDestructiveMigration`): версия 3 переименовала питомцев, и перенос старых значений
 держал бы прежние имена в коде. Каждую миграцию проверяет `MigrationTest` на
