@@ -87,22 +87,19 @@ class HomeDesignerLayoutTest {
         shot("02-ready-font130")
     }
 
-    @Test fun heartUsesThreeEmotionsAndRepeatsThePetsReason() {
+    @Test fun joyRingShowsMoodAndPetTapRepeatsTheReason() {
         val state = mutableStateOf(initialState().copy(emotion = Emotion.CALM))
         show({ state.value })
-        val heart = compose.onNodeWithContentDescription("Настроение питомца")
-        heart.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Спокойное. 40 из 100"))
-        shot("03-heart-calm")
-        heart.performClick()
+        val joy = compose.onNodeWithContentDescription("Радость")
+        joy.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "40 из 100"))
+        compose.onNodeWithTag("home-pet").performClick()
         compose.onNodeWithText("Мне хорошо!").assertIsDisplayed()
-        compose.runOnIdle { state.value = state.value.copy(emotion = Emotion.HAPPY, stats = state.value.stats.copy(mood = 90)) }
-        heart.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Весёлое. 90 из 100"))
-        shot("03-heart-happy")
+        shot("03-joy-calm")
         compose.runOnIdle { state.value = state.value.copy(emotion = Emotion.HUNGRY, stats = state.value.stats.copy(mood = 20)) }
-        heart.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Грустное. 20 из 100"))
-        heart.performClick()
+        joy.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "20 из 100, критически низко"))
+        compose.onNodeWithTag("home-pet").performClick()
         compose.onNodeWithText("Я проголодался.\nПокорми меня!").assertIsDisplayed()
-        shot("04-heart-hungry")
+        shot("04-joy-low")
         compose.onNodeWithText("Я проголодался.\nПокорми меня!").performClick()
         compose.onNodeWithText("Я проголодался.\nПокорми меня!").assertDoesNotExist()
     }
@@ -111,7 +108,7 @@ class HomeDesignerLayoutTest {
         val now = System.currentTimeMillis()
         val state = initialState().copy(sleep = SleepInfo(now, now + 600_000, 10))
         show({ state })
-        compose.onNodeWithContentDescription("Настроение питомца").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Радость").assertIsNotEnabled()
         compose.onNodeWithContentDescription("Магазин").assertIsEnabled().assertIsDisplayed()
         compose.onNodeWithContentDescription("Покормить").assertIsNotEnabled()
         compose.onNodeWithContentDescription("Помыть").assertIsNotEnabled()
@@ -130,12 +127,6 @@ class HomeDesignerLayoutTest {
             val action = compose.onNodeWithContentDescription(description).assertIsDisplayed()
                 .fetchSemanticsNode().boundsInRoot
             assertFalse("Речь закрыла $description", speech.overlaps(action))
-        }
-        val heart = compose.onNodeWithContentDescription("Настроение питомца").assertIsDisplayed()
-            .fetchSemanticsNode().boundsInRoot
-        for (description in listOf("Копилка", "Игры уровня")) {
-            assertFalse("Сердечко закрыло $description", heart.overlaps(
-                compose.onNodeWithContentDescription(description).fetchSemanticsNode().boundsInRoot))
         }
         shot("06-grown-font130")
     }

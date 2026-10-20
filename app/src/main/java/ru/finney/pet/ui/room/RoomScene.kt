@@ -94,7 +94,7 @@ private val PetFooting = Footing(feetX = 0.5f, feetY = 0.87f)
 private const val APPEAR_MS = 300
 
 /**
- * Прогулка по залу: раз в несколько секунд питомец сам скачет в случайное место.
+ * Прогулка по игровой: раз в несколько секунд питомец сам скачет в случайное место.
  * Пауза случайная — по часам его прыжков не ждут, и он выглядит живым, а не заведённым.
  */
 private val StrollPauseMs = 6_000L..14_000L
@@ -197,9 +197,9 @@ private val UfoPauseMs = 20_000L..45_000L
  * Если экран шире холста (планшет), холст подгоняется по ширине и срезается
  * сверху — пол, стол и ванна нужны целиком, а верх стены пустой.
  *
- * Комнаты три — зал, кухня, ванная, — и при переключении [spot] новая
- * проступает поверх старой. В каждой свой набор: в зале торшер, окно и капсула, на кухне стол
- * у окна без торшера, в ванной ванна под торшером без окна. Свет у каждой
+ * Комнат четыре — спальня, игровая, кухня, ванная, — и при переключении [spot] новая
+ * проступает поверх старой. В каждой свой набор: в спальне торшер, окно и капсула, в игровой
+ * окно и игрушки на полу, на кухне стол у окна, в ванной ванна под торшером без окна. Свет у каждой
  * комнаты свой, потому что источники в них разные.
  *
  * В комнате ночь (см. RoomLight.kt): светят торшер, окно и пролетающее НЛО.
@@ -207,17 +207,17 @@ private val UfoPauseMs = 20_000L..45_000L
  * и у каждого своя тень.
  *
  * @param lampOn горит ли торшер, пока питомец не спит. Во сне свет гаснет сам.
- * @param capsule стоит ли в зале капсула для сна. Мини-играм комната нужна
+ * @param capsule стоит ли в спальне капсула для сна. Мини-играм комната нужна
  *   фоном, и капсула во весь экран там только мешает.
  * @param asleep питомец спит: запрыгивает в капсулу, камера наезжает на неё,
  *   дверь закрывается и гаснет свет. Проснулся — всё в обратном порядке,
  *   и выпрыгивает он на своё место, а не туда, где гулял.
  * @param pet встаёт туда, где ему положено быть в текущей комнате.
  * @param onTapItem нажатие по самому предмету: тому же, что делает нижняя кнопка.
- * @param wander гулять ли питомцу по залу самому. Выключается, пока с ним что-то
+ * @param wander гулять ли питомцу по игровой самому. Выключается, пока с ним что-то
  *   делают: во сне, в играх ухода, в других комнатах.
  * @param onHop питомец скакнул — запустить прыжок в его анимации: поза живёт снаружи.
- * @param toys купленные игрушки — лежат на полу зала, см. RoomToys.kt.
+ * @param toys купленные игрушки — лежат на полу игровой, см. RoomToys.kt.
  * @param toysEnabled можно ли их брать: во сне и в играх ухода нельзя.
  * @param onToyDrag игрушку тащат: где её середина на экране и на сколько сдвинули.
  * @param onToyDrop игрушку отпустили.
@@ -332,9 +332,8 @@ fun RoomScene(
 
         // Куда можно скакать: только в пределах видимой части холста, чтобы
         // питомец не ушёл за край экрана.
-        val home = Room.petGround(RoomSpot.LIVING)
-        // Слева у края экрана шкала настроения: за неё питомец не заходит.
-        val visibleLeft = (-shiftX + 56.dp) / canvasW
+        val home = Room.petGround(RoomSpot.PLAY)
+        val visibleLeft = -shiftX / canvasW
         val visibleRight = (maxWidth - shiftX) / canvasW
         val strollMin = visibleLeft - home.left - home.width * PET_MARGIN
         val strollMax = visibleRight - home.right + home.width * PET_MARGIN
@@ -365,8 +364,8 @@ fun RoomScene(
             appear.snapTo(0f)
         }
 
-        // Без анимаций не гуляет: прыжки по залу стали бы телепортом с места на место.
-        val canWander = wander && spot == RoomSpot.LIVING && shown == RoomSpot.LIVING && !asleep && animations
+        // Без анимаций не гуляет: прыжки по игровой стали бы телепортом с места на место.
+        val canWander = wander && spot == RoomSpot.PLAY && shown == RoomSpot.PLAY && !asleep && animations
         LaunchedEffect(canWander, strollMin, strollMax) {
             if (!canWander || strollMax <= strollMin) return@LaunchedEffect
             while (true) {
@@ -411,7 +410,7 @@ fun RoomScene(
         // Масштаб не меньше «холст во всю ширину» и сдвиг зажат, как у камеры сна:
         // за краем холста пусто, и показывать это нельзя.
         val edit = with(density) {
-            val target = (if (focusPet) home.shiftedX(stroll.value) else focus)?.let { rect ->
+            val target = (if (focusPet) Room.petGround(RoomSpot.LIVING) else focus)?.let { rect ->
                 val w = maxWidth.toPx()
                 val h = (maxHeight - focusBottom).toPx().coerceAtLeast(1f)
                 val left = shiftX.toPx()
@@ -605,34 +604,12 @@ private fun RoomCanvas(
             SwapEffects(walls, windows.takeIf { room.hasWindow }, lamps.takeIf { room.hasLamp })
 
             val visibility = petVisibility
-            val ground = Room.petGround(room).let { if (room == RoomSpot.LIVING) it.shiftedX(stroll()) else it }
+            val ground = Room.petGround(room).let { if (room == RoomSpot.PLAY) it.shiftedX(stroll()) else it }
 
-            // Тень у питомца только в зале: за столом и в ванне она
+            // Тень у питомца только на полу: за столом и в ванне она
             // упала бы на мебель, а мебель пола не знает.
             when (room) {
                 RoomSpot.LIVING -> {
-                    // Игрушки на полу: дальше ступней питомца — за ним, ближе — перед ним (RoomToys.kt).
-                    val toysOnFloor: @Composable () -> Unit = {
-                        for ((toy, place) in toys) {
-                            key(toy.first) {
-                                RoomToy(
-                                    toyId = toy.first,
-                                    art = toy.second,
-                                    place = place,
-                                    moves = toyMoves,
-                                    floor = toyFloor,
-                                    canvasW = canvasW,
-                                    canvasH = canvasH,
-                                    lighting = lighting,
-                                    enabled = toysEnabled,
-                                    onDrag = onToyDrag,
-                                    onDrop = onToyDrop,
-                                    nudge = toyNudge,
-                                    onPlaced = onToyPlaced,
-                                )
-                            }
-                        }
-                    }
                     if (capsule) {
                         // Капсула в углу, питомец перед ней. Засыпая, он запрыгивает
                         // в капсулу по дуге и становится меньше — она дальше от зрителя.
@@ -640,16 +617,38 @@ private fun RoomCanvas(
                         // и спящего видно. Тень на полу — только пока он стоит на месте.
                         LitLayer(Room.Capsule, canvasW, canvasH, lighting, Solids.Capsule, visibility)
                         TapZone(Room.Capsule.rect, canvasW, canvasH, "Уложить спать", onTapItem)
-                        toysOnFloor()
                         val t = walk()
                         val footing = if (t == 0f) PetFooting else null
                         val arc = -CAPSULE_JUMP_ARC * 4f * t * (1f - t)
                         Pet(ground.lerp(Room.PetInCapsule, t).shiftedY(arc), canvasW, canvasH, lighting, footing, visibility, pet)
                         CapsuleDoor(canvasW, canvasH, lighting, shut = door)
                     } else {
-                        toysOnFloor()
                         Pet(ground, canvasW, canvasH, lighting, PetFooting, visibility, pet)
                     }
+                }
+
+                // Игрушки на полу: дальше ступней питомца — за ним, ближе — перед ним (RoomToys.kt).
+                RoomSpot.PLAY -> {
+                    for ((toy, place) in toys) {
+                        key(toy.first) {
+                            RoomToy(
+                                toyId = toy.first,
+                                art = toy.second,
+                                place = place,
+                                moves = toyMoves,
+                                floor = toyFloor,
+                                canvasW = canvasW,
+                                canvasH = canvasH,
+                                lighting = lighting,
+                                enabled = toysEnabled,
+                                onDrag = onToyDrag,
+                                onDrop = onToyDrop,
+                                nudge = toyNudge,
+                                onPlaced = onToyPlaced,
+                            )
+                        }
+                    }
+                    Pet(ground, canvasW, canvasH, lighting, PetFooting, visibility, pet)
                 }
 
                 // Питомец рисуется раньше стола: столешница перекрывает

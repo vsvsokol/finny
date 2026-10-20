@@ -38,7 +38,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalDensity
 import kotlinx.coroutines.launch
 
-// Игрушки в зале. Купленная игрушка лежит на полу; её можно взять пальцем и
+// Игрушки в игровой. Купленная игрушка лежит на полу; её можно взять пальцем и
 // положить в любое место пола — там она и останется. Рядом с питомцем он тянется
 // к ней и радуется. Кто кого заслоняет, решает глубина: игрушка ближе к зрителю,
 // чем ступни питомца, лежит перед ним, дальше — за ним. Тень у игрушки всегда
@@ -49,28 +49,29 @@ import kotlinx.coroutines.launch
 private const val TOY_SCREEN_SIZE = 0.155f
 
 /**
- * Низ игрушки на своём месте — доля высоты холста. Ступни питомца в зале — 0.70:
+ * Низ игрушки на своём месте — доля высоты холста. Ступни питомца в игровой — 0.70:
  * ряд чуть ближе к зрителю, чем он.
  */
 private const val TOY_BOTTOM = 0.72f
 
 /**
  * Куда по глубине можно положить игрушку — её низ, доли высоты холста. Дальше —
- * основание капсулы (0.66), ближе — ряд кнопок комнат.
+ * плинтус (шов пола у задников от 0.44 до 0.51) с запасом на высоту игрушки, ближе —
+ * ряд кнопок комнат. Капсулы в игровой нет, и пол свободен почти до стены.
  */
-private const val FLOOR_BACK = 0.665f
+private const val FLOOR_BACK = 0.56f
 private const val FLOOR_FRONT = 0.76f
 
-/** Ступни питомца в зале: игрушка ниже этой линии — перед ним, выше — за ним. */
+/** Ступни питомца в игровой: игрушка ниже этой линии — перед ним, выше — за ним. */
 private const val PET_FEET = 0.70f
 
 /**
- * Места игрушек — середины, доли видимой ширины экрана. Сначала — перед капсулой
- * справа: там пол свободен, питомец стоит левее. Потом — слева, у торшера.
+ * Места игрушек — середины, доли видимой ширины экрана. Сначала — справа: питомец
+ * стоит левее. Потом — слева, у края.
  */
 private val ToyPlaces = listOf(0.64f, 0.88f, 0.76f, 0.09f, 0.21f, 0.52f)
 
-/** Сколько игрушек помещается в зале. Магазин не продаёт больше (ContentTest). */
+/** Сколько игрушек помещается в игровой. Магазин не продаёт больше (ContentTest). */
 const val MAX_ROOM_TOYS = 6
 
 /** Как игрушка лежит на полу: тень под нижним краем рисунка. */
@@ -88,7 +89,7 @@ private const val HELD_SHADOW_FADE = 0.45f
 /** Игрушка перед питомцем — над ним, но под поднятой. */
 private const val FRONT_Z = 1f
 
-/** Поднятая игрушка — над питомцем и дверью капсулы. */
+/** Поднятая игрушка — над питомцем. */
 private const val HELD_Z = 2f
 
 /** Зона захвата — над всем в комнате, даже над поднятой игрушкой. */
@@ -162,7 +163,12 @@ internal fun RoomToy(
     onPlaced: (toyId: String, bounds: Rect) -> Unit = { _, _ -> },
 ) {
     val shift = clampToFloor(place, moves[toyId] ?: Offset.Zero, floor)
-    val here = place.shiftedX(shift.x).shiftedY(shift.y)
+    val here = place.shiftedX(shift.x).shiftedY(shift.y).let { at ->
+        // Чем ближе к стене, тем мельче: пол уходит вглубь до самого плинтуса.
+        val k = RoomSpace.scaleAt(at.bottom) / RoomSpace.scaleAt(place.bottom)
+        val centre = (at.left + at.right) / 2f
+        RelRect(centre - at.width * k / 2f, at.bottom - at.height * k, centre + at.width * k / 2f, at.bottom)
+    }
     // Поднята ли игрушка: 0 — лежит, 1 — в руке.
     val lift = remember { Animatable(0f) }
     var held by remember { mutableStateOf(false) }

@@ -56,8 +56,14 @@ enum class RoomSpot(
     /** Есть ли окно. В ванной его нет: светит только торшер. */
     val hasWindow: Boolean,
 ) {
-    /** Зал с капсулой: здесь спят. */
+    /** Спальня с капсулой: здесь спят. */
     LIVING(hasLamp = true, hasWindow = true),
+
+    /**
+     * Игровая: игрушки на полу, питомец гуляет. Без торшера и капсулы, свет сверху,
+     * как на кухне: торшер — примета спальни, по нему комнаты и различаются.
+     */
+    PLAY(hasLamp = false, hasWindow = true, ceilingLight = true),
 
     /** Стол: здесь кормят. */
     KITCHEN(hasLamp = false, hasWindow = true, ceilingLight = true),
@@ -160,6 +166,12 @@ object Room {
      */
     private const val LIVING_PET_SIZE = 0.50f
 
+    /**
+     * Питомец в игровой. Капсулы нет, и он крупнее, чем в спальне, но мельче, чем
+     * за столом: вокруг него на полу лежат игрушки, и им нужно место.
+     */
+    private const val PLAY_PET_SIZE = 0.56f
+
     // ---------- Капсула для сна ----------
     //
     // Дизайнер нарисовал капсулу на весь зал, а стоять ей в углу: правый угол
@@ -206,7 +218,11 @@ object Room {
         RelRect(centre - size / 2f, top, centre + size / 2f, top + size * CANVAS_RATIO)
     }
 
-    private fun petSize(spot: RoomSpot): Float = if (spot == RoomSpot.LIVING) LIVING_PET_SIZE else PET_SIZE
+    private fun petSize(spot: RoomSpot): Float = when (spot) {
+        RoomSpot.LIVING -> LIVING_PET_SIZE
+        RoomSpot.PLAY -> PLAY_PET_SIZE
+        RoomSpot.KITCHEN, RoomSpot.BATH -> PET_SIZE
+    }
 
     /**
      * Верх квадрата питомца в каждой комнате — доля высоты холста.
@@ -220,6 +236,9 @@ object Room {
         // Ступни (0.87 квадрата) на полу перед капсулой: 0.70 ближе к зрителю,
         // чем её основание (0.66), — питомец стоит перед ней, а не в ней.
         RoomSpot.LIVING -> 0.70f - 0.87f * LIVING_PET_SIZE * CANVAS_RATIO
+
+        // Ступни там же, где в спальне: по ним игрушки решают, лежать перед ним или за ним.
+        RoomSpot.PLAY -> 0.70f - 0.87f * PLAY_PET_SIZE * CANVAS_RATIO
 
         // Стол непрозрачен ниже своей кромки 0.5975 — за ней прячется нижняя
         // треть питомца, и получается, что он сидит за столом. Выше зала
@@ -246,6 +265,8 @@ object Room {
     private fun petCentre(spot: RoomSpot): Float = when (spot) {
         // Левее середины экрана: справа капсула, и питомец её почти не заслоняет.
         RoomSpot.LIVING -> 0.34f
+        // Чуть правее спальни: капсулы нет, а слева лежат игрушки.
+        RoomSpot.PLAY -> 0.37f
         RoomSpot.KITCHEN -> 0.453f
         RoomSpot.BATH -> 0.453f + BATH_SHIFT
     }

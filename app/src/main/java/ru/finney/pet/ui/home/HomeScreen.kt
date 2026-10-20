@@ -439,8 +439,8 @@ internal fun HomeContent(
     }
 
     // Что стоит в комнате. Живёт на экране, а не в игре: это взгляд ребёнка на
-    // комнату, а не событие в правилах.
-    var spot by rememberSaveable { mutableStateOf(RoomSpot.LIVING) }
+    // комнату, а не событие в правилах. Днём питомец в игровой, спит — в спальне.
+    var spot by rememberSaveable { mutableStateOf(RoomSpot.PLAY) }
 
     // Какая панель ухода открыта и что в ней выбрано. Выбор живёт на экране,
     // а не в игре: пока не нажали «Купить», ничего не произошло.
@@ -578,7 +578,7 @@ internal fun HomeContent(
     }
 
     // Мало радости — питомец время от времени вздыхает и оседает: грусть видна
-    // и без слов. Шкала при этом покачивается, зовёт на неё нажать.
+    // и без слов.
     LaunchedEffect(state.moodLow, sleeping, animations) {
         if (!state.moodLow || sleeping || !animations) return@LaunchedEffect
         while (true) {
@@ -594,9 +594,8 @@ internal fun HomeContent(
     var dreamsAsked by rememberSaveable(sleep?.since) { mutableIntStateOf(0) }
     var lastDream by remember { mutableStateOf<String?>(null) }
 
-    // Подсказка к шкале радости: что её поднимает. Открывается нажатием на шкалу и
-    // висит, пока не закроют: сама она пропадала, пока ребёнок её читал.
-    var moodHint by remember { mutableStateOf(false) }
+    // Второе нажатие на «Игру» в игровой: рука показывает, что делать с игрушкой.
+    var toyAsk by remember { mutableIntStateOf(0) }
 
     // Подсказка следующего шага: где стоят кнопки-цели и вспышка «уровень готов».
     val hintTargets = remember { HintTargets() }
@@ -653,7 +652,22 @@ internal fun HomeContent(
         if (spot == next) openCare(target) else spot = next
     }
 
-    // Спят только в зале. Вернулись в приложение, а комната запомнилась другая, —
+    // «Игра» — как кухня и ванная: первое нажатие — игровая, второе — что делать.
+    // Игрушки есть — рука показывает, как играть; наигрался — так и говорит; нет — магазин.
+    fun play() {
+        if (sleeping) return
+        if (spot != RoomSpot.PLAY) {
+            spot = RoomSpot.PLAY
+            return
+        }
+        when {
+            state.toys.isEmpty() -> onOpenShop()
+            state.playLeft <= 0 -> playedOutAt = System.currentTimeMillis()
+            else -> toyAsk++
+        }
+    }
+
+    // Спят только в спальне. Вернулись в приложение, а комната запомнилась другая, —
     // питомец всё равно в капсуле, и на экране должна быть она.
     LaunchedEffect(sleeping) {
         if (sleeping) spot = RoomSpot.LIVING
@@ -671,18 +685,21 @@ internal fun HomeContent(
     val showcase = remember { ToyShowcase() }
     val toyBounds = remember { mutableStateMapOf<String, Rect>() }
     var toyShown by rememberSaveable { mutableStateOf(false) }
-    val roomCalm = spot == RoomSpot.LIVING && !sleeping && playing == null && care == null &&
-        heldToy == null && !levelOpen && dreamCard == null && purchased == null && !rejectShown && !menuOpen && !moodHint && !gamesOpen &&
+    val roomCalm = spot == RoomSpot.PLAY && !sleeping && playing == null && care == null &&
+        heldToy == null && !levelOpen && dreamCard == null && purchased == null && !rejectShown && !menuOpen && !gamesOpen &&
         !editing
-    val showToy = !state.toyPlayed && !toyShown && state.toys.isNotEmpty() && roomCalm
+    val showToy = (toyAsk > 0 || !state.toyPlayed && !toyShown) && state.toys.isNotEmpty() && roomCalm
     LaunchedEffect(showToy, animations) {
         if (!showToy) return@LaunchedEffect
+        val asked = toyAsk > 0
         try {
-            delay(ToyShowDelayMillis)
+            // Попросили кнопкой — показываем сразу: ребёнок ждёт ответа на нажатие.
+            if (!asked) delay(ToyShowDelayMillis)
             val id = currentState.toys.firstOrNull { it in toyBounds } ?: return@LaunchedEffect
             if (!animations) {
                 showcase.point(id)
-                awaitCancellation()
+                if (asked) delay(ToyPointMillis) else awaitCancellation()
+                return@LaunchedEffect
             }
             repeat(ToyShowRounds) { round ->
                 val from = toyBounds[id] ?: return@LaunchedEffect
@@ -701,6 +718,7 @@ internal fun HomeContent(
             toyShown = true
         } finally {
             showcase.reset()
+            toyAsk = 0
         }
     }
     LaunchedEffect(touches) {
@@ -730,7 +748,7 @@ internal fun HomeContent(
     // В ванной ведёт своя панель шагов (BathRoom): пузырь «я испачкался» звал бы на кнопку
     // ванны внизу и закрывал плитки.
     val guideBusy = playing != null || care != null || bathShop != null || inBath || levelOpen || debugOpen || rejectShown ||
-        menuOpen || moodHint || dreamCard != null || gamesOpen || editing
+        menuOpen || dreamCard != null || gamesOpen || editing
     // Интерфейс главной расступается, пока выбирают интерьер, — комната целиком
     // принадлежит выбору. Читается на отрисовке.
     val hudShown by animateFloatAsState(
@@ -767,10 +785,11 @@ internal fun HomeContent(
                     RoomSpot.KITCHEN -> openCare(CareTarget.FOOD)
                     RoomSpot.BATH -> openCare(CareTarget.BATH)
                     RoomSpot.LIVING -> if (sleeping) onWake() else onSleep()
+                    RoomSpot.PLAY -> play()
                 }
             },
             asleep = sleeping,
-            // Сам гуляет по залу, пока с ним ничего не делают — и не играют игрушкой.
+            // Сам гуляет по игровой, пока с ним ничего не делают — и не играют игрушкой.
             // В панели «Финни / Комната» стоит на месте: камера держит его крупно.
             wander = playing == null && care == null && heldToy == null && !editing,
             // Без анимаций прыжок мелькнул бы по кадру на шаг — не прыгаем вовсе.
@@ -786,7 +805,7 @@ internal fun HomeContent(
             toyNudge = showcase::offsetFor,
             onToyPlaced = { id, bounds -> if (toyBounds[id] != bounds) toyBounds[id] = bounds },
         ) {
-            // Нажатие — питомец подпрыгивает: это игра, а не меню.
+            // Нажатие — питомец подпрыгивает и говорит, как он: это игра, а не меню.
             //
             // Подсветку убираем: у питомца нет прямоугольной формы, и ripple
             // лёг бы квадратом вокруг.
@@ -808,6 +827,7 @@ internal fun HomeContent(
                             if (!sleeping) {
                                 sounds.play(Sfx.PetHappy)
                                 if (animations) animation.playJoy()
+                                speechRequest++
                             }
                         },
                     ),
@@ -924,8 +944,8 @@ internal fun HomeContent(
                         onDismiss = { menuOpen = false },
                         onOpenHelp = onOpenHelp,
                         onOpenBudget = onOpenBudget,
-                        // Гардероб — в панели «Финни», а она есть только в гостиной: с кухни и из
-                        // ванной сначала переходим туда. Во сне свет выключен — тогда экраном.
+                        // Гардероб — в панели «Финни», а она есть только в спальне: из других
+                        // комнат сначала переходим туда. Во сне свет выключен — тогда экраном.
                         onOpenWardrobe = if (!sleeping) ({ spot = RoomSpot.LIVING; roomEdit = EditTab.OUTFIT }) else onOpenWardrobe,
                         onOpenGlossary = onOpenGlossary,
                         onOpenSettings = onOpenSettings,
@@ -944,30 +964,11 @@ internal fun HomeContent(
                 state = state, layout = actionLayout, enabled = !sleeping && playing == null && !inBath,
                 alpha = sideAlpha, hintTargets = hintTargets, onOpenGoals = onOpenGoals, onClaimGoal = onClaimGoal,
                 onOpenGames = { gamesOpen = true },
-                // Обустраивают зал днём: во сне свет выключен, а на кухне и в ванной нет торшера.
+                // Обустраивают спальню днём: во сне свет выключен, а в остальных комнатах нет торшера.
                 onOpenRoom = if (spot == RoomSpot.LIVING && !sleeping) ({ roomEdit = EditTab.WALL }) else null,
                 onSavingsBounds = { if (savingsBounds != it) savingsBounds = it },
                 onGamesBounds = { if (gamesBounds != it) gamesBounds = it },
             )
-            if (moodHint) {
-                // Подробная помощь про игрушки закрывается касанием за её пределами.
-                Box(
-                    Modifier
-                        .matchParentSize()
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClickLabel = "Закрыть подсказку",
-                            onClick = { moodHint = false },
-                        ),
-                )
-                MoodHint(
-                    onClose = { moodHint = false },
-                    playLeft = state.playLeft,
-                    hasToys = state.toys.isNotEmpty(),
-                )
-            }
-
             // Во сне на полу — сколько ещё спать и «Разбудить». Днём здесь пусто:
             // «Завершить уровень» живёт только в панели уровня (значок сверху),
             // чтобы ребёнок подводил итог, видя условия, а не мимоходом.
@@ -985,34 +986,27 @@ internal fun HomeContent(
         }
 
         // ---------- Низ: комнаты ----------
-        // Три кнопки из макета. Каждая переключает комнату, а кольцо вокруг
-        // показывает потребность, которую в этой комнате закрывают, — так они
-        // нарисованы в ките («опускание/поднятие шкал потребностей»). В зале
-        // закрывают сон.
+        // Четыре кнопки. Каждая переключает комнату, а кольцо вокруг показывает
+        // потребность, которую в этой комнате закрывают, — так они нарисованы
+        // в ките («опускание/поднятие шкал потребностей»). В игровой закрывают
+        // радость, в спальне — сон. Порядок — вечер ребёнка: поиграл, поел,
+        // помылся, лёг спать. Сон с краю: ночью он один горит, его легко найти.
         Row(
             modifier = Modifier.fillMaxWidth().graphicsLayer { alpha = hudAlpha },
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            // Спящий не играет, не ест и не моется: кнопки полупрозрачные и не нажимаются.
             HomeCareAction(
-                icon = R.drawable.home_sleep_icon,
-                label = "Сон",
-                description = "Сон",
-                // Как у кухни и ванной: первое нажатие — комната, второе — уложить
-                // спать. Гардероб — в меню.
-                onClick = {
-                    when {
-                        sleeping -> onWake()
-                        spot == RoomSpot.LIVING -> onSleep()
-                        else -> spot = RoomSpot.LIVING
-                    }
-                },
-                value = energyNow,
-                critical = energyNow < state.criticalThreshold,
-                selected = spot == RoomSpot.LIVING,
-                buttonModifier = Modifier.hintTarget(hintTargets, NextStep.SLEEP),
-                modifier = Modifier.weight(1f),
+                icon = R.drawable.home_smile_icon,
+                label = "Игра",
+                description = "Радость",
+                onClick = ::play,
+                value = state.stats.mood,
+                critical = state.stats.mood < state.criticalThreshold,
+                selected = spot == RoomSpot.PLAY,
+                enabled = !sleeping,
+                modifier = Modifier.weight(1f).graphicsLayer { alpha = if (sleeping) NightDim else 1f },
             )
-            // Спящего не кормят и не моют: кнопки полупрозрачные и не нажимаются.
             HomeCareAction(
                 icon = R.drawable.home_eat_icon,
                 label = "Еда",
@@ -1037,6 +1031,25 @@ internal fun HomeContent(
                 buttonModifier = Modifier.hintTarget(hintTargets, NextStep.WASH),
                 modifier = Modifier.weight(1f).graphicsLayer { alpha = if (sleeping) NightDim else 1f },
             )
+            HomeCareAction(
+                icon = R.drawable.home_sleep_icon,
+                label = "Сон",
+                description = "Сон",
+                // Как у кухни и ванной: первое нажатие — комната, второе — уложить
+                // спать. Гардероб — в меню.
+                onClick = {
+                    when {
+                        sleeping -> onWake()
+                        spot == RoomSpot.LIVING -> onSleep()
+                        else -> spot = RoomSpot.LIVING
+                    }
+                },
+                value = energyNow,
+                critical = energyNow < state.criticalThreshold,
+                selected = spot == RoomSpot.LIVING,
+                buttonModifier = Modifier.hintTarget(hintTargets, NextStep.SLEEP),
+                modifier = Modifier.weight(1f),
+            )
         }
 
         }
@@ -1044,32 +1057,6 @@ internal fun HomeContent(
         // Значки привязаны к реальной области питомца, в том числе при его прогулке.
         if (!sleeping && !guideBusy && petLayout != Rect.Zero &&
             !(guided && state.level == 1 && guideStep != null)) {
-            PetMoodHeart(
-                emotion = state.emotion, value = state.stats.mood, speaking = speechVisible,
-                onClick = { speechRequest++ },
-                modifier = Modifier.layout { measurable, constraints ->
-                    val pet = petBounds()
-                    val placeable = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
-                    val margin = 12.dp.roundToPx()
-                    var x = (pet.right - placeable.width * 0.8f).toInt()
-                        .coerceIn(margin, (constraints.maxWidth - placeable.width - margin).coerceAtLeast(margin))
-                    val y = (pet.top + pet.height * 0.12f).toInt()
-                        .coerceIn(margin, (constraints.maxHeight - placeable.height - margin).coerceAtLeast(margin))
-                    val bounds = Rect(x.toFloat(), y.toFloat(),
-                        x + placeable.width.toFloat(), y + placeable.height.toFloat())
-                    val obstacle = listOf(savingsBounds, gamesBounds).firstOrNull {
-                        it != Rect.Zero && bounds.overlaps(it.inflate(8.dp.toPx()))
-                    }
-                    if (obstacle != null) {
-                        val away = if (obstacle.center.x > constraints.maxWidth / 2)
-                            minOf(pet.left - placeable.width * 0.2f, obstacle.left - placeable.width - 8.dp.toPx())
-                        else maxOf(pet.right - placeable.width * 0.8f, obstacle.right + 8.dp.toPx())
-                        x = away.toInt().coerceIn(margin,
-                            (constraints.maxWidth - placeable.width - margin).coerceAtLeast(margin))
-                    }
-                    layout(constraints.maxWidth, constraints.maxHeight) { placeable.place(x, y) }
-                },
-            )
             PetSpeechBubble(
                 visible = speechVisible, tailAbove = speechBelow,
                 text = emotionReason(state.emotion, state.toys.isNotEmpty()) ?: "Мне хорошо!",
@@ -1079,7 +1066,7 @@ internal fun HomeContent(
                         Emotion.HUNGRY -> goTo(RoomSpot.KITCHEN, CareTarget.FOOD)
                         Emotion.DIRTY -> goTo(RoomSpot.BATH, CareTarget.BATH)
                         Emotion.TIRED -> if (spot == RoomSpot.LIVING) onSleep() else spot = RoomSpot.LIVING
-                        Emotion.SAD -> if (state.toys.isNotEmpty()) moodHint = true else onOpenShop()
+                        Emotion.SAD -> if (state.toys.isEmpty()) onOpenShop() else play()
                         else -> Unit
                     }
                 },
@@ -1145,7 +1132,7 @@ internal fun HomeContent(
         // своё (окно отказа, меню, подсказка настроения, сон-загадка), её глушит.
         // В ванной ведёт своя панель шагов — кольцо звало бы к игре уровня поверх мытья.
         val busy = playing != null || care != null || bathShop != null || inBath || levelOpen || debugOpen || rejectShown ||
-            menuOpen || moodHint || dreamCard != null || gamesOpen || editing
+            menuOpen || dreamCard != null || gamesOpen || editing
         val tutorial = state.level == 1 && guided
         // Итог покупки на обучении — не отдельной карточкой, а в пузыре подсказки,
         // над следующим шагом: «Купили: каша, −10 · +40» и «Дальше: сыграй в игру».
@@ -1452,7 +1439,7 @@ internal fun HomeContent(
                 )
                 // В ванной игры поверх нет: моют прямо с полочки (BathRoom).
                 // Игры идут поверх кнопок комнат, из кухни не уйти.
-                RoomSpot.BATH, RoomSpot.LIVING -> Unit
+                RoomSpot.BATH, RoomSpot.LIVING, RoomSpot.PLAY -> Unit
             }
         }
 
