@@ -529,8 +529,10 @@ private fun Tray(
                         modifier = Modifier.padding(horizontal = 20.dp),
                     )
                 } else {
+                    // Прокрутка режет всё, что за её краем, а минус торчит над монетой на 6 dp:
+                    // без поля сверху его срезало.
                     FlowRow(
-                        Modifier.verticalScroll(rememberScrollState()),
+                        Modifier.verticalScroll(rememberScrollState()).padding(top = 8.dp, bottom = 2.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
