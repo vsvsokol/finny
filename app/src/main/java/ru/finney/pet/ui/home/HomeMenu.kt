@@ -1,14 +1,10 @@
 package ru.finney.pet.ui.home
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -44,7 +40,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -56,6 +51,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import ru.finney.pet.ui.components.CloseButton
@@ -110,13 +106,10 @@ internal fun HomeMenu(
     onOpenProgress: () -> Unit,
 ) {
     val animations = LocalAnimations.current
-    AnimatedVisibility(
-        visible = visible && burger != Rect.Zero,
-        enter = fadeIn(tween(if (animations) 180 else 0)),
-        // Закрывается к бургеру: гаснет и чуть сжимается к правому верхнему углу.
-        exit = fadeOut(tween(if (animations) 160 else 0)) +
-            scaleOut(tween(if (animations) 160 else 0), targetScale = 0.94f, transformOrigin = TransformOrigin(0.9f, 0.1f)),
-    ) {
+    // Меню на экране и пока закрывается: [visible] уже false, а строки ещё уезжают в трубу.
+    var shown by remember { mutableStateOf(false) }
+    if (visible) shown = true
+    if (shown && burger != Rect.Zero) {
         val entries = listOf(
             MenuEntry("План расходов", { FinneyIcon(FinneyIcons.Plan, size = it) }, onOpenBudget),
             // Раньше «Гардероб», но в панели не только одежда: окрас и комната тоже.
@@ -131,27 +124,53 @@ internal fun HomeMenu(
             MenuEntry("Настройки", { FinneyIcon(FinneyIcons.Gear, size = it) }, onOpenSettings),
         )
 
-        val tube = remember { Animatable(if (animations) 0f else 1f) }
-        val items = remember { List(entries.size) { Animatable(if (animations) 0f else 1f) } }
-        LaunchedEffect(Unit) {
+        val tube = remember { Animatable(0f) }
+        val items = remember { List(entries.size) { Animatable(0f) } }
+        val fade = remember { Animatable(0f) }
+        LaunchedEffect(visible) {
+            val target = if (visible) 1f else 0f
             if (!animations || !motionEnabled()) {
-                tube.snapTo(1f)
-                items.forEach { it.snapTo(1f) }
+                tube.snapTo(target)
+                items.forEach { it.snapTo(target) }
+                fade.snapTo(target)
+                if (!visible) shown = false
                 return@LaunchedEffect
             }
-            launch { tube.animateTo(1f, tween(260, easing = FastOutSlowInEasing)) }
-            items.forEachIndexed { i, item ->
-                launch {
-                    delay(80L + 40L * i)
-                    item.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMediumLow))
+            if (visible) {
+                launch { fade.animateTo(1f, tween(180)) }
+                launch { tube.animateTo(1f, tween(260, easing = FastOutSlowInEasing)) }
+                items.forEachIndexed { i, item ->
+                    launch {
+                        delay(80L + 40L * i)
+                        item.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMediumLow))
+                    }
                 }
+            } else {
+                // Закрывается тем же путём назад: строки уходят в трубу снизу вверх, труба
+                // втягивается в бургер, и только потом гаснет «✕». Раньше меню просто гасло
+                // со сжатием, и строки слева будто улетали в сторону (20.10).
+                coroutineScope {
+                    items.asReversed().forEachIndexed { i, item ->
+                        launch {
+                            delay(30L * i)
+                            item.animateTo(0f, tween(140, easing = FastOutSlowInEasing))
+                        }
+                    }
+                    launch {
+                        delay(60L)
+                        tube.animateTo(0f, tween(240, easing = FastOutSlowInEasing))
+                    }
+                }
+                fade.animateTo(0f, tween(120))
+                shown = false
             }
         }
 
         // Оверлей может стоять не в начале корня: геометрию бургера переводим в его координаты.
         var origin by remember { mutableStateOf(Offset.Zero) }
         var columnHeight by remember { mutableIntStateOf(0) }
-        BoxWithConstraints(Modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }) {
+        BoxWithConstraints(Modifier.fillMaxSize().graphicsLayer { alpha = fade.value }
+            .onGloballyPositioned { origin = it.positionInRoot() }) {
             val density = LocalDensity.current
             val b = burger.translate(-origin)
             val width = constraints.maxWidth
