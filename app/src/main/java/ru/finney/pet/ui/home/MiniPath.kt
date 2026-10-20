@@ -86,8 +86,8 @@ internal fun MiniPath(nodes: List<LevelNode>, onOpen: () -> Unit, modifier: Modi
             .clickable(onClickLabel = "Открыть «Мой путь»", onClick = onOpen)
             .padding(top = 14.dp, bottom = 34.dp),
     ) {
-        // Поля по бокам: у крайнего узла подарок и «ты здесь» шире своего столбца и иначе срезались рамкой.
-        BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 10.dp).height(AreaHeight)) {
+        // Поля вмещают «ты здесь» у первого и последнего узла даже при шрифте 130 %: подпись шире столбца.
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 26.dp).height(AreaHeight)) {
             val n = nodes.size
             val slot = maxWidth / n
             fun centerX(i: Int): Dp = slot * i + slot / 2
