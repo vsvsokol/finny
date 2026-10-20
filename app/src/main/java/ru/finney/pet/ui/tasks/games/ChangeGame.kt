@@ -100,6 +100,7 @@ private val WoodDeep = Color(0xFF7A4E3C)
 private val Soft = Color(0xFFEDE6FF)
 private val TrayShade = Color(0xFFFBDDB4)
 private val Bad = Color(0xFFFBC3B0)
+private val WalletShade = Color(0xFFE98B6F)
 
 /** Монета на лотке. [id] — чтобы новая падала на лоток, а убранная не дёргала соседей. */
 private data class TrayCoin(val id: Int, val value: Int)
@@ -211,6 +212,8 @@ internal fun ChangeGame(task: ChangeTask, character: PetCharacter, onClose: () -
                     Tray(
                         title = if (give) "Отсчитай сдачу" else "Заплати ровно",
                         label = if (give) "Сдача покупателю" else "На кассу, нужно ровно ${current.price}",
+                        hint = if (give) "Нажимай на монетки в ящике, и они лягут сюда"
+                        else "Нажимай на монетки в кошельке, и они лягут сюда",
                         coins = tray,
                         enabled = !solved,
                         modifier = Modifier.weight(1f),
@@ -501,6 +504,7 @@ private fun Counter(modifier: Modifier = Modifier) {
 private fun Tray(
     title: String,
     label: String,
+    hint: String,
     coins: List<TrayCoin>,
     enabled: Boolean,
     modifier: Modifier = Modifier,
@@ -522,7 +526,7 @@ private fun Tray(
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 if (coins.isEmpty()) {
                     Text(
-                        "Нажимай на монетки в ящике, и они лягут сюда",
+                        hint,
                         style = MaterialTheme.typography.bodyMedium.copy(fontSize = 19.sp, lineHeight = 24.sp),
                         color = FinneyInk.copy(alpha = 0.6f),
                         textAlign = TextAlign.Center,
@@ -661,33 +665,42 @@ private fun Slot(coin: Int, enabled: Boolean, modifier: Modifier, onTake: () -> 
     }
 }
 
-/** Кошелёк Финни: каждая монета своя, потраченные бледнеют и не нажимаются. */
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * Кошелёк Финни: каждая монета своя, потраченные бледнеют и не нажимаются.
+ * Все монеты в один ряд: если не влезают по 56 dp, становятся меньше.
+ */
 @Composable
 private fun Wallet(wallet: List<Int>, tray: List<Int>, enabled: Boolean, onTake: (Int) -> Unit) {
     val used = tray.groupingBy { it }.eachCount().toMutableMap()
     val shape = RoundedCornerShape(24.dp)
-    FlowRow(
+    val gap = 6.dp
+    BoxWithConstraints(
         Modifier
             .fillMaxWidth()
             .clip(shape)
             .background(FinneyPeach)
+            .insetShade(shape, WalletShade, 7.dp, border = 4.dp)
             .border(4.dp, FinneyInk, shape)
-            .padding(10.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(horizontal = 12.dp, vertical = 14.dp),
     ) {
-        wallet.sortedDescending().forEach { coin ->
-            val spent = (used[coin] ?: 0) > 0
-            if (spent) used[coin] = used.getValue(coin) - 1
-            DenominationCoin(
-                value = coin,
-                size = 56.dp,
-                faded = spent,
-                modifier = Modifier.clickable(enabled = enabled && !spent, role = Role.Button, onClickLabel = "Положить монету $coin") {
-                    onTake(coin)
-                },
-            )
+        val n = wallet.size.coerceAtLeast(1)
+        val size = minOf(56.dp, (maxWidth - gap * (n - 1)) / n)
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(gap, Alignment.CenterHorizontally),
+        ) {
+            wallet.sortedDescending().forEach { coin ->
+                val spent = (used[coin] ?: 0) > 0
+                if (spent) used[coin] = used.getValue(coin) - 1
+                DenominationCoin(
+                    value = coin,
+                    size = size,
+                    faded = spent,
+                    modifier = Modifier.clickable(enabled = enabled && !spent, role = Role.Button, onClickLabel = "Положить монету $coin") {
+                        onTake(coin)
+                    },
+                )
+            }
         }
     }
 }
