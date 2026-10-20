@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -64,7 +63,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import ru.finney.pet.domain.model.BodyColor
 import ru.finney.pet.domain.model.PetCharacter
 import ru.finney.pet.domain.profile.PetNameError
 import ru.finney.pet.ui.components.ChargeButton
@@ -120,23 +118,21 @@ fun PetSetupScreen(
         state = state,
         onNameChange = viewModel::setName,
         onCharacterChange = viewModel::setCharacter,
-        onBodyColorChange = viewModel::setBodyColor,
         onSave = viewModel::save,
     )
 }
 
 /**
- * Цвет тела рисуется сдвигом оттенка тех же слоёв (`BodyColor.colorFilter` в
- * ui/pet/PetView.kt): 5 питомцев × 3 цвета = 15 различимых вариантов (ТЗ п. 2.6).
- * Выбора глаз по-прежнему нет: варианты глаз не нарисованы, а выбор, который
- * ничего не меняет на экране, ребёнка только путает. Сеттер в [PetSetupViewModel] остался.
+ * Выбора цвета здесь нет: питомец начинает в родном цвете, окраски копят в копилке
+ * и надевают в панели «Финни». Выбора глаз тоже нет: варианты глаз не нарисованы,
+ * а выбор, который ничего не меняет на экране, ребёнка только путает. Сеттер в
+ * [PetSetupViewModel] остался.
  */
 @Composable
 private fun PetSetupContent(
     state: PetSetupUiState,
     onNameChange: (String) -> Unit,
     onCharacterChange: (PetCharacter) -> Unit,
-    onBodyColorChange: (BodyColor) -> Unit,
     onSave: () -> Unit,
 ) {
     // Переход в мир: после зарядки питомец уходит в портал, и только потом сохранение
@@ -170,23 +166,15 @@ private fun PetSetupContent(
                 style = MaterialTheme.typography.headlineLarge,
             )
 
-            // Заголовки «Кто это будет» и «Какого цвета» убраны: выбор — картинками самих
-            // питомцев, он понятен без подписи. Имя без подписи не понять — она осталась.
+            // Заголовка «Кто это будет» нет: выбор — картинками самих питомцев, он понятен
+            // без подписи. Имя без подписи не понять — она осталась.
             CharacterPicker(
                 selected = state.appearance.character,
-                bodyColor = state.appearance.bodyColor,
                 // Карусель стоит, пока питомец уходит: иначе выбор сменился бы на полпути.
                 // Остальное не гасим — погасшие поля мелькнули бы бледными до конца перехода.
                 enabled = !state.isLoading && !entering,
                 portal = portal,
                 onSelect = onCharacterChange,
-            )
-
-            ColorPicker(
-                character = state.appearance.character,
-                selected = state.appearance.bodyColor,
-                enabled = !state.isLoading,
-                onSelect = onBodyColorChange,
             )
 
             OutlinedText("Как назовёшь?", style = MaterialTheme.typography.headlineMedium)
@@ -283,68 +271,6 @@ private fun PortalOverlay(portal: PortalRun, blockTouches: Boolean) {
     }
 }
 
-private val BodyColorLabels = mapOf(
-    BodyColor.A to "родной",
-    BodyColor.B to "тёплый",
-    BodyColor.C to "свежий",
-)
-
-/**
- * Цвет тела: три неподвижных питомца в своих цветах. Выбранный отмечен заливкой,
- * рамкой и словом — не только цветом (ТЗ п. 3.6).
- */
-@Composable
-private fun ColorPicker(
-    character: PetCharacter,
-    selected: BodyColor,
-    enabled: Boolean,
-    onSelect: (BodyColor) -> Unit,
-) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        BodyColor.entries.forEach { color ->
-            val isSelected = color == selected
-            val label = BodyColorLabels.getValue(color)
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(RadiusCard))
-                    .background(if (isSelected) FinneyYellow else FinneySand)
-                    .border(
-                        width = if (isSelected) StrokeBold else StrokeThin,
-                        color = FinneyInk,
-                        shape = RoundedCornerShape(RadiusCard),
-                    )
-                    .selectable(
-                        selected = isSelected,
-                        enabled = enabled,
-                        role = Role.RadioButton,
-                        onClick = { onSelect(color) },
-                    )
-                    .padding(6.dp)
-                    .clearAndSetSemantics { contentDescription = "Цвет: $label" },
-            ) {
-                PetView(
-                    character = character,
-                    bodyColor = color,
-                    mood = PetMood.HAPPY,
-                    pose = StillPose,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = FinneyInk,
-                    textAlign = TextAlign.Center,
-                )
-            }
-        }
-    }
-}
-
 @Composable
 private fun NameField(
     name: String,
@@ -377,7 +303,6 @@ private fun NameField(
 @Composable
 private fun CharacterPicker(
     selected: PetCharacter,
-    bodyColor: BodyColor,
     enabled: Boolean,
     portal: PortalRun,
     onSelect: (PetCharacter) -> Unit,
@@ -442,7 +367,6 @@ private fun CharacterPicker(
             itemsIndexed(PetCharacter.entries) { index, character ->
                 CharacterCard(
                     character = character,
-                    bodyColor = bodyColor,
                     isSelected = character == selected,
                     enabled = enabled,
                     portal = if (character == selected) portal else null,
@@ -495,7 +419,6 @@ private fun Modifier.shrinkAwayFromCenter(list: LazyListState, index: Int): Modi
 @Composable
 private fun CharacterCard(
     character: PetCharacter,
-    bodyColor: BodyColor,
     isSelected: Boolean,
     enabled: Boolean,
     onSelect: () -> Unit,
@@ -534,7 +457,6 @@ private fun CharacterCard(
         val pose = rememberPoseProvider(animation)
         PetView(
             character = character,
-            bodyColor = bodyColor,
             mood = PetMood.HAPPY,
             pose = if (isSelected) pose else StillPose,
             modifier = Modifier.fillMaxWidth().then(if (portal != null) Modifier.intoPortal(portal) else Modifier),
@@ -582,7 +504,7 @@ private fun PetSetupContentPreview() {
     FinneyTheme {
         PetSetupContent(
             state = PetSetupUiState(isEditing = false, name = "Финни"),
-            onNameChange = {}, onCharacterChange = {}, onBodyColorChange = {}, onSave = {},
+            onNameChange = {}, onCharacterChange = {}, onSave = {},
         )
     }
 }

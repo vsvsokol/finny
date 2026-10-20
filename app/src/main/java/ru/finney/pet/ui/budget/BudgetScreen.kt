@@ -94,11 +94,9 @@ import androidx.compose.ui.unit.Dp
 import ru.finney.pet.ui.components.OutlinedText
 import ru.finney.pet.ui.pet.accessoryArt
 import ru.finney.pet.ui.pet.PetMood
-import ru.finney.pet.ui.pet.colorFilter
 import ru.finney.pet.ui.pet.glassesPlacement
 import ru.finney.pet.ui.pet.hatPlacement
 import ru.finney.pet.ui.pet.skin
-import ru.finney.pet.domain.model.BodyColor
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
@@ -639,7 +637,7 @@ internal fun ActiveContent(state: BudgetUiState.Active, onBack: () -> Unit,
         // Пузырь начинается выше головы, а не над ней целиком: так пара занимает высоту
         // головы, и на 360 dp экран помещается без прокрутки.
         Row(modifier = Modifier.fillMaxWidth()) {
-            PetHead(state.character, state.bodyColor, state.worn, HeadSize, Modifier.padding(top = HeadSize * 0.3f))
+            PetHead(state.character, state.worn, HeadSize, Modifier.padding(top = HeadSize * 0.3f))
             SpeechBalloon(verdictSpeech(state.verdict), Modifier.weight(1f))
         }
         when (state.verdict) {
@@ -667,7 +665,7 @@ private const val HeadBottom = 0.84f
  * так же, как на целого питомца. Картинка неподвижна: реплика читается, а не играется.
  */
 @Composable
-private fun PetHead(character: PetCharacter, bodyColor: BodyColor, worn: List<String>, size: Dp, modifier: Modifier = Modifier) {
+private fun PetHead(character: PetCharacter, worn: List<String>, size: Dp, modifier: Modifier = Modifier) {
     val skin = character.skin
     Box(
         contentAlignment = Alignment.TopCenter,
@@ -680,7 +678,6 @@ private fun PetHead(character: PetCharacter, bodyColor: BodyColor, worn: List<St
             Image(
                 painter = painterResource(skin.face(PetMood.HAPPY).base),
                 contentDescription = null,
-                colorFilter = bodyColor.colorFilter,
                 modifier = Modifier.matchParentSize(),
             )
             // Очки раньше шляпы — тот же порядок, что у целого питомца.

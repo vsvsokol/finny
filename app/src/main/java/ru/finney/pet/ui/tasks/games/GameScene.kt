@@ -54,7 +54,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
-import ru.finney.pet.domain.model.BodyColor
 import ru.finney.pet.domain.model.PetCharacter
 import ru.finney.pet.ui.components.Coin
 import ru.finney.pet.ui.components.CoinAmount
@@ -344,12 +343,9 @@ private fun Rain(amount: () -> Float) {
 }
 
 /**
- * Цвет тела питомца игрока. Задаёт экран задания, читает [ScenePet]: так цвет не нужно
+ * Надетый аксессуар питомца игрока. Задаёт экран задания, читает [ScenePet]: так его не нужно
  * протаскивать параметром через все шесть игр. Гостей в сценах он не касается.
  */
-internal val LocalPlayerBodyColor = staticCompositionLocalOf { BodyColor.A }
-
-/** Надетый аксессуар питомца игрока — тем же способом, что и цвет тела. */
 internal val LocalPlayerAccessory = staticCompositionLocalOf<List<String>> { emptyList() }
 
 /** Питомец игрока в сцене: живой, дышит. */
@@ -364,7 +360,6 @@ internal fun ScenePet(
 ) {
     PetView(
         character = character,
-        bodyColor = LocalPlayerBodyColor.current,
         accessories = LocalPlayerAccessory.current,
         mood = mood,
         pose = rememberPoseProvider(animation),

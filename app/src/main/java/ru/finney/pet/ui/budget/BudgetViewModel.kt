@@ -19,7 +19,6 @@ import ru.finney.pet.domain.game.GameResult
 import ru.finney.pet.domain.game.PlanReport
 import ru.finney.pet.domain.game.Rejection
 import ru.finney.pet.domain.game.Session
-import ru.finney.pet.domain.model.BodyColor
 import ru.finney.pet.domain.model.Category
 import ru.finney.pet.domain.model.GameContent
 import ru.finney.pet.domain.model.Goal
@@ -101,9 +100,8 @@ sealed interface BudgetUiState {
         val level: Int,
         val report: PlanReport,
         val balance: Int,
-        /** Питомец игрока — он сам и говорит вывод «План и факт», в своём цвете и шляпе. */
+        /** Питомец игрока — он сам и говорит вывод «План и факт», в своей шляпе. */
         val character: PetCharacter = PetCharacter.PUSHISTIK,
-        val bodyColor: BodyColor = BodyColor.A,
         val worn: List<String> = emptyList(),
         val incomeToRecover: Int = report.overspend,
     ) : BudgetUiState {
@@ -196,7 +194,6 @@ class BudgetViewModel(
                 report = report,
                 balance = state.balance,
                 character = saved.profile.appearance.character,
-                bodyColor = saved.profile.appearance.bodyColor,
                 worn = state.worn,
                 incomeToRecover = (report.overspend - report.facts.unplannedIncome - content.economy.planTolerance)
                     .coerceAtLeast(0),

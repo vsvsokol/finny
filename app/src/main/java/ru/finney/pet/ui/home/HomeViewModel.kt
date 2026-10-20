@@ -31,7 +31,6 @@ import ru.finney.pet.ui.room.ShelfItem
 import ru.finney.pet.ui.room.times
 import ru.finney.pet.domain.game.Rejection
 import ru.finney.pet.domain.game.Session
-import ru.finney.pet.domain.model.BodyColor
 import ru.finney.pet.domain.model.Category
 import ru.finney.pet.domain.model.ItemKind
 import ru.finney.pet.domain.model.GlossaryTerm
@@ -383,14 +382,6 @@ class HomeViewModel(
     }
 
     /** Перекрасить питомца: окрас — часть профиля, как на экране знакомства. */
-    fun setBodyColor(color: BodyColor) {
-        viewModelScope.launch {
-            val profile = session.activeGame.first()?.profile ?: return@launch
-            if (profile.appearance.bodyColor == color) return@launch
-            session.updateProfile(profile.petName, profile.appearance.copy(bodyColor = color))
-        }
-    }
-
     /**
      * Шаг мытья в ванной: предметом [itemId] с полочки или водой (null). Денег не тратит —
      * тратит раз предмета. Окна-отклика нет: прибавка всплывает над питомцем, а кольцо на
