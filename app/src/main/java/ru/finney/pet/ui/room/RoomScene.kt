@@ -30,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -57,6 +58,8 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.res.painterResource
@@ -116,6 +119,9 @@ private const val LEAP_OVERSHOOT = 0.02f
  * Так на концепте игровой (20.10): шар виден целиком, край стойки чуть срезан.
  */
 private const val PLAY_LAMP_PEEK = 0.04f
+
+/** За сколько камера выбора интерьера возвращается: столько же уезжает панель выбора (HomeScreen). */
+private const val FOCUS_RETURN_MS = 250
 
 /**
  * Прогулка по игровой: раз в несколько секунд питомец сам скачет в случайное место.
@@ -261,11 +267,13 @@ private val UfoPauseMs = 20_000L..45_000L
  *   с анимацией: стену прокатывает валик, окно схлопывается и раскрывается, торшер
  *   падает сверху и мигает, включаясь.
  * @param focus что показать крупно, пока выбирают интерьер ([focusOf]); null — обычный вид.
- * @param focusPet показать крупно питомца. Важнее [focus].
+ * @param focusPet показать крупно питомца там, где он стоит. Важнее [focus].
  * @param focusRug показать крупно ковёр игровой. Его место знает только сцена: оно
  *   зависит от ширины экрана (RoomRugs.kt). Важнее [focus].
  * @param focusBottom сколько снизу закрыто панелью выбора: часть [focus] встаёт
  *   посередине того, что над ней осталось.
+ * @param focusSolid сколько снизу панель закрывает сплошь. Над этим краем низ холста
+ *   подниматься не может: между кнопками над рамкой и в её углах видно, что за панелью.
  * @param trip дошёл ли питомец до [spot], и «поторопить» его, см. [RoomTrip].
  */
 @Composable
@@ -291,6 +299,7 @@ fun RoomScene(
     focusPet: Boolean = false,
     focusRug: Boolean = false,
     focusBottom: Dp = 0.dp,
+    focusSolid: Dp = focusBottom,
     trip: RoomTrip = remember { RoomTrip(spot) },
     pet: @Composable BoxScope.() -> Unit = {},
 ) {
@@ -580,6 +589,7 @@ fun RoomScene(
             framed?.let { rect ->
                 val w = maxWidth.toPx()
                 val h = (maxHeight - focusBottom).toPx().coerceAtLeast(1f)
+                val floor = (maxHeight - focusSolid).toPx()
                 val top = shiftY.toPx()
                 val cw = canvasW.toPx()
                 val ch = canvasH.toPx()
@@ -594,7 +604,7 @@ fun RoomScene(
                 val cx = shiftX.toPx() + cw * (rect.left + rect.width / 2f)
                 val cy = top + ch * (rect.top + rect.height / 2f)
                 val x = (w / 2f - s * cx).coerceIn(minOf(w - s * right, -s * left), -s * left)
-                val y = (h / 2f - s * cy).coerceIn(minOf(h - s * (top + ch), -s * top), -s * top)
+                val y = (h / 2f - s * cy).coerceIn(minOf(floor - s * (top + ch), -s * top), -s * top)
                 Triple(s, x, y)
             } ?: Triple(1f, 0f, 0f)
         }
@@ -609,7 +619,12 @@ fun RoomScene(
                 editZoom.snapTo(1f)
             } else {
                 if (editCamera != editTarget) {
-                    editZoom.animateTo(0f, tween(220, easing = FastOutSlowInEasing))
+                    // Назад — вместе с панелью: под её полупрозрачным краем
+                    // не должен открываться фон, пока камера ещё приближена.
+                    val returning = shown != spot || (focus == null && !focusPet && !focusRug)
+                    val out = if (returning) tween<Float>(FOCUS_RETURN_MS, easing = LinearOutSlowInEasing)
+                        else tween(220, easing = FastOutSlowInEasing)
+                    editZoom.animateTo(0f, out)
                     editCamera = editTarget
                 }
                 editZoom.animateTo(1f, tween(400, easing = FastOutSlowInEasing))
@@ -830,7 +845,8 @@ private fun RoomCanvas(
             SwapEffects(walls, windows.takeIf { room.hasWindow }, lamps.takeIf { room.hasLamp })
 
             val visibility = petVisibility
-            val ground = Room.petGround(room).shiftedX(stroll())
+            // Лямбдой: прогулка читается на раскладке и отрисовке и не пересобирает комнату.
+            val ground = { Room.petGround(room).shiftedX(stroll()) }
 
             // Тень у питомца только там, где он стоит на полу: за столом и в ванне она
             // упала бы на мебель, а мебель пола не знает.
@@ -904,10 +920,18 @@ private fun RoomCanvas(
                         // и спящего видно. Тень на полу — только пока он стоит на месте.
                         LitLayer(Room.Capsule, canvasW, canvasH, lighting, Solids.Capsule, visibility)
                         TapZone(Room.Capsule.rect, canvasW, canvasH, "Уложить спать", onTapItem)
-                        val t = walk()
-                        val footing = if (t == 0f) PetFooting else null
-                        val arc = -CAPSULE_JUMP_ARC * 4f * t * (1f - t)
-                        Pet(ground.lerp(Room.PetInCapsule, t).shiftedY(arc), canvasW, canvasH, lighting, footing, visibility, pet)
+                        val currentWalk by rememberUpdatedState(walk)
+                        // Пересобирается только в начале и в конце прыжка, а не каждый кадр.
+                        val standing by remember { derivedStateOf { currentWalk() == 0f } }
+                        val footing = if (standing) PetFooting else null
+                        Pet(
+                            ground = {
+                                val t = walk()
+                                val arc = -CAPSULE_JUMP_ARC * 4f * t * (1f - t)
+                                ground().lerp(Room.PetInCapsule, t).shiftedY(arc)
+                            },
+                            canvasW, canvasH, lighting, footing, visibility, pet,
+                        )
                         CapsuleDoor(canvasW, canvasH, lighting, shut = door)
                     } else {
                         Pet(ground, canvasW, canvasH, lighting, PetFooting, visibility, pet)
@@ -942,7 +966,7 @@ private fun RoomCanvas(
 /** Питомец на своём месте в комнате. Квадрат по ширине холста — как у слоёв. */
 @Composable
 private fun Pet(
-    ground: RelRect,
+    ground: () -> RelRect,
     canvasW: Dp,
     canvasH: Dp,
     lighting: RoomLighting,
@@ -957,10 +981,17 @@ private fun Pet(
         visibility = visibility,
         pad = PET_PAD,
         padTop = PET_PAD_TOP,
+        // Место и размер читаются на раскладке: питомец идёт и прыгает без пересборки.
         modifier = Modifier
-            .offset(canvasW * ground.left, canvasH * ground.top)
-            .graphicsLayer { alpha = visibility() }
-            .requiredSize(canvasW * ground.width),
+            .layout { measurable, _ ->
+                val g = ground()
+                val side = (canvasW * g.width).roundToPx()
+                val placeable = measurable.measure(Constraints.fixed(side, side))
+                layout(side, side) {
+                    placeable.placeRelative((canvasW * g.left).roundToPx(), (canvasH * g.top).roundToPx())
+                }
+            }
+            .graphicsLayer { alpha = visibility() },
         content = pet,
     )
 }
@@ -1017,7 +1048,7 @@ internal fun Window(window: WindowSkin, canvasW: Dp, canvasH: Dp, flyer: WindowF
     val life = window.life
     val lifeImages = when (life) {
         is WindowLife.Flyer -> listOf(life.layer)
-        is WindowLife.Wheel -> listOf(life.wheel, life.stand) + life.cabins
+        is WindowLife.Wheel -> listOf(life.wheel, life.stand) + life.cabins.map { it.layer }
         is WindowLife.Twinkle -> listOf(life.layer)
         null -> emptyList()
     }.map { ImageBitmap.imageResource(it.image) }
@@ -1082,11 +1113,15 @@ internal fun Window(window: WindowSkin, canvasW: Dp, canvasH: Dp, flyer: WindowF
                         val cos = cos(radians)
                         val sin = sin(radians)
                         life.cabins.forEachIndexed { i, cabin ->
-                            val r = cabin.rect
-                            val hang = Offset(((r.left + r.right) / 2f - hole.left) * unit.width, (r.top - hole.top) * unit.height) - hub
+                            val r = cabin.layer.rect
+                            val attachment = cabin.attachment
+                            // Обод и подвес вращаются вокруг одной оси в пикселях:
+                            // доли ширины и высоты у портретного холста различаются.
+                            val hang = Offset((attachment.x - hole.left) * unit.width, (attachment.y - hole.top) * unit.height) - hub
                             val moved = Offset(hang.x * cos - hang.y * sin, hang.x * sin + hang.y * cos)
+                            val at = Offset(attachment.x - r.width / 2f, attachment.y)
                             translate(moved.x - hang.x, moved.y - hang.y) {
-                                drawRoomImage(lifeImages[2 + i], r, hole, unit, blend = BlendMode.SrcAtop)
+                                drawRoomImage(lifeImages[2 + i], r, hole, unit, at = at, blend = BlendMode.SrcAtop)
                             }
                         }
                     }

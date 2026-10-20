@@ -73,11 +73,19 @@ sealed interface WindowLife {
     ) : WindowLife
 
     /** Колесо обозрения: колесо крутится вокруг [hub], кабинки на нём висят ровно. */
-    data class Wheel(val wheel: RoomLayer, val stand: RoomLayer, val cabins: List<RoomLayer>, val hub: Offset) : WindowLife
+    data class Wheel(val wheel: RoomLayer, val stand: RoomLayer, val cabins: List<WheelCabin>, val hub: Offset) : WindowLife
 
     /** Мерцает на месте — светлячки. */
     data class Twinkle(val layer: RoomLayer) : WindowLife
 }
+
+/**
+ * Кабинка висит верхней серединой на [attachment] — стыке спицы с ободом.
+ * Координаты слоя сохраняют исходный кроп, но не задают подвес: в статичном
+ * рисунке художника кабинки смещены относительно спиц.
+ */
+@Immutable
+data class WheelCabin(val layer: RoomLayer, val attachment: Offset)
 
 /**
  * Окно.
@@ -180,11 +188,24 @@ object Interiors {
         val lamp = RoomLayer(R.drawable.room_circus_lamp, RelRect(0.0389f, 0.0754f, 0.2986f, 0.4917f))
         val wheel = RoomLayer(R.drawable.room_circus_wheel, RelRect(0.7389f, 0.1625f, 0.9083f, 0.2642f))
         val stand = RoomLayer(R.drawable.room_circus_wheel_stand, RelRect(0.7868f, 0.2004f, 0.8597f, 0.2967f))
+        // Стыки спиц с ободом промерены по wheel.PNG на холсте 1440×2400.
         val cabins = listOf(
-            RoomLayer(R.drawable.room_circus_cabin_1, RelRect(0.7667f, 0.1633f, 0.7944f, 0.1808f)),
-            RoomLayer(R.drawable.room_circus_cabin_2, RelRect(0.8500f, 0.1642f, 0.8778f, 0.1817f)),
-            RoomLayer(R.drawable.room_circus_cabin_3, RelRect(0.7500f, 0.2358f, 0.7778f, 0.2533f)),
-            RoomLayer(R.drawable.room_circus_cabin_4, RelRect(0.8667f, 0.2367f, 0.8944f, 0.2542f)),
+            WheelCabin(
+                RoomLayer(R.drawable.room_circus_cabin_1, RelRect(0.7667f, 0.1633f, 0.7944f, 0.1808f)),
+                attachment = Offset(1124f / 1440f, 412f / 2400f),
+            ),
+            WheelCabin(
+                RoomLayer(R.drawable.room_circus_cabin_2, RelRect(0.8500f, 0.1642f, 0.8778f, 0.1817f)),
+                attachment = Offset(1252f / 1440f, 412f / 2400f),
+            ),
+            WheelCabin(
+                RoomLayer(R.drawable.room_circus_cabin_3, RelRect(0.7500f, 0.2358f, 0.7778f, 0.2533f)),
+                attachment = Offset(1100f / 1440f, 594f / 2400f),
+            ),
+            WheelCabin(
+                RoomLayer(R.drawable.room_circus_cabin_4, RelRect(0.8667f, 0.2367f, 0.8944f, 0.2542f)),
+                attachment = Offset(1270f / 1440f, 594f / 2400f),
+            ),
         )
         RoomInterior(
             id = "circus",
@@ -297,7 +318,7 @@ object Interiors {
 
 /**
  * Что в комнате меняется по отдельности: вкладки выбора и куда смотрит камера.
- * Стена, окно и торшер — в спальне, ковёр — в игровой.
+ * Выбирают в игровой: там видны и стена, окно, торшер, и ковёр.
  */
 enum class InteriorPart(val label: String) { WALL("Стена"), WINDOW("Окно"), LAMP("Торшер"), RUG("Ковёр") }
 

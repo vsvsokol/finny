@@ -88,14 +88,15 @@ fun TaskGame(
 
 /** Сцена задания — и на вступлении, и в итоге. Лавка в итоге уже вечерняя. */
 fun backdropFor(task: TaskDefinition, finished: Boolean = false): Backdrop = when (task) {
-    is SorterTask -> Backdrop.DOTS
+    is SorterTask -> Backdrop.ROOM_SORTER
     is BasketTask -> Backdrop.SHOP
     is GoalRaceTask -> Backdrop.FIELD
-    is ReserveTask -> if (finished) Backdrop.DOTS_RAIN else Backdrop.DOTS
+    is ReserveTask -> if (finished) Backdrop.ROOM_RESERVE_RAIN else Backdrop.ROOM_RESERVE
     is StandTask -> if (finished) Backdrop.SUNSET else Backdrop.SKY
     is ChangeTask -> Backdrop.TILL
-    is ReceiptTask -> Backdrop.STORE
-    is ChoresTask, is DistributorTask, is GoalSliderTask -> Backdrop.DOTS
+    is ReceiptTask -> Backdrop.TILL_DESK
+    is ChoresTask -> Backdrop.ROOM_CHORES
+    is DistributorTask, is GoalSliderTask -> Backdrop.DOTS
 }
 
 /** Фон карточки перед игрой — по макету карточек (вариант A). Игра потом встаёт на свой [backdropFor]. */

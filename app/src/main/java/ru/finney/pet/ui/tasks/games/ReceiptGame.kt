@@ -1,6 +1,13 @@
 package ru.finney.pet.ui.tasks.games
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -98,35 +105,61 @@ internal fun ReceiptGame(task: ReceiptTask, character: PetCharacter, onClose: ()
         checked = false
     }
 
-    GameScene(backdrop = Backdrop.STORE, onClose = onClose) {
-        SceneBody(
-            bottom = {
-                if (solved) {
-                    FinneyButton(text = "Готово", onClick = { onSubmit(first ?: TaskInput.Flags(lines, change)) })
-                } else {
-                    FinneyButton(text = "Проверить", onClick = {
-                        if (first == null) first = TaskInput.Flags(lines, change)
-                        checked = true
-                        sounds.play(if (right) Sfx.Correct else Sfx.Wrong)
-                    })
+    GameScene(backdrop = Backdrop.TILL_DESK, onClose = onClose) {
+        val density = LocalDensity.current
+        val rowTop = with(density) { WindowInsets.systemBars.getTop(this).toDp() } + 8.dp + HudHeight
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            val screenWidth = maxWidth + SceneEdge * 2
+            SceneBody(
+                bottom = {
+                    if (solved) {
+                        FinneyButton(text = "Готово", onClick = { onSubmit(first ?: TaskInput.Flags(lines, change)) })
+                    } else {
+                        FinneyButton(text = "Проверить", onClick = {
+                            if (first == null) first = TaskInput.Flags(lines, change)
+                            checked = true
+                            sounds.play(if (right) Sfx.Correct else Sfx.Wrong)
+                        })
+                    }
+                },
+            ) {
+                // Кассир с репликой стоит за прилавком фона, покупки лежат на прилавке рядом,
+                // как товар у «Сдачи», а чек — под прилавком, на сиреневом: так в макете кассы.
+                // Отдельным окном «Пакет» покупки не помещались: чек уходил за низ экрана.
+                // Прилавок нарисован в единицах макета от верха экрана, поэтому и место
+                // над ним считается от верха экрана.
+                val unit = designUnit(screenWidth)
+                val stand = (unit * DESK_TOP - rowTop).coerceAtLeast(MinStand)
+                Box(Modifier.fillMaxWidth().height(stand)) {
+                    Guest(cashier, CashierSize, Modifier.align(Alignment.BottomStart).width(CashierSize))
+                    Bag(task.cart, Modifier.align(Alignment.BottomEnd).padding(start = CashierSize - 16.dp))
+                    SpeechBubble(
+                        cashierLine(checked, solved, details),
+                        Tail.DOWN,
+                        Modifier.align(Alignment.TopStart).widthIn(max = 250.dp),
+                        tailAt = 0.3f,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
                 }
-            },
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Guest(cashier, 96.dp, Modifier.width(96.dp))
-                SpeechBubble(cashierLine(checked, solved, details), Tail.LEFT, Modifier.weight(1f, fill = false).widthIn(max = 230.dp), style = MaterialTheme.typography.bodyMedium)
+                // Два промежутка колонки по 12 dp уже есть: до прилавка и после него.
+                Spacer(Modifier.height((unit * (DESK_BOTTOM - DESK_TOP) - 16.dp).coerceAtLeast(0.dp)))
+                ReceiptPaper(
+                    task = task,
+                    markOf = { id -> mark(id in lines, id in errors.lines) },
+                    changeMark = mark(change, changeWrong || (change && errors.changeEither)),
+                    onLine = { id -> edit { lines = if (id in lines) lines - id else lines + id } },
+                    onChange = { edit { change = !change } },
+                )
             }
-            Bag(task.cart)
-            ReceiptPaper(
-                task = task,
-                markOf = { id -> mark(id in lines, id in errors.lines) },
-                changeMark = mark(change, changeWrong || (change && errors.changeEither)),
-                onLine = { id -> edit { lines = if (id in lines) lines - id else lines + id } },
-                onChange = { edit { change = !change } },
-            )
         }
     }
 }
+
+/** Кассир за прилавком — крупно, как покупатель у «Сдачи». */
+private val CashierSize = 124.dp
+
+/** Меньше места над прилавком не бывает: на низком экране кассир не сжимается, а сцена прокручивается. */
+private val MinStand = 160.dp
 
 /** Кассир вежливый: ошибся случайно, после проверки подсказывает, а не ругает. */
 private fun cashierLine(checked: Boolean, solved: Boolean, details: TaskDetails.Receipt?): String = when {
@@ -138,24 +171,30 @@ private fun cashierLine(checked: Boolean, solved: Boolean, details: TaskDetails.
     else -> "Где «✓» — всё верно, сними отметку"
 }
 
-/** Пакет с покупками: рисунок, ценник из магазина и сколько штук. */
+/**
+ * Покупки на прилавке: рисунок, ценник из магазина и сколько штук. Стоят справа
+ * от кассира, нижний ряд — на столешнице; много покупок переносятся рядом выше.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Bag(cart: List<ReceiptItem>) {
-    ScenePanel(title = "Пакет", modifier = Modifier.fillMaxWidth()) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            cart.forEach { item ->
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.semantics(mergeDescendants = true) {
-                        contentDescription = "${item.label}: ${item.qty} шт. по ${item.price}"
-                    },
-                ) {
-                    ItemPicture(item, item.label, 48.dp)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        PriceTag(item.price.toString())
-                        if (item.qty > 1) Text("${item.qty} шт.", style = MaterialTheme.typography.labelLarge, color = FinneyInk)
-                    }
+private fun Bag(cart: List<ReceiptItem>, modifier: Modifier = Modifier) {
+    FlowRow(
+        modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+        verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.Bottom),
+        itemVerticalAlignment = Alignment.Bottom,
+    ) {
+        cart.forEach { item ->
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.semantics(mergeDescendants = true) {
+                    contentDescription = "${item.label}: ${item.qty} шт. по ${item.price}"
+                },
+            ) {
+                ItemPicture(item, item.label, 52.dp)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    PriceTag(item.price.toString())
+                    if (item.qty > 1) Text("${item.qty} шт.", style = MaterialTheme.typography.labelLarge, color = FinneyInk)
                 }
             }
         }

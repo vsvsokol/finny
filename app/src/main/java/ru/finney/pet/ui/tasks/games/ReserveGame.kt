@@ -110,7 +110,7 @@ internal fun ReserveGame(
     val joys = task.spendings.count { it.category == Category.WANTS && it.id in planned }
 
     if (!weekStarted) {
-        GameScene(backdrop = Backdrop.DOTS, onClose = onClose, money = task.amount) {
+        GameScene(backdrop = Backdrop.ROOM_RESERVE, onClose = onClose, money = task.amount) {
             SceneBody(
                 bottom = { FinneyButton(text = "Начать неделю", onClick = { weekStarted = true }, enabled = reserve >= 0) },
             ) {
@@ -203,7 +203,7 @@ internal fun ReserveGame(
     val joysSoFar = week.take(today).count { it.joy != null }
     val finished = today >= DAYS_IN_WEEK || (stopDay != null && today >= stopDay)
 
-    GameScene(backdrop = Backdrop.DOTS_RAIN, onClose = onClose, money = jarNow) {
+    GameScene(backdrop = Backdrop.ROOM_RESERVE_RAIN, onClose = onClose, money = jarNow) {
         SceneBody {
             WeekStrip(week, today)
             DayCard(week.getOrNull(today - 1), today)

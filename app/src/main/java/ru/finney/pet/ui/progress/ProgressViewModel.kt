@@ -106,6 +106,7 @@ class ProgressViewModel(
 
     private fun toUiState(saved: SavedGame): ProgressUiState.Ready {
         val state = saved.state
+        val levelOf = game.levelsPlayed(state)
         return ProgressUiState.Ready(
             petName = saved.profile.petName,
             level = game.level(state),
@@ -139,7 +140,7 @@ class ProgressViewModel(
                 .map { (number, entries) ->
                     HistoryPeriod(
                         number = number,
-                        level = game.levelAfter(state, number - 1),
+                        level = levelOf[number] ?: game.levelAfter(state, number - 1),
                         // Лента в порядке записи; новые сверху. По времени не сортируем:
                         // у операций одной команды оно совпадает.
                         rows = entries.asReversed().map {

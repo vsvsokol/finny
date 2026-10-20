@@ -3,6 +3,7 @@ package ru.finney.pet.ui.home
 import ru.finney.pet.R
 import androidx.compose.foundation.layout.heightIn
 import ru.finney.pet.ui.progress.NextProgress
+import ru.finney.pet.ui.period.NewPlace
 import androidx.annotation.DrawableRes
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.layout.ContentScale
@@ -176,6 +177,7 @@ import ru.finney.pet.ui.room.InteriorPart
 import ru.finney.pet.ui.room.EditTab
 import ru.finney.pet.ui.room.InteriorPicker
 import ru.finney.pet.ui.room.InteriorPickerHeight
+import ru.finney.pet.ui.room.InteriorPickerSolidHeight
 import ru.finney.pet.ui.room.toInterior
 import ru.finney.pet.ui.room.core
 import ru.finney.pet.domain.model.RoomPart
@@ -245,6 +247,7 @@ fun HomeScreen(
         }
     }
 
+    val newSeen = rememberNewSeen()
     when (val s = state) {
         HomeUiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = FinneyInk)
@@ -252,8 +255,11 @@ fun HomeScreen(
         is HomeUiState.Ready -> HomeContent(
             state = s,
             onOpenBudget = onOpenBudget,
-            onOpenShop = onOpenShop,
-            onOpenGoals = onOpenGoals,
+            // Зашёл туда, где «Новое», — наклейка снята до следующего уровня.
+            onOpenShop = { newSeen.mark(NewPlace.SHOP, s.level); onOpenShop() },
+            onOpenGoals = { newSeen.mark(NewPlace.GOALS, s.level); onOpenGoals() },
+            newStickers = s.newPlaces.filterNot { newSeen.seen(it, s.level) }.toSet(),
+            onGamesSeen = { newSeen.mark(NewPlace.GAMES, s.level) },
             onOpenTasks = onOpenTasks,
             onOpenTask = onOpenTask,
             onOpenWardrobe = onOpenWardrobe,
@@ -370,6 +376,8 @@ internal fun HomeContent(
     purchased: ActionFeedback? = null,
     onHidePurchased: () -> Unit = {},
     rejectShown: Boolean = false,
+    newStickers: Set<NewPlace> = emptySet(),
+    onGamesSeen: () -> Unit = {},
     actionLayout: HomeActionLayout = HomeActionLayout.SPLIT,
     shopContent: @Composable (Int, () -> Unit) -> Unit = { balance, click -> HomeShopButton(balance, click, diameter = HomeButtonSize) },
 ) {
@@ -481,21 +489,17 @@ internal fun HomeContent(
 
     // Панель «Игры уровня»: обязательная игра и две по желанию.
     var gamesOpen by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(gamesOpen) { if (gamesOpen) onGamesSeen() }
+    var shopBounds by remember { mutableStateOf(Rect.Zero) }
 
     // Панель «Финни / Комната»: какая вкладка открыта; null — панель закрыта. Пока
     // выбирают, интерфейс главной расступается, а камера подлетает к питомцу или вещи.
     var roomEdit by rememberSaveable { mutableStateOf<EditTab?>(null) }
     val editing = roomEdit != null
-    // Панель живёт там, где видны стена, окно и торшер: в спальне и в игровой. Ковёр лежит
-    // только в игровой — на вкладке «Ковёр» питомец уходит туда. Из кухни и ванной — в спальню,
-    // а из игровой и спальни на других вкладках никуда не уходит. Закрыли панель — остаётся, где был.
-    LaunchedEffect(roomEdit) {
-        val tab = roomEdit ?: return@LaunchedEffect
-        spot = when {
-            tab.room == InteriorPart.RUG -> RoomSpot.PLAY
-            spot.hasWindow && spot.hasLamp -> spot
-            else -> RoomSpot.LIVING
-        }
+    // Панель живёт в игровой (разбор 20.10): там видно всё сразу — стену, окно, торшер и ковёр,
+    // и питомец не прыгает между комнатами при смене вкладки. Закрыли панель — остаётся там.
+    LaunchedEffect(editing) {
+        if (editing) spot = RoomSpot.PLAY
     }
     val editScope = rememberCoroutineScope()
     // Комната — из сохранения (ядро помнит её после перезапуска). «Вся комната» ставит
@@ -817,7 +821,8 @@ internal fun HomeContent(
     )
     // Сколько снизу закрывает панель выбора: камера ставит вещь посередине того, что над ней.
     // Заголовок и «Готово» висят над рамкой — их высота тоже закрыта.
-    val pickerCovers = InteriorPickerHeight + 36.dp + WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val navBar = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val pickerCovers = InteriorPickerHeight + 36.dp + navBar
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -861,6 +866,7 @@ internal fun HomeContent(
             focusPet = roomEdit?.pet == true,
             focusRug = roomEdit?.room == InteriorPart.RUG,
             focusBottom = pickerCovers,
+            focusSolid = InteriorPickerSolidHeight + navBar,
             onToyDrag = ::onToyDrag,
             onToyDrop = ::onToyDrop,
             toyNudge = showcase::offsetFor,
@@ -945,7 +951,9 @@ internal fun HomeContent(
                 modifier = Modifier.weight(1f),
                 contentAlignment = Alignment.CenterStart,
             ) {
-                shopContent(state.balance, onOpenShop)
+                Box(Modifier.onGloballyPositioned { val b = it.boundsInRoot(); if (shopBounds != b) shopBounds = b }) {
+                    shopContent(state.balance, onOpenShop)
+                }
             }
 
             // Уровень — главный показатель роста, поэтому в полтора раза крупнее кнопок по краям.
@@ -1576,8 +1584,8 @@ internal fun HomeContent(
             burger = burgerBounds,
             onDismiss = { menuOpen = false },
             onOpenBudget = onOpenBudget,
-            // «Украсить» — панель «Финни» с первой вкладки; в какую комнату, решает roomEdit выше.
-            // Во сне — экраном.
+            // «Украсить» — панель «Финни» с первой вкладки. Панель живёт в игровой (см. roomEdit),
+            // туда она и уводит из других комнат. Во сне — экраном.
             onDecorate = if (!sleeping) ({ roomEdit = EditTab.COLOUR }) else onOpenWardrobe,
             onOpenHelp = onOpenHelp,
             onOpenGlossary = onOpenGlossary,
@@ -1648,6 +1656,19 @@ internal fun HomeContent(
             )
         }
 
+        // Наклейки — только на открытой комнате: во сне, в игре и в ванной боковых кнопок
+        // не видно, а панели и окна поверх них не должны пестреть «Новым».
+        val roomFree = !sleeping && playing == null && !inBath && care == null && bathShop == null &&
+            roomEdit == null && !levelOpen && !menuOpen && !gamesOpen && !debugOpen
+        if (roomFree) {
+            NewStickers(newStickers, bounds = { place ->
+                when (place) {
+                    NewPlace.SHOP -> shopBounds
+                    NewPlace.GAMES -> gamesBounds
+                    NewPlace.GOALS -> savingsBounds
+                }
+            })
+        }
         LevelStars(
             state = state,
             from = { petBounds().takeIf { it != Rect.Zero } ?: badgeBounds },
@@ -2269,10 +2290,11 @@ private fun LevelGameRow(game: String, passed: Boolean, required: Boolean) {
 }
 
 /**
- * Условие уровня плиткой: крупный значок, подпись и отметка под ней.
+ * Условие уровня плиткой: крупный значок и подпись под ним.
  *
- * Выполненное — зелёная плитка, но главный признак — галочка в квадрате
- * под ней: по ТЗ п. 3.6 цвет не может быть единственным. Подпись — наше
+ * Выполненное — зелёная плитка с круглым «✓» на углу, как везде в приложении
+ * ([CheckBadge]): по ТЗ п. 3.6 цвет не может быть единственным. Строки «✓ Готово» /
+ * «Ещё нет» под каждой плиткой убраны (разбор 20.10) — значок говорит то же. Подпись — наше
  * добавление к макету: без неё смайлик и монету ребёнок не свяжет с условием.
  */
 @Composable
@@ -2301,15 +2323,17 @@ private fun ConditionTile(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(RoundedCornerShape(RadiusCard))
-                .background(if (done) FinneyGreen else FinneyCream)
-                .border(StrokeRegular, FinneyInk, RoundedCornerShape(RadiusCard)),
-            contentAlignment = Alignment.Center,
-        ) { icon() }
+        Box(Modifier.fillMaxWidth().aspectRatio(1f)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(RadiusCard))
+                    .background(if (done) FinneyGreen else FinneyCream)
+                    .border(StrokeRegular, FinneyInk, RoundedCornerShape(RadiusCard)),
+                contentAlignment = Alignment.Center,
+            ) { icon() }
+            if (done) CheckBadge(Modifier.align(Alignment.TopEnd).padding(5.dp), size = 28.dp)
+        }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(label, style = LevelItemText, color = FinneyInk, maxLines = 1)
             expanded?.let { open ->
@@ -2322,7 +2346,6 @@ private fun ConditionTile(
                 }
             }
         }
-        Text(if (done) "✓ Готово" else "Ещё нет", style = MaterialTheme.typography.bodyMedium, color = FinneyInk)
     }
 }
 

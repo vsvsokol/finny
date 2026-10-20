@@ -123,6 +123,16 @@ class PeriodTest {
     }
 
     @Test
+    fun `уровни периодов за один проход совпадают с levelAfter`() {
+        val game = Fixtures.game()
+        var s = game.playPerfectPeriod(game.newGame())
+        s = game.closePeriod(game.confirmPlan(s, 0, 0, 0).state()).state()
+        s = game.playPerfectPeriod(s)
+        val played = game.levelsPlayed(s)
+        s.periods.forEach { assertEquals(game.levelAfter(s, it.number - 1), played[it.number]) }
+    }
+
+    @Test
     fun `чек-лист уровня считается на эту минуту`() {
         val game = Fixtures.game()
         var s = game.selectGoal(game.newGame(), "bike").state()

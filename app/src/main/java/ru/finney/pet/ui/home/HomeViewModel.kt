@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import ru.finney.pet.appContainer
+import ru.finney.pet.ui.goals.forPet
 import ru.finney.pet.ui.progress.NextProgress
 import ru.finney.pet.ui.progress.homeUnlocks
 import ru.finney.pet.domain.pet.PetRules
@@ -200,6 +201,8 @@ sealed interface HomeUiState {
         val upcoming: NextProgress? = null,
         /** Кусок карты «Мой путь» вокруг текущего уровня — для панели уровня. */
         val path: List<ru.finney.pet.ui.progress.LevelNode> = emptyList(),
+        /** Где на главном лежит открытое этим уровнем — туда клеится «Новое». */
+        val newPlaces: Set<ru.finney.pet.ui.period.NewPlace> = emptySet(),
         val upcomingFood: ShopItem? = null,
     ) : HomeUiState {
         /** Уровень завершается только после подтверждения плана. */
@@ -442,6 +445,20 @@ class HomeViewModel(
         viewModelScope.launch { session.execute { play(it, toyId, shakes) } }
     }
 
+    /**
+     * Открытое на текущем уровне по местам. Первый уровень — не новинка, а начало игры.
+     * В демо вещи и цели открыты сразу, новым бывают только игры.
+     */
+    private fun newPlaces(level: Int, isDemo: Boolean, character: ru.finney.pet.domain.model.PetCharacter): Set<ru.finney.pet.ui.period.NewPlace> {
+        if (level <= 1) return emptySet()
+        val unlocks = game.unlocksAt(level).forPet(character)
+        return buildSet {
+            if (unlocks.games.isNotEmpty() || unlocks.harderGames.isNotEmpty()) add(ru.finney.pet.ui.period.NewPlace.GAMES)
+            if (!isDemo && unlocks.items.isNotEmpty()) add(ru.finney.pet.ui.period.NewPlace.SHOP)
+            if (!isDemo && unlocks.goals.isNotEmpty()) add(ru.finney.pet.ui.period.NewPlace.GOALS)
+        }
+    }
+
     private fun toUiState(saved: SavedGame): HomeUiState.Ready {
         val state = saved.state
         val level = game.level(state)
@@ -457,7 +474,11 @@ class HomeViewModel(
             level = level,
             title = game.title(state),
             upcoming = homeUnlocks(game, content, state, saved.profile.appearance.character),
-            path = miniPathWindow(ru.finney.pet.ui.progress.levelNodes(game, content, state, saved.profile.appearance.character)),
+            newPlaces = newPlaces(level, state.isDemo, saved.profile.appearance.character),
+            path = ru.finney.pet.ui.progress.levelNodes(
+                game, content, state, saved.profile.appearance.character,
+                levels = miniPathLevels(level, content.economy.maxLevel),
+            ),
             upcomingFood = content.forSale.filter { it.effect.satiety > 0 && !game.isUnlocked(state, it) }
                 .minByOrNull { it.unlockLevel },
             check = check,
@@ -607,6 +628,7 @@ class HomeViewModel(
             },
             hygiene = hygiene,
             clean = hygiene >= rule.cleanFrom,
+            enough = hygiene >= content.economy.pet.needsThreshold,
             canRinse = hygiene < rule.waterUpTo,
             full = hygiene >= PetRules.STAT_MAX,
         )

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -40,6 +41,8 @@ fun OutlinedText(
     fill: Color = FinneyPeach,
     outline: Color = FinneyInk,
     textAlign: TextAlign? = null,
+    /** Не null — одна строка, кегль ужимается до ширины места, а не переносится. */
+    autoSize: TextAutoSize? = null,
 ) {
     // Stroke задаётся в пикселях, а правило обводки — в dp: переводим по плотности экрана.
     val widthPx = with(LocalDensity.current) { stroke(style.fontSize).toPx() }
@@ -53,12 +56,16 @@ fun OutlinedText(
             text = text,
             style = style.copy(color = outline, drawStyle = Stroke(width = widthPx * 2f)),
             textAlign = textAlign,
+            maxLines = if (autoSize != null) 1 else Int.MAX_VALUE,
+            autoSize = autoSize,
             modifier = Modifier.clearAndSetSemantics {},
         )
         Text(
             text = text,
             style = style.copy(color = fill),
             textAlign = textAlign,
+            maxLines = if (autoSize != null) 1 else Int.MAX_VALUE,
+            autoSize = autoSize,
         )
     }
 }

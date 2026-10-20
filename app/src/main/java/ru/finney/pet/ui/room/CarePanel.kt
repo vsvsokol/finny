@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,6 +32,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import ru.finney.pet.domain.game.PurchasePreview
 import ru.finney.pet.domain.model.Category
 import ru.finney.pet.domain.model.PetStats
@@ -416,9 +418,9 @@ internal fun CareTile(option: CareOption, picture: Dp, short: Boolean, onPick: (
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            EffectChip(FinneyIcons.Food, "сытость", option.item.effect.satiety, preview.statsBefore.satiety, preview.statsAfter.satiety)
-            EffectChip(FinneyIcons.Bath, "чистота", option.item.effect.hygiene, preview.statsBefore.hygiene, preview.statsAfter.hygiene)
-            EffectChip(null, "радость", option.item.effect.mood, preview.statsBefore.mood, preview.statsAfter.mood)
+            EffectChip(FinneyIcons.Food, "сытость", option.item.effect.satiety, preview.statsBefore.satiety, preview.statsAfter.satiety, short)
+            EffectChip(FinneyIcons.Bath, "чистота", option.item.effect.hygiene, preview.statsBefore.hygiene, preview.statsAfter.hygiene, short)
+            EffectChip(null, "радость", option.item.effect.mood, preview.statsBefore.mood, preview.statsAfter.mood, short)
             CoinAmount(amount = option.item.price)
         }
         option.item.uses?.let { UsesNote(it, option.left, short) }
@@ -472,9 +474,12 @@ private val TilePicture = 88.dp
  * [icon] null — радость, её знак — лицо, как под шкалой на главном.
  */
 @Composable
-private fun EffectChip(icon: FinneyIcons?, label: String, effect: Int, before: Int, after: Int) {
+private fun EffectChip(icon: FinneyIcons?, label: String, effect: Int, before: Int, after: Int, short: Boolean = false) {
     if (effect == 0 && before == after) return
     val delta = after - before
+    // В плитке по три — на ступень мельче: на 360 dp и шрифте 130 % крупное число
+    // не помещалось рядом со значком.
+    val style = if (short) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -482,16 +487,22 @@ private fun EffectChip(icon: FinneyIcons?, label: String, effect: Int, before: I
             .clip(RoundedCornerShape(50))
             .background(Color.White)
             .border(StrokeThin, FinneyInk, RoundedCornerShape(50))
-            .padding(start = 10.dp, end = 8.dp)
+            // Сверху и снизу — зазор: значок во весь свой квадрат иначе ложится на обводку.
+            .padding(start = if (short) 8.dp else 10.dp, end = if (short) 6.dp else 8.dp, top = 3.dp, bottom = 3.dp)
             .clearAndSetSemantics {
                 contentDescription = if (before == after) "$label: уже полная" else "$label: было $before, станет $after"
             },
     ) {
         OutlinedText(
             text = if (delta >= 0) "+$delta" else "$delta",
-            style = MaterialTheme.typography.titleLarge,
+            style = style,
             // Направление — знаком «+» / «−», цвет один: зелёный «+» читался как похвала.
             fill = FinneyPeach,
+            // С весом число меряется после значка: в узкой плитке (три в ряд, шрифт 130 %)
+            // ужимается оно, а не значок — вилку с ножом срезало справа и сплющивало.
+            // Ужимается кеглем в одну строку: перенос ставил «+2» над «0».
+            modifier = Modifier.weight(1f, fill = false),
+            autoSize = TextAutoSize.StepBased(minFontSize = 12.sp, maxFontSize = style.fontSize),
         )
         if (icon != null) FinneyIcon(icon, size = 22.dp) else MoodFace(size = 22.dp)
     }

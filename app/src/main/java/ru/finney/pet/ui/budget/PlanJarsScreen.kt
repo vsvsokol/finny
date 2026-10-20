@@ -71,6 +71,7 @@ import ru.finney.pet.ui.components.FinneyScreen
 import ru.finney.pet.ui.components.FinniHead
 import ru.finney.pet.ui.components.FinniSays
 import ru.finney.pet.ui.components.OutlinedText
+import ru.finney.pet.ui.components.PlanJarShape
 import ru.finney.pet.ui.components.PlanPart
 import ru.finney.pet.ui.components.buttonFill
 import ru.finney.pet.ui.components.partIcon
@@ -324,8 +325,21 @@ private fun PlanJarColumn(
     val scope = rememberCoroutineScope()
     LaunchedEffect(sealed) {
         if (sealed && lid.value < 1f) {
-            if (animations) { delay(sealDelay.toLong()); lid.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMedium)) }
-            else lid.snapTo(1f)
+            if (animations) {
+                delay(sealDelay.toLong())
+                var sounded = false
+                lid.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMedium)) {
+                    // Клинк при первом касании банки, без повторов на отскоках пружины.
+                    if (!sounded && this.value >= 1f) {
+                        sounds.play(Sfx.JarLid)
+                        sounded = true
+                    }
+                }
+            } else {
+                lid.snapTo(1f)
+                delay(sealDelay.toLong())
+                sounds.play(Sfx.JarLid)
+            }
         }
     }
     val add: (Int) -> Boolean = { n ->
@@ -417,8 +431,8 @@ private fun PlanJarColumn(
     }
 }
 
-/** Форма банки: скругление сверху шире, чем снизу, — горлышко. */
-private val JarShape = RoundedCornerShape(topStart = 40.dp, topEnd = 40.dp, bottomStart = 26.dp, bottomEnd = 26.dp)
+/** Форма банки — общая с «План и факт» ([PlanJarShape]). */
+private val JarShape = PlanJarShape
 
 /**
  * Заливка узором части снизу на [shown] высоты, сверху — ровная линия уровня. Узор
@@ -572,7 +586,9 @@ private fun PartIntro(
                     .padding(top = 30.dp)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(30.dp))
-                    .background(FinneyCream)
+                    // Окно — в узоре своей банки: клетка, конфетти, монетки. Ребёнок
+                    // запоминает узор здесь и потом узнаёт часть по банке.
+                    .background(rememberPartBrush(part))
                     .drawBehind {
                         // Тень по низу внутри окна — тёплая, как у окон карточки игры.
                         drawRect(Color(0xFFFBDDB4), topLeft = Offset(0f, size.height - 8.dp.toPx()), size = Size(size.width, 8.dp.toPx()))

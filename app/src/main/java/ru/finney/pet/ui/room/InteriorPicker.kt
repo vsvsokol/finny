@@ -115,6 +115,15 @@ import ru.finney.pet.ui.theme.StrokeRegular
 // 224, а не 214: у комнаты вкладки в два этажа (значок над подписью), иначе карточки срезало снизу.
 val InteriorPickerHeight = 224.dp
 
+/** Скругление верха панели: в углах сквозь панель видно то, что за ней. */
+private val PanelCorner = 36.dp
+
+/**
+ * Сколько снизу панель закрывает сплошь, без системной полоски: без вкладок над рамкой
+ * и без скруглённых углов. Ниже этого края комната обязана быть — иначе виден фон.
+ */
+val InteriorPickerSolidHeight = InteriorPickerHeight - PanelCorner
+
 /** Сколько висит предложение взять тему целиком: прочитать и решить, но не мешать дальше. */
 private const val OFFER_MS = 4_500L
 
@@ -372,7 +381,7 @@ fun InteriorPicker(
     }
 }
 
-private val PanelShape = RoundedCornerShape(topStart = 36.dp, topEnd = 36.dp)
+private val PanelShape = RoundedCornerShape(topStart = PanelCorner, topEnd = PanelCorner)
 
 private val StillPose: () -> PetPose = { PetPose() }
 

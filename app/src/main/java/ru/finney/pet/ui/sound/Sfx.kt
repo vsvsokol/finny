@@ -6,8 +6,8 @@ import ru.finney.pet.R
 /**
  * Все звуки игры. Файлы — `res/raw/`, исходники и таблица — design/exports/sounds/.
  *
- * Звука, которого звуковик ещё не прислал, в res/raw лежит заглушка с тем же именем
- * (tools/make_sound_stubs.py). Настоящий файл кладётся поверх — код не меняется.
+ * Синтезированные эффекты воспроизводятся tools/synth_sounds.py; оставшиеся
+ * заглушки — tools/make_sound_stubs.py. Происхождение — в таблице и скриптах.
  */
 enum class Sfx(@RawRes val res: Int) {
     // Интерфейс
@@ -28,6 +28,13 @@ enum class Sfx(@RawRes val res: Int) {
     GameFail(R.raw.sfx_game_fail),
     LevelUp(R.raw.sfx_level_up),
     Pour(R.raw.sfx_pour),
+
+    // Церемония уровня и план
+    Star(R.raw.sfx_star),
+    Whoosh(R.raw.sfx_whoosh),
+    Grow(R.raw.sfx_grow),
+    NewThing(R.raw.sfx_new),
+    JarLid(R.raw.sfx_jar_lid),
 
     // Питомец и уход
     PetHappy(R.raw.sfx_pet_happy),
