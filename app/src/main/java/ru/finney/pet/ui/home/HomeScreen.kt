@@ -68,8 +68,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import ru.finney.pet.ui.sound.LocalSounds
@@ -138,7 +136,6 @@ import ru.finney.pet.ui.debug.DebugPanel
 import androidx.compose.animation.core.animateFloatAsState
 import ru.finney.pet.ui.components.RoomActionLabel
 import ru.finney.pet.ui.components.OutlinedText
-import ru.finney.pet.ui.progress.GlossaryBook
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableFloatStateOf
@@ -395,6 +392,7 @@ internal fun HomeContent(
     }
     val energyNow = sleep?.energyAt(now) ?: state.stats.energy
     var menuOpen by rememberSaveable { mutableStateOf(false) }
+    var burgerBounds by remember { mutableStateOf(Rect.Zero) }
     var savingsBounds by remember { mutableStateOf(Rect.Zero) }
     var gamesBounds by remember { mutableStateOf(Rect.Zero) }
     var headerBottom by remember { mutableFloatStateOf(0f) }
@@ -475,9 +473,10 @@ internal fun HomeContent(
 
     // «Назад» закрывает открытую панель, а не приложение: плейтест 29.09 — из
     // панели непройденного уровня было не выйти.
-    BackHandler(enabled = levelOpen || gamesOpen || editing) {
+    BackHandler(enabled = levelOpen || gamesOpen || menuOpen || editing) {
         levelOpen = false
         gamesOpen = false
+        menuOpen = false
         roomEdit = null
     }
 
@@ -915,24 +914,14 @@ internal fun HomeContent(
                 // «Бургер» — всё, что не про уход за питомцем и не на экране:
                 // игры, план, гардероб, подсказка и раздел взрослого.
                 // Низ экрана из-за этого остался про комнаты, а не про меню.
-                Box {
-                    DesignerHomeButton(
-                        icon = R.drawable.home_menu_icon,
-                        description = "Меню",
-                        onClick = { menuOpen = true },
-                    )
-
-                    HomeMenu(
-                        expanded = menuOpen,
-                        onDismiss = { menuOpen = false },
-                        onOpenHelp = onOpenHelp,
-                        onOpenBudget = onOpenBudget,
-                        // Гардероб теперь в панели «Финни»; на кухне и в ванной, где панели нет, — экраном.
-                        onOpenWardrobe = if (spot == RoomSpot.LIVING && !sleeping) ({ roomEdit = EditTab.OUTFIT }) else onOpenWardrobe,
-                        onOpenGlossary = onOpenGlossary,
-                        onOpenSettings = onOpenSettings,
-                    )
-                }
+                // Само меню — слоем поверх экрана (HomeMenu ниже): из ряда оно не смогло бы
+                // затемнить остальное. Отсюда ему нужно только место бургера.
+                DesignerHomeButton(
+                    icon = R.drawable.home_menu_icon,
+                    description = "Меню",
+                    onClick = { menuOpen = true },
+                    modifier = Modifier.onGloballyPositioned { burgerBounds = it.boundsInRoot() },
+                )
             }
         }
 
@@ -1530,6 +1519,18 @@ internal fun HomeContent(
                 )
             }
         }
+
+        HomeMenu(
+            visible = menuOpen,
+            burger = burgerBounds,
+            onDismiss = { menuOpen = false },
+            onOpenBudget = onOpenBudget,
+            // «Украсить» — панель «Финни» с первой вкладки; на кухне и в ванной, где панели нет, — экраном.
+            onDecorate = if (spot == RoomSpot.LIVING && !sleeping) ({ roomEdit = EditTab.COLOUR }) else onOpenWardrobe,
+            onOpenHelp = onOpenHelp,
+            onOpenGlossary = onOpenGlossary,
+            onOpenSettings = onOpenSettings,
+        )
 
         if (debugOpen && isDebuggable) {
             Box(
@@ -2281,61 +2282,6 @@ private fun LevelIcon(@DrawableRes id: Int) {
         contentDescription = null,
         contentScale = ContentScale.Fit,
         modifier = Modifier.size(60.dp),
-    )
-}
-
-/**
- * Меню «бургера»: всё, что не про уход за питомцем и чего нет на экране.
- *
- * Порядок — от игры к служебному: планировать, наряжать, потом подсказка
- * и настройки (звук, музыка, раздел взрослого). Прогресс и итоги — в панели уровня
- * (нажатие на значок), игра уровня — в плашке над комнатой: дублей в меню нет.
- */
-@Composable
-private fun HomeMenu(
-    expanded: Boolean,
-    onDismiss: () -> Unit,
-    onOpenHelp: () -> Unit,
-    onOpenBudget: () -> Unit,
-    onOpenWardrobe: () -> Unit,
-    onOpenGlossary: () -> Unit,
-    onOpenSettings: () -> Unit,
-) {
-    DropdownMenu(
-        expanded = expanded,
-        onDismissRequest = onDismiss,
-        modifier = Modifier.background(FinneyCream),
-    ) {
-        // Каждый пункт сначала закрывает меню: иначе после возврата с экрана
-        // оно осталось бы раскрытым поверх главного.
-        HomeMenuItem("План расходов", icon = { FinneyIcon(FinneyIcons.Plan, size = MenuIconSize) }) { onDismiss(); onOpenBudget() }
-        HomeMenuItem("Гардероб", icon = { FinneyIcon(FinneyIcons.Hanger, size = MenuIconSize) }) { onDismiss(); onOpenWardrobe() }
-        // Знакомство в режиме подсказки: в конце «Понятно» и назад, без «Создать питомца».
-        HomeMenuItem("Как играть", icon = { FinneyIcon(FinneyIcons.Help, size = MenuIconSize) }) { onDismiss(); onOpenHelp() }
-        // Справочник раньше жил только в «Прогрессе» и настройках — его не находили
-        // (плейтест 29.09). Здесь он рядом с «Как играть»: оба — «что это значит».
-        HomeMenuItem("Справочник", icon = { GlossaryBook(size = MenuIconSize) }) { onDismiss(); onOpenGlossary() }
-        HomeMenuItem("Настройки", icon = { FinneyIcon(FinneyIcons.Gear, size = MenuIconSize) }) { onDismiss(); onOpenSettings() }
-    }
-}
-
-/** Значок пункта меню. */
-private val MenuIconSize = 28.dp
-
-/**
- * Пункт меню «бургера» со значком слева. Значок — у каждого пункта: плейтест 29.09,
- * «либо всем значки, либо никому».
- */
-@Composable
-private fun HomeMenuItem(text: String, icon: @Composable () -> Unit, onClick: () -> Unit) {
-    val sounds = LocalSounds.current
-    DropdownMenuItem(
-        leadingIcon = { Box(Modifier.size(MenuIconSize), contentAlignment = Alignment.Center) { icon() } },
-        text = { Text(text, style = MaterialTheme.typography.bodyLarge, color = FinneyInk) },
-        onClick = {
-            sounds.play(Sfx.Tap)
-            onClick()
-        },
     )
 }
 

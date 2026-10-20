@@ -80,6 +80,9 @@ enum class FinneyIcons {
 
     /** Шестерёнка — настройки. */
     Gear,
+
+    /** Кисточка — «Украсить»: окрас, одежда и комната. */
+    Brush,
 }
 
 /**
@@ -111,6 +114,7 @@ fun FinneyIcon(
             FinneyIcons.Lock -> drawLock(tint)
             FinneyIcons.Hanger -> drawHanger(tint)
             FinneyIcons.Gear -> drawGear(tint)
+            FinneyIcons.Brush -> drawBrush(tint)
         }
     }
 }
@@ -463,6 +467,22 @@ private fun DrawScope.drawHanger(tint: Color) {
     }
     drawPath(shoulders, tint, style = Stroke(width = line, join = androidx.compose.ui.graphics.StrokeJoin.Round))
     drawLine(tint, Offset(s * 0.50f, s * 0.30f), Offset(s * 0.50f, s * 0.38f), line, StrokeCap.Round)
+}
+
+// Кисточка: ручка наискось, толстый обжим и мазок-капля с хвостиком влево вниз.
+// Как и прочие значки кита — плотные формы и толстые линии, без тонких штрихов.
+private fun DrawScope.drawBrush(tint: Color) {
+    val s = size.minDimension
+    drawLine(tint, Offset(s * 0.86f, s * 0.14f), Offset(s * 0.56f, s * 0.44f), s * 0.11f, StrokeCap.Round)
+    drawLine(tint, Offset(s * 0.58f, s * 0.42f), Offset(s * 0.48f, s * 0.52f), s * 0.20f, StrokeCap.Butt)
+    drawCircle(tint, radius = s * 0.17f, center = Offset(s * 0.35f, s * 0.65f))
+    val flick = Path().apply {
+        moveTo(s * 0.20f, s * 0.58f)
+        lineTo(s * 0.08f, s * 0.92f)
+        lineTo(s * 0.42f, s * 0.80f)
+        close()
+    }
+    drawPath(flick, tint)
 }
 
 // Шестерёнка: восемь зубцов вокруг круга и дырка посередине. Дырка вырезается,
