@@ -6,12 +6,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,19 +29,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import ru.finney.pet.ui.tasks.games.PetInFreeSpace
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ru.finney.pet.domain.model.TaskOutcome
@@ -64,8 +57,6 @@ import ru.finney.pet.ui.tasks.games.GameScene
 import ru.finney.pet.ui.tasks.games.LocalPlayerAccessory
 import ru.finney.pet.ui.tasks.games.PetAtRight
 import ru.finney.pet.ui.tasks.games.rememberPetReactions
-import ru.finney.pet.ui.tasks.games.PetOffers
-import ru.finney.pet.ui.tasks.games.PetSays
 import ru.finney.pet.ui.tasks.games.ResultBody
 import ru.finney.pet.ui.tasks.games.SceneBody
 import ru.finney.pet.ui.tasks.games.SceneStage
@@ -73,11 +64,10 @@ import ru.finney.pet.ui.tasks.games.ScenePanel
 import ru.finney.pet.ui.tasks.games.Tail
 import ru.finney.pet.ui.tasks.games.TaskGame
 import ru.finney.pet.ui.tasks.games.backdropFor
-import ru.finney.pet.ui.theme.FinneyCream
+import ru.finney.pet.ui.tasks.games.introBackdropFor
+import androidx.compose.ui.platform.LocalConfiguration
 import ru.finney.pet.ui.theme.FinneyInk
 import ru.finney.pet.ui.theme.FinneyYellow
-import ru.finney.pet.ui.theme.GapInner
-import ru.finney.pet.ui.theme.StrokeThin
 import ru.finney.pet.ui.theme.StrokeRegular
 import ru.finney.pet.ui.sound.LocalSounds
 import ru.finney.pet.ui.sound.Sfx
@@ -112,7 +102,9 @@ fun TaskScreen(
             LocalPlayerAccessory provides s.worn,
         ) {
             // Фон один на вступление, игру и итог — меняется плавно, а не с каждым экраном.
-            SceneStage(initial = backdropFor(s.task, finished = s.phase == TaskPhase.RESULT)) {
+            SceneStage(
+                initial = if (s.phase == TaskPhase.INTRO) introBackdropFor(s.task) else backdropFor(s.task, finished = s.phase == TaskPhase.RESULT),
+            ) {
                 when (s.phase) {
                     TaskPhase.INTRO -> TaskIntro(s, onStart = viewModel::start, onBack = onBack, onOpenBudget = onOpenBudget)
                     // Крестик и системное «назад» посреди игры закрывают её: до итога ничего не засчитано.
@@ -140,12 +132,15 @@ internal fun TaskPlay(state: TaskUiState.Ready, onInputSeen: () -> Unit,
     if (helpOpen) GameHelpDialog(state.task) { helpOpen = false }
 }
 
-/** Вступление в той же сцене, что игра: питомец рассказывает, что делать. */
+/**
+ * Карточка перед игрой по макету «Карточки мини-игр · вариант A»: питомец слева
+ * говорит роль, ниже окна «Сделай» и «Получишь», внизу «Играть». Плейтест 02.10:
+ * ребёнок не понимал, кто он в игре и зачем играть, — поэтому видно и роль,
+ * и что игра даёт уровню. Тема ребёнку ничего не говорит — она у взрослого.
+ */
 @Composable
 internal fun TaskIntro(state: TaskUiState.Ready, onStart: () -> Unit, onBack: () -> Unit, onOpenBudget: () -> Unit) {
-    GameScene(backdrop = backdropFor(state.task), onClose = onBack, money = state.balance) {
-        // Питомец стоит внизу, на полу сцены, а «Играть» прижата к краю —
-        // раньше всё собиралось наверху, и под кнопкой оставалось полэкрана пустоты.
+    GameScene(backdrop = introBackdropFor(state.task), onClose = onBack, money = state.balance) {
         SceneBody(
             horizontalAlignment = Alignment.CenterHorizontally,
             // Без плана — не «Играть», а путь к плану: уровень начинается с него,
@@ -158,41 +153,23 @@ internal fun TaskIntro(state: TaskUiState.Ready, onStart: () -> Unit, onBack: ()
                 }
             },
         ) {
-            val density = LocalDensity.current
-            var titleHeight by remember { mutableStateOf(0.dp) }
-            var cardHeight by remember { mutableStateOf(0.dp) }
-            OutlinedText(
-                state.task.title,
-                style = MaterialTheme.typography.headlineLarge,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.onSizeChanged { titleHeight = with(density) { it.height.toDp() } },
-            )
-            // Без заголовка на рамке: персиковое «Что делать» стояло вплотную к панели и
-            // спорило с названием игры того же цвета (плейтест 29.09). Что это правила,
-            // говорят номера шагов. Тема ребёнку ничего не говорит — она у взрослого.
-            // Карточка «Ты — … · Сделай … · Получишь …» (плейтест 02.10): ребёнок не понимал,
-            // кто он в игре и зачем играть. Поэтому видно и то, что игра даёт уровню.
-            ScenePanel(title = null, modifier = Modifier.fillMaxWidth().onSizeChanged { cardHeight = with(density) { it.height.toDp() } }) {
-                Text(gameHelp(state.task).role, style = MaterialTheme.typography.titleMedium, color = FinneyInk)
-                CardLabel("Сделай")
-                IntroSteps(state.task.intro)
-                CardLabel("Получишь")
-                Text(rewardLine(state), style = MaterialTheme.typography.titleMedium, color = FinneyInk)
-                Text(progressLine(state), style = MaterialTheme.typography.bodyMedium, color = FinneyInk)
-                Text(
-                    "Монеты внутри игры — учебные.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = FinneyInk,
-                )
+            OutlinedText(state.task.title, style = MaterialTheme.typography.headlineLarge, textAlign = TextAlign.Center)
+            if (state.isLevelGame) {
+                LevelPill(state.level, state.levelProgress, if (state.levelGamePassed) "Игра уровня пройдена" else "Это игра уровня")
             }
-            // Сколько дадут — монеткой в пузыре, а не фразой. Уже пройдено — просто «ещё?».
-            // У короткой карточки питомец до 240 dp, у длинной заходит на её угол.
-            PetInFreeSpace(above = titleHeight + cardHeight + 12.dp, min = 160.dp, max = 240.dp, maxLift = 48.dp) { size, modifier ->
-                if (state.completed) {
-                    PetSays(state.character, "Сыграем ещё?", modifier, petSize = size)
-                } else {
-                    PetOffers(state.character, state.reward.success, modifier, petSize = size)
+            // Карточка по центру свободного места, как в макете; не влезла — прокрутка.
+            Spacer(Modifier.weight(1f))
+            // Питомец — чуть больше трети ширины (136 dp на 360): на узком экране пузырю роли остаётся место.
+            val width = LocalConfiguration.current.screenWidthDp.dp
+            // Питомец стоит прямо на окне «Сделай»: зазор между ними — только подъём заголовка окна.
+            Column {
+                CardHost(state.character, gameHelp(state.task), petSize = (width * 0.38f).coerceIn(112.dp, 156.dp))
+                ScenePanel(title = "Сделай", flag = cardFlag(state.task), raised = true, modifier = Modifier.fillMaxWidth()) {
+                    CardSteps(state.task.intro)
                 }
+            }
+            ScenePanel(title = "Получишь", raised = true, modifier = Modifier.fillMaxWidth()) {
+                CardReward(state, note = cardNote(state))
             }
             if (state.available && state.needsPlan) {
                 ScenePanel(title = null, modifier = Modifier.fillMaxWidth()) {
@@ -216,15 +193,19 @@ internal fun TaskIntro(state: TaskUiState.Ready, onStart: () -> Unit, onBack: ()
                     )
                 }
             }
+            Spacer(Modifier.weight(1f))
         }
     }
 }
 
-/** Подпись части карточки перед игрой: «Сделай», «Получишь». */
-@Composable
-private fun CardLabel(text: String) {
-    Text(text, style = MaterialTheme.typography.labelLarge, color = FinneyInk.copy(alpha = 0.7f),
-        modifier = Modifier.padding(top = 4.dp).semantics { heading() })
+/**
+ * Строка под пунктиром в «Получишь». У игры уровня то, что она игра уровня, уже
+ * сказано плашкой под названием, — здесь только что с ней сделать.
+ */
+internal fun cardNote(state: TaskUiState.Ready): String? = when {
+    !state.isLevelGame -> progressLine(state)
+    state.levelGameRequired && !state.levelGamePassed -> "Пройди её, чтобы закрыть уровень."
+    else -> null
 }
 
 /** Что попадёт в кошелёк. Правила — как в [ru.finney.pet.domain.game.Game.submitTask]. */
@@ -248,46 +229,13 @@ internal fun progressLine(state: TaskUiState.Ready): String = when {
 }
 
 /**
- * Вступление по шагам: каждое предложение — своей строкой и со своим номером.
- * Плейтест 29.09: «Финни копит на самокат. Каждый день…» сплошным абзацем дети
- * 7–11 лет читали через силу, а с новой строки каждая мысль видна отдельно.
- */
-@Composable
-private fun IntroSteps(intro: String) {
-    val steps = introSentences(intro)
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        steps.forEachIndexed { i, sentence ->
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                // Номер — только когда шагов больше одного: одинокая «1» ничего не считает.
-                if (steps.size > 1) StepNumber(i + 1)
-                Text(sentence, style = MaterialTheme.typography.titleMedium, color = FinneyInk, modifier = Modifier.weight(1f))
-            }
-        }
-    }
-}
-
-/**
  * Предложения вступления. Режем после «.», «!» и «?», за которыми идёт пробел и
  * заглавная буква, — «10 монет. Каждый» разрежется, а «т. е.» и «3.5» нет.
+ * Плейтест 29.09: сплошным абзацем дети 7–11 лет читали через силу, а с новой
+ * строки каждая мысль видна отдельно.
  */
 internal fun introSentences(intro: String): List<String> =
     intro.split(Regex("""(?<=[.!?…])\s+(?=[«"A-ZА-ЯЁ0-9])""")).map { it.trim() }.filter { it.isNotEmpty() }
-
-/** Номер шага в кружке: белый с обводкой, как пустая отметка, — не кнопка. */
-@Composable
-private fun StepNumber(n: Int) {
-    Box(
-        modifier = Modifier
-            .size(28.dp)
-            .clip(CircleShape)
-            .background(Color.White)
-            .border(StrokeThin, FinneyInk, CircleShape)
-            .clearAndSetSemantics {},
-        contentAlignment = Alignment.Center,
-    ) {
-        Text("$n", style = MaterialTheme.typography.titleSmall, color = FinneyInk)
-    }
-}
 
 /**
  * Итог в сцене игры: что получилось по пунктам, объяснение при любом исходе и

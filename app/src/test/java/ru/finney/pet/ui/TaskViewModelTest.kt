@@ -16,6 +16,7 @@ import ru.finney.pet.domain.tasks.TaskInputError
 import ru.finney.pet.ui.tasks.TaskPhase
 import ru.finney.pet.ui.tasks.TaskUiState
 import ru.finney.pet.ui.tasks.TaskViewModel
+import ru.finney.pet.ui.tasks.cardNote
 import ru.finney.pet.ui.tasks.progressLine
 import ru.finney.pet.ui.tasks.rewardLine
 
@@ -68,6 +69,7 @@ class TaskViewModelTest : ViewModelTest() {
         assertTrue(viewModel.ready().firstTry)
         assertEquals("+15 монет в кошелёк Финни. Не выйдет — всё равно\u00A0+5.", rewardLine(viewModel.ready()))
         assertEquals("Монеты пригодятся для плана и копилки.", progressLine(viewModel.ready()))
+        assertEquals("не игра уровня — под пунктиром, зачем монеты", progressLine(viewModel.ready()), cardNote(viewModel.ready()))
 
         viewModel.start()
         viewModel.submit(Fixtures.failure)

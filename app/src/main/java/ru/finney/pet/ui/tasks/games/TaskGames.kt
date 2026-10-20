@@ -97,6 +97,19 @@ fun backdropFor(task: TaskDefinition, finished: Boolean = false): Backdrop = whe
     is ChoresTask, is DistributorTask, is GoalSliderTask -> Backdrop.DOTS
 }
 
+/** Фон карточки перед игрой — по макету карточек (вариант A). Игра потом встаёт на свой [backdropFor]. */
+fun introBackdropFor(task: TaskDefinition): Backdrop = when (task) {
+    is SorterTask -> Backdrop.DOTS
+    is BasketTask -> Backdrop.CARD_GREEN
+    is GoalRaceTask -> Backdrop.CARD_LILAC
+    is ReserveTask -> Backdrop.CARD_RAIN
+    is StandTask -> Backdrop.CARD_LEMON
+    is ChangeTask -> Backdrop.CARD_YELLOW
+    is ReceiptTask -> Backdrop.CARD_BLUE
+    is ChoresTask -> Backdrop.CARD_PINK
+    is DistributorTask, is GoalSliderTask -> Backdrop.DOTS
+}
+
 /** Значок задания — берётся из самого контента, отдельной картинки не нужно. */
 fun taskIcon(task: TaskDefinition): ItemArt? = taskIconCandidates(task).firstOrNull()
 

@@ -15,8 +15,17 @@ import ru.finney.pet.ui.components.FinneyButton
 import ru.finney.pet.ui.components.FinneyPanel
 import ru.finney.pet.ui.theme.FinneyInk
 
-/** [role] всегда начинается с «Ты —»: этой строкой открывается карточка перед игрой. */
-data class GameHelp(val role: String, val action: String, val goal: String)
+/**
+ * [role] всегда начинается с «Ты —»: этой строкой открывается карточка перед игрой.
+ * [lead] — начало роли, которое на карточке выделено цветом: кто ты в игре.
+ */
+data class GameHelp(val role: String, val action: String, val goal: String, val lead: String = roleLead(role))
+
+/** Кто ты — до двоеточия или до конца первого предложения: «Ты — сортировщик:», «Ты — кассир.». */
+internal fun roleLead(role: String): String {
+    val end = role.indexOf(':').takeIf { it >= 0 } ?: role.indexOf('.').takeIf { it >= 0 } ?: (role.length - 1)
+    return role.substring(0, end + 1)
+}
 
 fun gameHelp(task: TaskDefinition): GameHelp = when (task) {
     is SorterTask -> GameHelp("Ты — сортировщик: разбираешь покупки Финни.",
@@ -24,7 +33,8 @@ fun gameHelp(task: TaskDefinition): GameHelp = when (task) {
         "Еда и уход — «Нужное». Игрушки и сладости — «Хочется».")
     is BasketTask -> GameHelp("Ты — покупатель в магазине.",
         "Нажимай товары на полках. Собери список и нажми кнопку кассы.",
-        "Возьми нужные покупки и уложись в сумму. Нажми товар ещё раз, чтобы убрать.")
+        "Возьми нужные покупки и уложись в сумму. Нажми товар ещё раз, чтобы убрать.",
+        lead = "Ты — покупатель")
     is GoalRaceTask -> GameHelp("Ты — хранитель копилки: решаешь, что Финни купить по дороге к цели.",
         "В каждый день выбери «Купить» или «Пропустить». Остаток дня пойдёт в копилку.",
         "Собери сумму на цель. Покупки по дороге необязательны: их можно пропускать.")
@@ -33,7 +43,8 @@ fun gameHelp(task: TaskDefinition): GameHelp = when (task) {
         "Запас помогает оплатить непредвиденное. Если его мало, перенеси желаемое: это тоже верное решение.")
     is StandTask -> GameHelp("Ты — продавец лимонада вместе с Финни.",
         "Купи сырьё для гостей. В открытой лавке нажимай «Налить» — по стакану каждому.",
-        "Выручка — всё, что заплатили гости. Заработок — выручка минус закупка.")
+        "Выручка — всё, что заплатили гости. Заработок — выручка минус закупка.",
+        lead = "Ты — продавец лимонада")
     is ChangeTask -> GameHelp(
         when {
             task.rounds.all { it.mode == ChangeMode.GIVE } -> "Ты — кассир. Покупатели приходят к тебе."
