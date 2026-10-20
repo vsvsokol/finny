@@ -41,6 +41,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.StrokeJoin
@@ -70,6 +71,7 @@ import ru.finney.pet.ui.theme.FinneyPeach
 import ru.finney.pet.ui.theme.FinneyYellow
 import ru.finney.pet.ui.theme.StrokeThin
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.sin
@@ -106,6 +108,9 @@ private const val BOX_BOTTOM = 0.665f
 /** Кромка переднего борта — доля высоты ящика. Ниже неё игрушки внутри не видно. */
 private const val RIM = 0.36f
 
+/** Верх выступающей кромки — немного выше переднего борта. */
+private const val LIP_ABOVE_RIM = 0.035f
+
 /**
  * Насколько ниже ящика может быть низ игрушки, чтобы она считалась над ним, — доля
  * высоты холста. Поднятая игрушка висит выше своего места, и над ящиком она уже тогда,
@@ -126,7 +131,7 @@ private const val CATCH_MS = 380
 /** Сколько летит выброшенная игрушка, мс. */
 private const val TOSS_MS = 620
 
-/** Высота дуги, в высотах игрушки: в ящик — подкинуть через борт, из ящика — высоко, как из хлопушки. */
+/** Минимальная дуга, в высотах игрушки; [clearRimArc] добавляет подъём до кромки. */
 private const val ARC_IN = 0.7f
 private const val ARC_OUT = 2.2f
 
@@ -501,8 +506,8 @@ internal fun ToyBox(
 }
 
 /**
- * Игрушка в полёте — в ящик или из него. Ниже кромки ящика её срезает: так видно,
- * что она ныряет за борт и выпрыгивает из-за него.
+ * Игрушка в полёте — в ящик или из него. Передний борт скрывает её только в
+ * пределах ящика. При смене глубины весь повёрнутый рисунок уже выше кромки.
  *
  * Игрушка стоит там, где полёт кончается (из ящика) или начинается (в ящик), а летит
  * сдвигом слоя: ни пересборки, ни перерисовки света по кадрам. Тень — тоже там: у
@@ -512,7 +517,7 @@ internal fun ToyBox(
 internal fun FlyingToy(
     art: Int,
     flight: ToyFlight,
-    rim: Float,
+    box: RelRect,
     canvasW: Dp,
     canvasH: Dp,
     lighting: RoomLighting,
@@ -520,6 +525,11 @@ internal fun FlyingToy(
 ) {
     val flip = if (mirrored) -1f else 1f
     val anchor = if (flight.into) flight.from else flight.to
+    val lip = toyBoxRim(box) - box.height * LIP_ABOVE_RIM
+    val arc = remember(flight, lip, canvasW, canvasH) {
+        val aspect = (canvasW * anchor.width).value / (canvasH * anchor.height).value
+        clearRimArc(flight, anchor, lip, aspect)
+    }
 
     Box(
         Modifier
@@ -527,9 +537,17 @@ internal fun FlyingToy(
             .zIndex(FLIGHT_Z)
             .drawWithContent {
                 val t = flight.progress.value
-                // Над бортом срезать нельзя: в начале полёта в ящик игрушка ещё перед ним.
+                // В начале полёта в ящик игрушка ещё перед бортом, в конце вылета — тоже.
                 val clipped = if (flight.into) t > 0.5f else t < 0.3f
-                if (clipped) clipRect(bottom = size.height * rim) { this@drawWithContent.drawContent() } else drawContent()
+                if (clipped) {
+                    clipRect(
+                        left = size.width * box.left,
+                        top = size.height * lip,
+                        right = size.width * box.right,
+                        bottom = size.height * box.bottom,
+                        clipOp = ClipOp.Difference,
+                    ) { this@drawWithContent.drawContent() }
+                } else drawContent()
             },
     ) {
         LitBody(
@@ -553,9 +571,9 @@ internal fun FlyingToy(
                     // Насколько игрушка ушла от якоря к другому концу полёта.
                     val away = if (flight.into) FastOutSlowInEasing.transform(t) else 1f - t
                     val height = if (flight.into) {
-                        (1f - t) * HELD_LIFT * flight.lift + ARC_IN * 4f * t * (1f - t)
+                        (1f - t) * HELD_LIFT * flight.lift + arc * 4f * t * (1f - t)
                     } else {
-                        ARC_OUT * 4f * t * (1f - t)
+                        arc * 4f * t * (1f - t)
                     }
                     translationX = (other.left - anchor.left) * cw * away
                     translationY = (other.bottom - anchor.bottom) * ch * away - size.height * height
@@ -582,6 +600,30 @@ internal fun FlyingToy(
             )
         }
     }
+}
+
+/**
+ * Минимальная дуга, при которой смена глубины происходит над кромкой, а не
+ * посреди рисунка. Считается один раз: учитывает путь, масштаб, поворот и его
+ * центр. Особенно важно для вылета — вращение вокруг низа опускает верхние углы.
+ */
+private fun clearRimArc(flight: ToyFlight, anchor: RelRect, lip: Float, aspect: Float): Float {
+    val t = if (flight.into) 0.5f else 0.3f
+    val other = if (flight.into) flight.to else flight.from
+    val away = if (flight.into) FastOutSlowInEasing.transform(t) else 1f - t
+    val baseline = anchor.bottom + (other.bottom - anchor.bottom) * away
+    val grow = if (flight.into) (1f + 0.2f * flight.lift) * (1f - t) + 0.85f * t else 0.85f + 0.15f * t
+    val pivot = if (flight.into) 0.5f else 0.92f
+    val degrees = if (flight.into) flight.spin * sin(PI.toFloat() * t)
+        else flight.spin * SpinEasing.transform((t / SPIN_DONE).coerceAtMost(1f))
+    val angle = degrees * PI.toFloat() / 180f
+    // Нижний из четырёх углов после поворота — в высотах исходного рисунка.
+    val bottom = pivot + grow * (
+        abs(sin(angle)) * aspect / 2f + maxOf(-pivot * cos(angle), (1f - pivot) * cos(angle))
+    )
+    val held = if (flight.into) (1f - t) * HELD_LIFT * flight.lift else 0f
+    val clearance = (baseline - lip) / anchor.height + bottom - 1f - held + 0.08f
+    return maxOf(if (flight.into) ARC_IN else ARC_OUT, clearance / (4f * t * (1f - t)))
 }
 
 /** Где выглядывают игрушки — доли ширины ящика, по числу игрушек. */
@@ -669,7 +711,7 @@ private fun DrawScope.drawBoxFront() {
     drawPath(body, FinneyInk, style = stroke)
 
     // Кромка — чуть шире борта.
-    val lipTop = Offset(0f + line / 2f, top - h * 0.035f)
+    val lipTop = Offset(0f + line / 2f, top - h * LIP_ABOVE_RIM)
     val lipSize = Size(w - line, h * 0.08f)
     drawRoundRect(FinneyCream, lipTop, lipSize, CornerRadius(h * 0.03f))
     drawRoundRect(FinneyInk, lipTop, lipSize, CornerRadius(h * 0.03f), style = stroke)

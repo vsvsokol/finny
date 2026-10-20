@@ -1,5 +1,7 @@
 package ru.finney.pet.ui
 
+import android.graphics.Bitmap
+import android.os.SystemClock
 import android.view.View
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.CompositionLocalProvider
@@ -19,6 +21,7 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 import ru.finney.pet.ui.motion.LocalAnimations
 import ru.finney.pet.ui.room.InteriorPart
 import ru.finney.pet.ui.room.Interiors
@@ -39,6 +42,50 @@ class RoomFocusCameraTest {
     @Test fun bedroomFocusKeepsRoomAcrossVisibleArea() = checkFocus(RoomSpot.LIVING)
 
     @Test fun mirroredPlayroomFocusKeepsRoomAcrossVisibleArea() = checkFocus(RoomSpot.PLAY)
+
+    @Test fun mirroredLampReplacementKeepsRoomAcrossVisibleArea() {
+        val interior = mutableStateOf(Interiors.Default)
+        compose.setContent {
+            FinneyTheme {
+                CompositionLocalProvider(LocalAnimations provides true) {
+                    roomView = LocalView.current
+                    RoomScene(
+                        spot = RoomSpot.PLAY,
+                        modifier = Modifier.requiredSize(360.dp, 740.dp).testTag("room"),
+                        interior = interior.value,
+                        focus = interior.value.focusOf(InteriorPart.LAMP),
+                        focusBottom = 300.dp,
+                    ) {}
+                }
+            }
+        }
+        compose.onNodeWithTag("room").assertIsDisplayed()
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        compose.mainClock.advanceTimeByFrame()
+        assertRoomEdges(fullHeight = true, screenshot = "room-focus-lamp-default")
+
+        // У «Сот» левый край торшера другой: зеркало комнаты меняется сразу,
+        // пока камера ещё держит прежний торшер крупно.
+        compose.runOnIdle { interior.value = Interiors.Default.copy(lamp = Interiors.Honey.lamp) }
+        compose.mainClock.advanceTimeByFrame()
+        assertRoomEdges(fullHeight = true, screenshot = "room-focus-lamp-honey-retarget")
+        repeat(12) {
+            compose.mainClock.advanceTimeBy(64)
+            assertRoomEdges(fullHeight = true)
+        }
+        assertRoomEdges(fullHeight = true, screenshot = "room-focus-lamp-honey-settled")
+
+        // Передумали ещё до завершения отъезда к обычному виду.
+        compose.runOnIdle { interior.value = Interiors.Default }
+        compose.mainClock.advanceTimeBy(128)
+        compose.runOnIdle { interior.value = Interiors.Default.copy(lamp = Interiors.Honey.lamp) }
+        repeat(12) {
+            compose.mainClock.advanceTimeBy(64)
+            assertRoomEdges(fullHeight = true)
+        }
+        assertRoomEdges(fullHeight = true, screenshot = "room-focus-lamp-honey-interrupted")
+    }
 
     private fun checkFocus(spot: RoomSpot) {
         val focus = mutableStateOf(Interiors.Default.focusOf(InteriorPart.WALL))
@@ -77,16 +124,24 @@ class RoomFocusCameraTest {
         }
     }
 
-    private fun assertRoomEdges() {
+    private fun assertRoomEdges(fullHeight: Boolean = false, screenshot: String? = null) {
         compose.waitForIdle()
         val bounds = compose.onNodeWithTag("room").fetchSemanticsNode().boundsInRoot
         val origin = IntArray(2)
         compose.runOnIdle { roomView.getLocationOnScreen(origin) }
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         instrumentation.waitForIdleSync()
+        SystemClock.sleep(80)
         val pixels = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
         try {
-            val visibleHeight = bounds.height * 440 / 740
+            if (screenshot != null) {
+                val context = instrumentation.targetContext
+                val directory = File(context.getExternalFilesDir(null), "playtest-clipping").apply { mkdirs() }
+                File(directory, "$screenshot.png").outputStream().use {
+                    pixels.compress(Bitmap.CompressFormat.PNG, 100, it)
+                }
+            }
+            val visibleHeight = if (fullHeight) bounds.height else bounds.height * 440 / 740
             for (edge in listOf(bounds.left + 2, bounds.right - 3)) {
                 val x = origin[0] + edge.toInt()
                 for (step in 1..8) {

@@ -18,6 +18,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -31,6 +32,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -67,6 +69,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -453,31 +456,37 @@ private fun CupStrip(cups: Int, poured: Int) {
  */
 @Composable
 private fun Stall(character: PetCharacter, cupPrice: Int, pet: PetReactions) {
-    Box(Modifier.fillMaxWidth(0.9f).height(340.dp)) {
-        Canvas(Modifier.fillMaxSize()) { stallBack() }
-        PetView(
-            character = character,
-            mood = if (pet.current == PetReaction.FAIL) PetMood.SAD else PetMood.HAPPY,
-            pose = rememberPoseProvider(pet.body),
-            accessories = LocalPlayerAccessory.current,
-            modifier = Modifier.width(230.dp).align(Alignment.BottomCenter).offset(y = (-26).dp),
-        )
-        Canvas(Modifier.fillMaxSize()) { stallFront() }
-        Box(
-            Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 30.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(FinneyCream)
-                .border(StrokeRegular, FinneyInk, RoundedCornerShape(10.dp))
-                .padding(horizontal = 14.dp, vertical = 2.dp),
-        ) { OutlinedText("Стакан: ${coins(cupPrice)}", style = MaterialTheme.typography.titleMedium) }
+    BoxWithConstraints(Modifier.fillMaxWidth(0.9f).height(StallHeight).testTag("stand-stall"), contentAlignment = Alignment.Center) {
+        // Итоговая строка и короткий экран уменьшают место для лавки. Сжимаем всю сцену
+        // вместе: иначе прилавок поднимался отдельно и перекрывал голову питомца.
+        val scale = (maxHeight / StallHeight).coerceAtMost(1f)
+        Box(Modifier.requiredSize(maxWidth, StallHeight).graphicsLayer { scaleX = scale; scaleY = scale }) {
+            Canvas(Modifier.fillMaxSize()) { stallBack() }
+            PetView(
+                character = character,
+                mood = if (pet.current == PetReaction.FAIL) PetMood.SAD else PetMood.HAPPY,
+                pose = rememberPoseProvider(pet.body),
+                accessories = LocalPlayerAccessory.current,
+                modifier = Modifier.width(230.dp).align(Alignment.BottomCenter).offset(y = (-26).dp).testTag("stand-stall-pet"),
+            )
+            Canvas(Modifier.fillMaxSize()) { stallFront() }
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 30.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(FinneyCream)
+                    .border(StrokeRegular, FinneyInk, RoundedCornerShape(10.dp))
+                    .padding(horizontal = 14.dp, vertical = 2.dp),
+            ) { OutlinedText("Стакан: ${coins(cupPrice)}", style = MaterialTheme.typography.titleMedium) }
+        }
     }
 }
 
 private val Wood = Color(0xFFA0715A)
 private val WoodLight = lerp(Wood, Color.White, 0.35f)
 private val WoodDark = lerp(Wood, FinneyInk, 0.25f)
+private val StallHeight = 340.dp
 private val StallRoof = 40.dp
 private val StallCounter = 92.dp
 

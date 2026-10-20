@@ -578,6 +578,13 @@ fun RoomScene(
         // Игровая отражена: часть и питомец там лежат зеркально, и холст на экране кончается
         // по краям отражения, а не своим.
         val mirroredRoom = shown == RoomSpot.PLAY
+        // Смена торшера меняет ось зеркала сразу, даже пока камера ещё отъезжает
+        // от прежнего. Поэтому проверяем покрытие по текущему холсту на каждом кадре.
+        val editBounds = with(density) {
+            val left = shiftX.toPx() + canvasW.toPx() * (if (mirroredRoom) 2f * mirrorAxis - 1f else 0f)
+            Rect(left, shiftY.toPx(), left + canvasW.toPx(), (shiftY + canvasH).toPx())
+        }
+        val editFloor = with(density) { (maxHeight - focusSolid).toPx() }
         val editTarget = with(density) {
             val framed = when {
                 shown != spot -> null
@@ -640,8 +647,12 @@ fun RoomScene(
                     transformOrigin = TransformOrigin(0f, 0f)
                     scaleX = s
                     scaleY = s
-                    translationX = editCamera.second * z
-                    translationY = editCamera.third * z
+                    translationX = (editCamera.second * z).coerceIn(
+                        minOf(size.width - s * editBounds.right, -s * editBounds.left), -s * editBounds.left,
+                    )
+                    translationY = (editCamera.third * z).coerceIn(
+                        minOf(editFloor - s * editBounds.bottom, -s * editBounds.top), -s * editBounds.top,
+                    )
                 },
         ) {
         Box(
@@ -721,7 +732,10 @@ fun RoomScene(
                 val edit = 1f + (editCamera.first - 1f) * editZoom.value
                 val scale = edit * sleep
                 val atCanvas = shiftY.toPx() + canvasH.toPx() * rollerAt(t)
-                val y = editCamera.third * editZoom.value + edit * (camera.y * z + sleep * atCanvas)
+                val editY = (editCamera.third * editZoom.value).coerceIn(
+                    minOf(editFloor - edit * editBounds.bottom, -edit * editBounds.top), -edit * editBounds.top,
+                )
+                val y = editY + edit * (camera.y * z + sleep * atCanvas)
                 roller(y, h = canvasW.toPx() * 0.045f * scale, t = t)
             },
         )
@@ -898,7 +912,7 @@ private fun RoomCanvas(
                             FlyingToy(
                                 art = art,
                                 flight = flight,
-                                rim = toyBoxRim(toyBoxRect),
+                                box = toyBoxRect,
                                 canvasW = canvasW,
                                 canvasH = canvasH,
                                 lighting = lighting,
