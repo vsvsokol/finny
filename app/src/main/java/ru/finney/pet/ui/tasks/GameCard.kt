@@ -21,23 +21,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.PathOperation
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -52,9 +46,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ru.finney.pet.domain.model.BasketTask
@@ -75,6 +67,8 @@ import ru.finney.pet.ui.tasks.games.PillShade
 import ru.finney.pet.ui.tasks.games.ScenePet
 import ru.finney.pet.ui.tasks.games.insetShade
 import ru.finney.pet.ui.tasks.games.plural
+import ru.finney.pet.ui.components.SpeechBubble
+import ru.finney.pet.ui.components.Tail
 import ru.finney.pet.ui.theme.FinneyBlue
 import ru.finney.pet.ui.theme.FinneyGreen
 import ru.finney.pet.ui.theme.FinneyInk
@@ -111,9 +105,6 @@ internal val cardText: TextStyle
 
 /** Выделение «Ты — …» в реплике: тёмный коралловый — светлый персиковый на белом не читается. */
 private val RoleLeadColor = Color(0xFFE8694A)
-
-/** Тень пузыря по низу — светло-сиреневая, чуть светлее, чем у плашек. */
-private val BubbleShade = Color(0xFFF1ECFF)
 
 /** Тень питомца — его же силуэт, сдвинутый вниз, полупрозрачным ink. */
 private val PetShadow = FinneyInk.copy(alpha = 0.15f)
@@ -157,45 +148,11 @@ private fun Modifier.silhouetteShadow(color: Color, dy: Dp): Modifier {
 
 @Composable
 private fun RoleBubble(help: GameHelp, modifier: Modifier = Modifier) {
-    val tail = 16.dp
-    val shape = remember { SideTailBubble(22.dp, tail, 12.5.dp) }
     val text = buildAnnotatedString {
         withStyle(SpanStyle(color = RoleLeadColor)) { append(help.lead) }
         append(help.role.removePrefix(help.lead))
     }
-    Text(
-        text,
-        style = cardText,
-        color = FinneyInk,
-        modifier = modifier
-            .clip(shape)
-            .background(Color.White)
-            .insetShade(shape, BubbleShade, 6.dp)
-            .border(StrokeRegular, FinneyInk, shape)
-            .padding(start = tail + 14.dp, end = 14.dp, top = 10.dp, bottom = 13.dp),
-    )
-}
-
-/**
- * Пузырь с хвостиком слева посередине высоты. Одна фигура — тело и хвостик
- * объединены, поэтому рамка обходит их общим контуром, без шва у основания хвостика.
- */
-private class SideTailBubble(private val radius: Dp, private val tail: Dp, private val halfBase: Dp) : Shape {
-    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
-        val r = with(density) { radius.toPx() }
-        val t = with(density) { tail.toPx() }
-        val h = with(density) { halfBase.toPx() }
-        val mid = size.height / 2
-        val body = Path().apply { addRoundRect(RoundRect(t, 0f, size.width, size.height, CornerRadius(r))) }
-        // Основание хвостика заходит внутрь тела: так объединение не оставляет щели.
-        val tip = Path().apply {
-            moveTo(t + r / 2, mid - h)
-            lineTo(0f, mid)
-            lineTo(t + r / 2, mid + h)
-            close()
-        }
-        return Outline.Generic(Path().apply { op(body, tip, PathOperation.Union) })
-    }
+    SpeechBubble(text, Tail.LEFT, modifier, style = cardText)
 }
 
 /**

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -46,6 +47,8 @@ import ru.finney.pet.ui.components.StableOutlinedText
 import ru.finney.pet.ui.components.CheckBadge
 import ru.finney.pet.ui.components.Coin
 import ru.finney.pet.ui.components.FinneyButton
+import ru.finney.pet.ui.components.SpeechBubble
+import ru.finney.pet.ui.components.Tail
 import ru.finney.pet.ui.components.SpendBar
 import ru.finney.pet.ui.components.FinneyIcon
 import ru.finney.pet.ui.components.FinneyIconButton
@@ -124,7 +127,7 @@ private fun Shelves(
             // под питомца и показывала хвостиком в пустоту.
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 val hint = if (task.shelf.any { it.qty > 1 }) "Где больше за монету?" else "Сначала — по списку!"
-                Bubble(hint, Tail.DOWN_LEFT, maxWidth = 130.dp)
+                SpeechBubble(hint, Tail.DOWN, Modifier.widthIn(max = 130.dp), tailAt = 0.3f, style = MaterialTheme.typography.bodyMedium)
                 ScenePet(character, 180.dp, Modifier.width(180.dp))
             }
         }
