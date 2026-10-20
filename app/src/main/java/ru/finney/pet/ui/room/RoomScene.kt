@@ -35,6 +35,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -263,11 +264,12 @@ private val UfoPauseMs = 20_000L..45_000L
  *   с анимацией: стену прокатывает валик, окно схлопывается и раскрывается, торшер
  *   падает сверху и мигает, включаясь.
  * @param focus что показать крупно, пока выбирают интерьер ([focusOf]); null — обычный вид.
- * @param focusPet показать крупно питомца в спальне. Важнее [focus].
+ * @param focusPet показать крупно питомца. Важнее [focus].
  * @param focusRug показать крупно ковёр игровой. Его место знает только сцена: оно
  *   зависит от ширины экрана (RoomRugs.kt). Важнее [focus].
  * @param focusBottom сколько снизу закрыто панелью выбора: часть [focus] встаёт
  *   посередине того, что над ней осталось.
+ * @param trip дошёл ли питомец до [spot], и «поторопить» его, см. [RoomTrip].
  */
 @Composable
 fun RoomScene(
@@ -292,6 +294,7 @@ fun RoomScene(
     focusPet: Boolean = false,
     focusRug: Boolean = false,
     focusBottom: Dp = 0.dp,
+    trip: RoomTrip = remember { RoomTrip(spot) },
     pet: @Composable BoxScope.() -> Unit = {},
 ) {
     // Где питомец в игровой сейчас: сдвиг от его обычного места, доля ширины холста.
@@ -302,17 +305,6 @@ fun RoomScene(
     // Ночь: свет в комнате выключен. Гаснет, когда за питомцем закрылась дверь,
     // загорается, как только его будят, — до того, как дверь открылась.
     var dark by remember { mutableStateOf(asleep) }
-    // Свет у каждой комнаты свой: источники в них разные. Во время перехода
-    // видны две комнаты сразу, и каждая освещена по-своему.
-    val lights = RoomSpot.entries.associateWith { room ->
-        rememberRoomLighting(
-            lampOn = lampOn && !dark && (room.hasLamp || room.ceilingLight),
-            ufo = flyer::light,
-            window = room.hasWindow,
-            ceiling = room.ceilingLight,
-            interior = interior,
-        )
-    }
     // Летун один на все комнаты: окна во время перехода два, а пролёт один.
     // Звучит, только если окно сейчас видно.
     val sounds = LocalSounds.current
@@ -332,6 +324,19 @@ fun RoomScene(
     }
     // Ковёр шуршит, как ткань.
     val rugs = rememberPartSwap(interior.rug, RUG_SWAP_MS) { sounds.play(Sfx.ToyRustle) }
+    // Свет у каждой комнаты свой: источники в них разные. Части интерьера общие,
+    // и свет от окна и торшера меняется вместе с их сменой, а не раньше.
+    val lights = RoomSpot.entries.associateWith { room ->
+        rememberRoomLighting(
+            lampOn = lampOn && !dark && (room.hasLamp || room.ceilingLight),
+            ufo = flyer::light,
+            walls = walls,
+            windows = windows,
+            lamps = lamps,
+            window = room.hasWindow,
+            ceiling = room.ceilingLight,
+        )
+    }
 
     // Отход ко сну: питомец прыгает в капсулу (walk 0 → 1), камера наезжает,
     // закрывается дверь, гаснет свет. Живёт на всю сцену, а не на зал:
@@ -449,17 +454,26 @@ fun RoomScene(
             RoomSpot.PLAY -> Room.petGround(room).shiftedX(stroll.value).mirrored(mirrorAxis)
             else -> Room.petGround(room)
         }
-        LaunchedEffect(spot) {
-            if (spot == shown && travel.value == 0f) return@LaunchedEffect
-            // Передумали посреди перехода, только что проснулись или анимации выключены —
-            // сразу на месте: ждать, пока он допрыгает, ребёнку незачем.
-            if (spot == shown || !animations || asleep || travel.value != 0f) {
+        // Сколько раз торопили — чтобы отличить «поторопили» от «сменили комнату».
+        var hurried by remember { mutableIntStateOf(trip.hurries) }
+        LaunchedEffect(spot, trip.hurries) {
+            val rushed = trip.hurries != hurried
+            hurried = trip.hurries
+            if (spot == shown && travel.value == 0f) {
+                trip.at = spot
+                return@LaunchedEffect
+            }
+            // Поторопили, передумали посреди перехода, только что проснулись или анимации
+            // выключены — сразу на месте: ждать, пока он допрыгает, ребёнку незачем.
+            if (rushed || spot == shown || !animations || asleep || travel.value != 0f) {
                 shown = spot
                 toysWatch = false
                 stroll.snapTo(0f)
                 travel.snapTo(0f)
+                trip.at = spot
                 return@LaunchedEffect
             }
+            trip.at = null
             val right = spot.ordinal > shown.ordinal
             val from = petOnScreen(shown)
             onHop()
@@ -486,6 +500,7 @@ fun RoomScene(
             onHop()
             delay(HOP_CROUCH_MS)
             travel.animateTo(0f, tween(LEAP_MS, easing = LinearOutSlowInEasing))
+            trip.at = spot
             sounds.play(Sfx.PetLand)
         }
 
@@ -552,22 +567,34 @@ fun RoomScene(
         // Камера выбора интерьера: выбранная часть крупно над панелью выбора.
         // Масштаб не меньше «холст во всю ширину» и сдвиг зажат, как у камеры сна:
         // за краем холста пусто, и показывать это нельзя.
+        // Пока питомец ещё идёт в нужную комнату, кадр держится на старой: иначе камера
+        // уезжала бы к вещи в спальне, а на экране оставалась игровая.
+        // Игровая отражена: часть и питомец там лежат зеркально, и холст на экране кончается
+        // по краям отражения, а не своим.
+        val mirroredRoom = shown == RoomSpot.PLAY
         val edit = with(density) {
-            val rug = rugRect(toyFloor, interior.rug).mirrored(mirrorAxis)
-            val target = (if (focusPet) Room.petGround(RoomSpot.LIVING) else if (focusRug) rug else focus)?.let { rect ->
+            val framed = when {
+                shown != spot -> null
+                focusPet -> petOnScreen(shown)
+                focusRug -> rugRect(toyFloor, interior.rug).mirrored(mirrorAxis)
+                mirroredRoom -> focus?.mirrored(mirrorAxis)
+                else -> focus
+            }
+            val target = framed?.let { rect ->
                 val w = maxWidth.toPx()
                 val h = (maxHeight - focusBottom).toPx().coerceAtLeast(1f)
-                val left = shiftX.toPx()
                 val top = shiftY.toPx()
                 val cw = canvasW.toPx()
                 val ch = canvasH.toPx()
+                val left = shiftX.toPx() + cw * (if (mirroredRoom) maxOf(0f, 2f * mirrorAxis - 1f) else 0f)
+                val right = shiftX.toPx() + cw * (if (mirroredRoom) minOf(1f, 2f * mirrorAxis) else 1f)
                 val pad = FOCUS_PAD.toPx()
                 val rw = cw * rect.width
                 val rh = ch * rect.height
-                val s = minOf((w - 2 * pad) / rw, (h - 2 * pad) / rh, FOCUS_MAX_ZOOM).coerceAtLeast(w / cw)
-                val cx = left + cw * (rect.left + rect.width / 2f)
+                val s = minOf((w - 2 * pad) / rw, (h - 2 * pad) / rh, FOCUS_MAX_ZOOM).coerceAtLeast(w / (right - left))
+                val cx = shiftX.toPx() + cw * (rect.left + rect.width / 2f)
                 val cy = top + ch * (rect.top + rect.height / 2f)
-                val x = (w / 2f - s * cx).coerceIn(minOf(w - s * (left + cw), -s * left), -s * left)
+                val x = (w / 2f - s * cx).coerceIn(minOf(w - s * right, -s * left), -s * left)
                 val y = (h / 2f - s * cy).coerceIn(minOf(h - s * (top + ch), -s * top), -s * top)
                 Triple(s, x, y)
             } ?: Triple(1f, 0f, 0f)
@@ -670,6 +697,25 @@ fun RoomScene(
                 roller(y, h = canvasW.toPx() * 0.045f * scale, t = t)
             },
         )
+    }
+}
+
+/**
+ * Дошёл ли питомец до комнаты, куда его отправили. Снаружи сцены: кнопка комнаты,
+ * нажатая ещё раз, пока он в пути, не открывает выбор (ребёнок жмёт снова, потому что
+ * не хочет ждать), а переносит его сразу, и панель ванной не появляется раньше него.
+ */
+@Stable
+class RoomTrip(start: RoomSpot) {
+    /** Где питомец стоит; null — в прыжке между комнатами. */
+    var at by mutableStateOf<RoomSpot?>(start)
+        internal set
+    internal var hurries by mutableIntStateOf(0)
+        private set
+
+    /** Перенести сразу туда, куда он идёт. */
+    fun hurry() {
+        hurries++
     }
 }
 

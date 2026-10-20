@@ -181,6 +181,7 @@ import ru.finney.pet.ui.room.toInterior
 import ru.finney.pet.ui.room.core
 import ru.finney.pet.domain.model.RoomPart
 import ru.finney.pet.ui.room.PetLook
+import ru.finney.pet.ui.room.RoomTrip
 import ru.finney.pet.ui.room.TAKE_ALL_STEP_MS
 import ru.finney.pet.ui.room.focusOf
 import ru.finney.pet.ui.room.themeOf
@@ -377,7 +378,7 @@ internal fun HomeContent(
     newStickers: Set<NewPlace> = emptySet(),
     onGamesSeen: () -> Unit = {},
     actionLayout: HomeActionLayout = HomeActionLayout.SPLIT,
-    shopContent: @Composable (Int, () -> Unit) -> Unit = { balance, click -> HomeShopButton(balance, click) },
+    shopContent: @Composable (Int, () -> Unit) -> Unit = { balance, click -> HomeShopButton(balance, click, diameter = HomeButtonSize) },
 ) {
     // Комната тяжёлая для 120 Гц: на ровных 60 анимации идут без рывков (SteadyFrameRate).
     SteadyFrameRate()
@@ -494,11 +495,16 @@ internal fun HomeContent(
     // выбирают, интерфейс главной расступается, а камера подлетает к питомцу или вещи.
     var roomEdit by rememberSaveable { mutableStateOf<EditTab?>(null) }
     val editing = roomEdit != null
-    // Панель живёт в спальне, а ковёр лежит в игровой: на вкладке «Ковёр» питомец уходит туда,
-    // с остальных вкладок — обратно. Закрыли панель — остаётся, где был.
+    // Панель живёт там, где видны стена, окно и торшер: в спальне и в игровой. Ковёр лежит
+    // только в игровой — на вкладке «Ковёр» питомец уходит туда. Из кухни и ванной — в спальню,
+    // а из игровой и спальни на других вкладках никуда не уходит. Закрыли панель — остаётся, где был.
     LaunchedEffect(roomEdit) {
         val tab = roomEdit ?: return@LaunchedEffect
-        spot = if (tab.room == InteriorPart.RUG) RoomSpot.PLAY else RoomSpot.LIVING
+        spot = when {
+            tab.room == InteriorPart.RUG -> RoomSpot.PLAY
+            spot.hasWindow && spot.hasLamp -> spot
+            else -> RoomSpot.LIVING
+        }
     }
     val editScope = rememberCoroutineScope()
     // Комната — из сохранения (ядро помнит её после перезапуска). «Вся комната» ставит
@@ -658,7 +664,9 @@ internal fun HomeContent(
 
     // В ванной боковые кнопки (копилка, игры) гаснут: на их месте подсказка, что делать с
     // полочкой. Деньги сверху и кольцо чистоты на кнопке ванны остаются — свои не заводим.
-    val inBath = spot == RoomSpot.BATH && !sleeping
+    // Дошёл ли питомец до комнаты: панель ванной встаёт, когда он уже в ней, а не в прыжке.
+    val trip = remember { RoomTrip(spot) }
+    val inBath = spot == RoomSpot.BATH && trip.at == RoomSpot.BATH && !sleeping
     val sideAlpha by animateFloatAsState(if (playing == null && !inBath) 1f else 0f, label = "side")
 
     // Сколько раз нажали на ванну внизу, уже стоя в ванной: мыть начинают с панели шагов,
@@ -680,9 +688,15 @@ internal fun HomeContent(
     // Кнопка внизу сначала показывает комнату, и только повторное нажатие
     // открывает выбор: по макету её дело — «появляется стол», «появляется ванна».
     // Ребёнок сперва видит, куда попал, и лишь потом тратит деньги.
+    // Нажали ещё раз, пока он в пути, — не открываем выбор, а переносим его сразу:
+    // ребёнок жмёт снова, потому что ждать не хочет.
     fun goTo(next: RoomSpot, action: () -> Unit) {
         if (sleeping) return
-        if (spot == next) action() else spot = next
+        when {
+            spot != next -> spot = next
+            trip.at != next -> trip.hurry()
+            else -> action()
+        }
     }
 
     // Спят только в спальне. Вернулись в приложение, а комната запомнилась другая, —
@@ -832,6 +846,7 @@ internal fun HomeContent(
 
         RoomScene(
             spot = spot,
+            trip = trip,
             modifier = Modifier.fillMaxSize(),
             onTapItem = {
                 when (spot) {
@@ -979,6 +994,7 @@ internal fun HomeContent(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .offset(y = 6.dp)
+                            .hintCover(hintTargets)
                             .clip(RoundedCornerShape(percent = 50))
                             .background(FinneySand)
                             .border(StrokeThin, FinneyInk, RoundedCornerShape(percent = 50))
@@ -1090,11 +1106,7 @@ internal fun HomeContent(
                 description = "Сон",
                 // Как у остальных: первое нажатие — спальня, второе — уложить спать.
                 onClick = {
-                    when {
-                        sleeping -> onWake()
-                        spot == RoomSpot.LIVING -> onSleep()
-                        else -> spot = RoomSpot.LIVING
-                    }
+                    if (sleeping) onWake() else goTo(RoomSpot.LIVING, onSleep)
                 },
                 value = energyNow,
                 critical = energyNow < state.criticalThreshold,
@@ -1118,7 +1130,7 @@ internal fun HomeContent(
                     if (speechNote == null) when (state.emotion) {
                         Emotion.HUNGRY -> goTo(RoomSpot.KITCHEN) { openCare(CareTarget.FOOD) }
                         Emotion.DIRTY -> goTo(RoomSpot.BATH) { openCare(CareTarget.BATH) }
-                        Emotion.TIRED -> if (spot == RoomSpot.LIVING) onSleep() else spot = RoomSpot.LIVING
+                        Emotion.TIRED -> goTo(RoomSpot.LIVING, onSleep)
                         Emotion.SAD -> goTo(RoomSpot.PLAY, ::play)
                         else -> Unit
                     }
@@ -1574,9 +1586,9 @@ internal fun HomeContent(
             burger = burgerBounds,
             onDismiss = { menuOpen = false },
             onOpenBudget = onOpenBudget,
-            // «Украсить» — панель «Финни» с первой вкладки. Панель живёт в спальне: там видны
-            // все три части интерьера, — из других комнат сперва туда. Во сне — экраном.
-            onDecorate = if (!sleeping) ({ spot = RoomSpot.LIVING; roomEdit = EditTab.COLOUR }) else onOpenWardrobe,
+            // «Украсить» — панель «Финни» с первой вкладки; в какую комнату, решает roomEdit выше.
+            // Во сне — экраном.
+            onDecorate = if (!sleeping) ({ roomEdit = EditTab.COLOUR }) else onOpenWardrobe,
             onOpenHelp = onOpenHelp,
             onOpenGlossary = onOpenGlossary,
             onOpenSettings = onOpenSettings,
@@ -2352,12 +2364,14 @@ private fun LevelIcon(@DrawableRes id: Int) {
 }
 
 /**
- * Уровень в полтора раза крупнее кнопок по краям верхнего ряда — вместе с кольцом
- * прогресса. Кольцо рисуется снаружи круга и добавляет 26 % диаметра (дорожка и обводка
- * с двух сторон), поэтому круг 66 dp даёт значок 84 dp = 1,5 × 56. Вдвое крупнее
- * (112 dp) уровень перетягивал на себя весь ряд.
+ * Уровень крупнее остальных кнопок главного — вместе с кольцом прогресса.
+ * Кольцо рисуется снаружи круга и добавляет 27 % диаметра (дорожка и обводка
+ * с двух сторон, 84 dp снаружи у круга 66 dp), поэтому круг считаем от размера
+ * значка целиком. Вдвое крупнее уровень перетягивал на себя весь ряд.
  */
-private val LevelBadgeSize = 66.dp
+// 1,25 сравнивали на эмуляторе 20.10: рядом с кнопками 68 dp уровень почти не выделялся.
+private const val LevelScale = 1.5f
+private val LevelBadgeSize = HomeButtonSize * LevelScale * (66f / 84f)
 
 /**
  * Плашка-кнопка с фактом: копилка, активное задание.

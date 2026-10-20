@@ -28,23 +28,27 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.layout
@@ -102,6 +106,7 @@ class HintSpot(val rect: Rect, val corner: Dp?)
 class HintTargets {
     internal val spots = mutableStateMapOf<NextStep, HintSpot>()
     internal var escape by mutableStateOf<Rect?>(null)
+    internal val covers = mutableStateMapOf<Any, HintSpot>()
 }
 
 /**
@@ -115,6 +120,20 @@ fun Modifier.hintTarget(targets: HintTargets, vararg steps: NextStep, corner: Dp
         val spot = HintSpot(coordinates.boundsInRoot(), corner)
         steps.forEach { targets.spots[it] = spot }
     }
+
+/**
+ * Подпись или число у цели: кольцо и волна проходят под ним, а не поверх.
+ * Плейтест 20.10: жёлтое кольцо уровня перечёркивало «Уровень · демо», и подпись
+ * переставала читаться ровно тогда, когда на неё смотрят. [corner] null — «стадион».
+ */
+fun Modifier.hintCover(targets: HintTargets, corner: Dp? = null): Modifier = composed {
+    val key = remember { Any() }
+    DisposableEffect(targets) { onDispose { targets.covers.remove(key) } }
+    onGloballyPositioned {
+        val rect = it.boundsInRoot()
+        if (targets.covers[key]?.rect != rect) targets.covers[key] = HintSpot(rect, corner)
+    }
+}
 
 /** Одна строка к подсказке для первого уровня: до шести слов, чтобы прочитать на бегу. */
 fun NextStep.bubble(): String = when (this) {
@@ -185,6 +204,7 @@ fun NextStepOverlay(
     val target = spot?.rect?.translate(-origin)
     val corner = spot?.corner
     val badge = targets.spots[NextStep.FINISH]?.rect?.translate(-origin)
+    val covers = targets.covers.values
 
     val transition = rememberInfiniteTransition(label = "hint")
     val cycle = transition.animateFloat(
@@ -206,10 +226,15 @@ fun NextStepOverlay(
         }
         Canvas(Modifier.fillMaxSize().graphicsLayer { alpha = visibility() }) {
             if (target == null) return@Canvas
-            if (spotlight) drawSpotlight(target, corner)
+            // Подпись самой цели не темнеет: «Уровень · демо» читается вместе с кругом.
+            if (spotlight) underCovers(covers.filter { it.rect.translate(-origin).overlaps(target.inflate(RingGap.toPx() + 4.dp.toPx())) }, origin) {
+                drawSpotlight(target, corner)
+            }
             val tap = if (animate) TapPhase.at(cycle.value) else TapPhase.Still
-            if (step == NextStep.FINISH) drawGlow(target, if (animate) 0.75f + 0.25f * (1f - tap.distance) else 1f)
-            drawHintRing(target, corner, if (spotlight) 0f else tap.wave)
+            underCovers(covers, origin) {
+                if (step == NextStep.FINISH) drawGlow(target, if (animate) 0.75f + 0.25f * (1f - tap.distance) else 1f)
+                drawHintRing(target, corner, if (spotlight) 0f else tap.wave)
+            }
             if (hand && !spotlight) drawHand(target, tap)
         }
 
@@ -296,6 +321,14 @@ private fun DrawScope.around(target: Rect, corner: Dp?, grow: Float): RoundRect 
     val radius = corner?.let { (it.toPx() + grow).coerceAtMost(min(r.width, r.height) / 2f) }
         ?: (min(r.width, r.height) / 2f)
     return RoundRect(r, CornerRadius(radius))
+}
+
+/** Рисует [draw] везде, кроме подписей [covers]: так кольцо оказывается за ними. */
+private fun DrawScope.underCovers(covers: Collection<HintSpot>, origin: Offset, draw: DrawScope.() -> Unit) {
+    if (covers.isEmpty()) return draw()
+    val holes = Path()
+    covers.forEach { holes.addRoundRect(around(it.rect.translate(-origin), it.corner, 0f)) }
+    clipPath(holes, ClipOp.Difference) { draw() }
 }
 
 /** Всё темнеет, кроме цели: вырез по форме кольца. */

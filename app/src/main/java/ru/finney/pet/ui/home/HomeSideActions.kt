@@ -48,13 +48,14 @@ internal fun BoxScope.HomeSideActions(
                 warning = goal == null && !state.reserveMode,
                 ready = ready, enabled = enabled,
                 ringModifier = Modifier.hintTarget(hintTargets, NextStep.SAVE))
-            HomeMoneyBadge(state.totalSavings, Modifier.padding(top = 3.dp)
+            HomeMoneyBadge(state.totalSavings, Modifier.padding(top = 3.dp).hintCover(hintTargets)
                 .testTag("home-savings-money").semantics { contentDescription = "Накоплено ${state.totalSavings} монет" })
-            if (goal == null && !state.reserveMode) ActionCaption("Выбрать цель")
+            if (goal == null && !state.reserveMode) ActionCaption("Выбрать цель", hintTargets)
             // Накопили — забрать не уходя в копилку: вещь сразу на питомце, это и есть отклик.
             if (ready) FinneyButton(
                 text = "Забрать", onClick = onClaimGoal, enabled = enabled, fillWidth = false, compact = true,
-                textStyle = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 4.dp),
+                textStyle = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(top = 4.dp).hintCover(hintTargets),
             )
         }
     }
@@ -70,7 +71,7 @@ internal fun BoxScope.HomeSideActions(
                         if (passed == state.levelGames.size) ". Все игры пройдены" else "",
                     progress = passed.toFloat() / state.levelGames.size, ready = passed == state.levelGames.size,
                     enabled = enabled, ringModifier = Modifier.hintTarget(hintTargets, NextStep.LEVEL_GAME))
-                ActionCaption(state.levelGame)
+                ActionCaption(state.levelGame, hintTargets)
             }
         }
     }
@@ -92,9 +93,9 @@ internal fun BoxScope.HomeSideActions(
 }
 
 @Composable
-private fun ActionCaption(text: String) {
+private fun ActionCaption(text: String, hintTargets: HintTargets) {
     Text(text, style = MaterialTheme.typography.labelMedium, color = FinneyInk,
         textAlign = TextAlign.Center, maxLines = 3,
-        modifier = Modifier.padding(top = 3.dp).background(FinneyCream, RoundedCornerShape(8.dp))
+        modifier = Modifier.padding(top = 3.dp).hintCover(hintTargets, corner = 8.dp).background(FinneyCream, RoundedCornerShape(8.dp))
             .padding(horizontal = 5.dp, vertical = 2.dp))
 }
