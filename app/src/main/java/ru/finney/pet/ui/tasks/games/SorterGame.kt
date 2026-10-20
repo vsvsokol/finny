@@ -150,7 +150,7 @@ internal fun SorterGame(
         finishIfLast()
     }
 
-    GameScene(backdrop = Backdrop.DOTS, onClose = onClose, money = money) {
+    GameScene(backdrop = Backdrop.ROOM_SORTER, onClose = onClose, money = money) {
         Column(modifier = Modifier.fillMaxSize().padding(top = HudHeight)) {
             Progress(task.items, index, answers)
             Text(

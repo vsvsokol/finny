@@ -89,7 +89,7 @@ internal fun ChoresGame(task: ChoresTask, character: PetCharacter, onClose: () -
     }
 
     val pet = rememberPetReactions()
-    GameScene(backdrop = Backdrop.DOTS, onClose = onClose) {
+    GameScene(backdrop = Backdrop.ROOM_CHORES, onClose = onClose) {
         SceneBody(
             bottom = {
                 FinneyButton(text = "Готово", onClick = { onSubmit(TaskInput.Schedule(week)) })

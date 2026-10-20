@@ -1,10 +1,12 @@
 package ru.finney.pet.ui.tasks.games
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -67,7 +69,6 @@ import ru.finney.pet.ui.theme.FinneyYellow
 // перебор — тот же отказ, что в магазине игры: «не хватает N». Что убрать,
 // ребёнок решает сам, прямо на кассе.
 
-private val Wood = Color(0xFFA0715A)
 
 @Composable
 internal fun ShoppingGame(
@@ -136,7 +137,8 @@ private fun Shelves(
         // делят полку поровну. С шириной числом они жались к середине, а под
         // ними оставалась пустая полоса пола.
         Spacer(Modifier.weight(1f))
-        task.shelf.chunked(3).forEach { row ->
+        val rows = task.shelf.chunked(3)
+        rows.forEachIndexed { i, row ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -145,7 +147,7 @@ private fun Shelves(
                 row.forEach { item -> Goods(item, inCart = item.id in cart, Modifier.weight(1f)) { onToggle(item.id) } }
                 repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
             }
-            Shelf()
+            Shelf(last = i == rows.lastIndex)
         }
     }
 }
@@ -240,18 +242,26 @@ internal fun PriceTag(text: String) {
     }
 }
 
-/** Полка — деревянная доска с обводкой во всю ширину. */
+/**
+ * Полка магазина по макету: доска со светлым краем и два кронштейна под ней.
+ * По ширине сцены, как в макете, а не за край: у полки видны торцы. Кронштейны
+ * свисают ниже доски и места не занимают — их закрывает следующий ряд товаров.
+ * Под нижней [last] полкой — место под кронштейны и зазор до плинтуса, как в макете:
+ * без него полка ложилась на плинтус, а кронштейны прятались под тележку.
+ */
 @Composable
-private fun Shelf() {
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .bleed()
-            .height(14.dp)
-            .background(Wood)
-            .border(3.dp, FinneyInk),
-    )
+private fun Shelf(last: Boolean) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val unit = maxWidth / SHELF_W
+        Column {
+            Canvas(Modifier.fillMaxWidth().height(unit * SHELF_BOARD_H)) { shopShelf(size.width) }
+            if (last) Spacer(Modifier.height(unit * SHELF_BELOW_LAST))
+        }
+    }
 }
+
+/** От доски нижней полки до низа сцены, в единицах макета: кронштейны 46 и зазор до плинтуса. */
+private const val SHELF_BELOW_LAST = 82f
 
 /** Тележка: сколько набрано, сколько останется, и кнопка на кассу. */
 @Composable
