@@ -296,4 +296,26 @@ class MigrationTest {
             }
         }
     }
+
+    @Test
+    fun migrate14To15PutsRugFromWallTheme() {
+        helper.createDatabase(dbName, 14).use { db ->
+            db.execSQL(
+                "INSERT INTO profiles (id, petName, petCharacter, bodyColor, eyes, activeGoalId, isDemo, createdAt, roomWall, roomLamp) " +
+                    "VALUES (1, 'Финни', 'PUSHISTIK', 'B', 'ROUND', NULL, 0, 1, 'sea', 'honey'), " +
+                    "(2, 'Рогатик', 'ROGATIK', 'A', 'ROUND', NULL, 0, 2, NULL, NULL)",
+            )
+        }
+
+        helper.runMigrationsAndValidate(dbName, 15, true, FinneyDatabase.MIGRATION_14_15).use { db ->
+            db.query("SELECT roomWall, roomLamp, roomRug FROM profiles ORDER BY id").use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("стена на месте", "sea", c.getString(0))
+                assertEquals("торшер на месте", "honey", c.getString(1))
+                assertEquals("ковёр — из темы стены", "sea", c.getString(2))
+                assertTrue(c.moveToNext())
+                assertTrue("базовая комната — базовый ковёр", c.isNull(2))
+            }
+        }
+    }
 }

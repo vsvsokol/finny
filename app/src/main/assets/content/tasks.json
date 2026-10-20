@@ -432,22 +432,21 @@
     "title": "Проверь чек",
     "series": "receipt",
     "unlockLevel": 4,
-    "intro": "Финни купил продукты. Сверь чек с пакетом: ошибку отметь нажатием.",
-    "cart": [
-      { "id": "juice", "label": "Сок", "price": 12, "art": "item_food_juice" },
-      { "id": "bread", "label": "Хлеб", "price": 6, "art": "item_food_bread" },
-      { "id": "milk", "label": "Молоко", "price": 9, "art": "item_food_milk" }
-    ],
-    "lines": [
-      { "id": "l1", "item": "juice", "price": 12 },
-      { "id": "l2", "item": "juice", "price": 12 },
-      { "id": "l3", "item": "bread", "price": 6 },
-      { "id": "l4", "item": "milk", "price": 9 }
-    ],
-    "paid": 50,
-    "change": 11,
-    "explainOk": "Ты нашёл ошибку — кассир вернул 12! Проверять чек — это нормально.",
-    "explainFail": "Сок пробили два раза, а в пакете он один. Сосчитай штуки в пакете и строки в чеке."
+    "intro": "Финни купил продукты. Сверь чек с пакетом и сдачу: ошибку отметь нажатием.",
+    "cart": {
+      "pick": 3,
+      "from": [
+        { "id": "apple", "label": "Яблоко", "price": 10, "art": "item_food_apple" },
+        { "id": "juice", "label": "Сок", "price": 12, "art": "item_food_juice" },
+        { "id": "bread", "label": "Хлеб", "price": 6, "art": "item_food_bread" },
+        { "id": "milk", "label": "Молоко", "price": 9, "art": "item_food_milk" },
+        { "id": "water", "label": "Вода", "price": 4, "art": "item_food_water" },
+        { "id": "candy", "label": "Леденец", "price": 5, "art": "item_treat_candy" }
+      ]
+    },
+    "mistakes": 1,
+    "explainOk": "Ты нашёл все ошибки! Проверять чек и сдачу — это нормально.",
+    "explainFail": "Сверяй каждую строку с ценником в пакете и пересчитывай сдачу."
   },
   {
     "id": "game_receipt_2",
@@ -456,24 +455,23 @@
     "title": "Проверь чек",
     "series": "receipt",
     "unlockLevel": 12,
-    "intro": "Сверь каждую строку чека с ценником в пакете. Ошибок может быть больше одной.",
-    "cart": [
-      { "id": "milk", "label": "Молоко", "price": 9, "art": "item_food_milk" },
-      { "id": "bread", "label": "Хлеб", "price": 6, "art": "item_food_bread" },
-      { "id": "candy", "label": "Леденец", "price": 5, "art": "item_treat_candy" },
-      { "id": "water", "label": "Вода", "price": 4, "art": "item_food_water" }
-    ],
-    "lines": [
-      { "id": "l1", "item": "milk", "price": 9 },
-      { "id": "l2", "item": "bread", "price": 8 },
-      { "id": "l3", "item": "candy", "price": 5 },
-      { "id": "l4", "item": "candy", "price": 5 },
-      { "id": "l5", "item": "water", "price": 4 }
-    ],
-    "paid": 40,
-    "change": 9,
-    "explainOk": "Ты нашёл обе ошибки и вернул 7! Сверяй каждую строку с ценником.",
-    "explainFail": "Хлеб пробили дороже, а леденец — дважды. Сравни цену в каждой строке с ценником."
+    "intro": "Сверь каждую строку чека с ценником в пакете и проверь сдачу. Ошибок может быть больше одной.",
+    "cart": {
+      "pick": 4,
+      "from": [
+        { "id": "apple", "label": "Яблоко", "price": 10, "qty": { "oneOf": [1, 2] }, "art": "item_food_apple" },
+        { "id": "juice", "label": "Сок", "price": 12, "art": "item_food_juice" },
+        { "id": "bread", "label": "Хлеб", "price": 6, "art": "item_food_bread" },
+        { "id": "milk", "label": "Молоко", "price": 9, "art": "item_food_milk" },
+        { "id": "water", "label": "Вода", "price": 4, "art": "item_food_water" },
+        { "id": "egg", "label": "Яйцо", "price": 5, "qty": { "oneOf": [1, 2] }, "art": "item_food_egg" },
+        { "id": "candy", "label": "Леденец", "price": 5, "art": "item_treat_candy" },
+        { "id": "icecream", "label": "Мороженое", "price": 7, "art": "item_treat_icecream" }
+      ]
+    },
+    "mistakes": 2,
+    "explainOk": "Ты нашёл все ошибки! Проверять чек и сдачу — это нормально.",
+    "explainFail": "Сверяй каждую строку с ценником в пакете и пересчитывай сдачу."
   },
   {
     "id": "game_receipt_3",
@@ -482,26 +480,24 @@
     "title": "Проверь чек",
     "series": "receipt",
     "unlockLevel": 15,
-    "intro": "Финни дал кассиру 50. Проверь чек и сдачу.",
-    "cart": [
-      { "id": "apple", "label": "Яблоко", "price": 3, "qty": 2, "art": "item_food_apple" },
-      { "id": "juice", "label": "Сок", "price": 12, "art": "item_food_juice" },
-      { "id": "bread", "label": "Хлеб", "price": 6, "art": "item_food_bread" },
-      { "id": "icecream", "label": "Мороженое", "price": 7, "art": "item_treat_icecream" },
-      { "id": "milk", "label": "Молоко", "price": 9, "art": "item_food_milk" }
-    ],
-    "lines": [
-      { "id": "l1", "item": "apple", "price": 3 },
-      { "id": "l2", "item": "apple", "price": 3 },
-      { "id": "l3", "item": "juice", "price": 12 },
-      { "id": "l4", "item": "bread", "price": 6 },
-      { "id": "l5", "item": "icecream", "price": 7 },
-      { "id": "l6", "item": "milk", "price": 9 }
-    ],
-    "paid": 50,
-    "change": 5,
-    "explainOk": "Ты заметил: сдачи дали 5 вместо 10! Сдача — это сколько дал минус итог.",
-    "explainFail": "Сдачи нужно 10, а дали только 5. Вычти итог чека из того, что дал."
+    "intro": "Большая покупка. Проверь каждую строку и сдачу — сколько ошибок, не скажу.",
+    "cart": {
+      "pick": 5,
+      "from": [
+        { "id": "apple", "label": "Яблоко", "price": 10, "qty": { "oneOf": [1, 2] }, "art": "item_food_apple" },
+        { "id": "juice", "label": "Сок", "price": 12, "art": "item_food_juice" },
+        { "id": "bread", "label": "Хлеб", "price": 6, "art": "item_food_bread" },
+        { "id": "milk", "label": "Молоко", "price": 9, "art": "item_food_milk" },
+        { "id": "water", "label": "Вода", "price": 4, "qty": { "oneOf": [1, 2] }, "art": "item_food_water" },
+        { "id": "egg", "label": "Яйцо", "price": 5, "qty": { "oneOf": [1, 2] }, "art": "item_food_egg" },
+        { "id": "icecream", "label": "Мороженое", "price": 7, "art": "item_treat_icecream" },
+        { "id": "chocolate", "label": "Шоколадка", "price": 8, "art": "item_treat_chocolate" },
+        { "id": "donut", "label": "Пончик", "price": 10, "art": "item_treat_donut" }
+      ]
+    },
+    "mistakes": { "min": 1, "max": 3 },
+    "explainOk": "Ты нашёл все ошибки! Проверять чек и сдачу — это нормально.",
+    "explainFail": "Сверяй каждую строку с ценником в пакете и пересчитывай сдачу."
   },
   {
     "id": "game_chores",

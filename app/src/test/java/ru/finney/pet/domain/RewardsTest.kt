@@ -75,9 +75,19 @@ class RewardsTest {
         assertEquals(Rejection.UnknownItem("moon"), game.setRoom(start, "moon").reason())
 
         val s = game.setRoom(collect("room_sea"), RoomThemes.BASE, RoomPart.LAMP).state()
-        assertEquals(RoomChoice(wall = "sea", window = "sea", lamp = RoomThemes.BASE), s.room)
+        assertEquals(RoomChoice(wall = "sea", window = "sea", lamp = RoomThemes.BASE, rug = "sea"), s.room)
         assertEquals("тема целиком", RoomChoice.whole(RoomThemes.BASE), game.setRoom(s, RoomThemes.BASE).state().room)
         assertEquals("купленное не отбирается", RoomChoice.whole("sea"), game.setRoom(s, "sea").state().room)
+    }
+
+    @Test
+    fun `ковёр — часть темы, приходит с ней и меняется отдельно`() {
+        val s = collect("room_sea")
+        assertEquals("тему получили — ковёр из неё", "sea", s.room.rug)
+
+        val base = game.setRoom(s, RoomThemes.BASE, RoomPart.RUG).state()
+        assertEquals(RoomChoice(wall = "sea", window = "sea", lamp = "sea", rug = RoomThemes.BASE), base.room)
+        assertEquals(Rejection.NotOwned("town"), game.setRoom(s, "town", RoomPart.RUG).reason())
     }
 
     @Test

@@ -121,17 +121,16 @@ internal fun ReserveGame(
                 var planHeight by remember { mutableStateOf(0.dp) }
                 WeekGoals(joys = joys, reserve = maxOf(0, reserve), Modifier.onSizeChanged { goalsHeight = with(density) { it.height.toDp() } })
                 ScenePanel(title = "Моя неделя", modifier = Modifier.fillMaxWidth().onSizeChanged { planHeight = with(density) { it.height.toDp() } }) {
-                    // По три конверта в ряд на всю ширину панели. С шириной числом они
-                    // оставляли справа пустую полосу, а на широком экране — ещё шире.
-                    task.spendings.chunked(3).forEach { row ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.height(IntrinsicSize.Max)) {
-                            row.forEach { s ->
-                                Envelope(s, checked = s.id in planned, Modifier.weight(1f).fillMaxHeight()) {
-                                    planned = if (it) planned + s.id else planned - s.id
-                                }
-                            }
-                            repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
-                        }
+                    // Нужное и «хочется» — двумя группами с подписью. Вперемешку нужное с замком
+                    // выглядело закрытым, и было не понять, от чего это зависит (20.10).
+                    val (needs, wants) = task.spendings.partition { it.category == Category.NEEDS }
+                    if (needs.isNotEmpty()) {
+                        GroupCaption("Нужное — покупаем всегда")
+                        EnvelopeRows(needs, planned) { id, on -> planned = if (on) planned + id else planned - id }
+                    }
+                    if (wants.isNotEmpty()) {
+                        GroupCaption("Хочется — выбери сам")
+                        EnvelopeRows(wants, planned) { id, on -> planned = if (on) planned + id else planned - id }
                     }
                     ReserveJar(maxOf(0, reserve))
                     val spent = task.amount - reserve
@@ -476,14 +475,34 @@ private fun JoyCounter(joys: Int) {
     }
 }
 
+/** Подпись над группой конвертов: почему нужное отмечено само, а «хочется» — выбирают. */
+@Composable
+private fun GroupCaption(text: String) {
+    Text(text, style = MaterialTheme.typography.titleMedium, color = FinneyInk)
+}
+
+/** Конверты по три в ряд на всю ширину панели: с шириной числом справа оставалась пустая полоса. */
+@Composable
+private fun EnvelopeRows(spendings: List<Spending>, planned: Set<String>, onChange: (String, Boolean) -> Unit) {
+    spendings.chunked(3).forEach { row ->
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.height(IntrinsicSize.Max)) {
+            row.forEach { s ->
+                Envelope(s, checked = s.id in planned, Modifier.weight(1f).fillMaxHeight()) { onChange(s.id, it) }
+            }
+            repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+        }
+    }
+}
+
 /**
  * Конверт траты: день недели не важен, важно — что это и сколько.
  *
  * Плейтест: невыбранные конверты (бледная рамка) выглядели закрытыми, «откроются
  * позже», а выбранные — вариантами на выбор. Теперь как у обычного выбора:
  * выбранное — жёлтое, в толстой рамке и с «✓»; невыбранное — белое, в обычной
- * рамке и с пустым кружком, который хочется отметить; нужное — выбрано навсегда,
- * вместо «✓» замок. Слова «купить / в запас» — для TalkBack.
+ * рамке и с пустым кружком, который хочется отметить. Нужное выбрано всегда: кремовое
+ * с «✓» и не нажимается — замок на нём читали как «закрыто, откроется позже» (20.10).
+ * Слова «купить / в запас» — для TalkBack.
  */
 @Composable
 private fun Envelope(spending: Spending, checked: Boolean, modifier: Modifier, onChange: (Boolean) -> Unit) {
@@ -491,10 +510,10 @@ private fun Envelope(spending: Spending, checked: Boolean, modifier: Modifier, o
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(if (checked) FinneyYellow else Color.White)
-            .border(if (checked) StrokeBold else StrokeRegular, FinneyInk, RoundedCornerShape(12.dp))
+            .background(if (locked) FinneyCream else if (checked) FinneyYellow else Color.White)
+            .border(if (checked && !locked) StrokeBold else StrokeRegular, FinneyInk, RoundedCornerShape(12.dp))
             .toggleable(value = checked, enabled = !locked, role = Role.Checkbox, onValueChange = onChange)
-            .semantics { stateDescription = if (locked) "нужное, уже в плане" else if (checked) "купить" else "в запас" }
+            .semantics { stateDescription = if (locked) "нужное, покупаем всегда" else if (checked) "купить" else "в запас" }
             .padding(6.dp),
     ) {
         Column(
@@ -508,10 +527,6 @@ private fun Envelope(spending: Spending, checked: Boolean, modifier: Modifier, o
         }
         Box(Modifier.align(Alignment.TopEnd)) {
             when {
-                locked -> Box(
-                    Modifier.size(24.dp).clip(CircleShape).background(FinneyCream).border(2.dp, FinneyInk, CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) { FinneyIcon(FinneyIcons.Lock, size = 16.dp) }
                 checked -> CheckBadge(size = 24.dp)
                 else -> Box(Modifier.size(24.dp).clip(CircleShape).background(Color.White).border(2.dp, FinneyInk, CircleShape))
             }

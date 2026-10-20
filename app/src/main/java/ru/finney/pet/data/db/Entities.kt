@@ -36,6 +36,8 @@ data class ProfileEntity(
     val roomWall: String? = null,
     val roomWindow: String? = null,
     val roomLamp: String? = null,
+    /** Ковёр в игровой — id темы; NULL — базовая. С версии 15, см. [FinneyDatabase.MIGRATION_14_15]. */
+    val roomRug: String? = null,
     /** Платный облик поверх цвета профиля; NULL — цвет профиля. С версии 14. */
     val wornLook: String? = null,
 )

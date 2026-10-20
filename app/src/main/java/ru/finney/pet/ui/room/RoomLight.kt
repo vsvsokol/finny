@@ -16,6 +16,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -41,6 +42,8 @@ import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import kotlin.math.ceil
+import java.util.WeakHashMap
+import kotlin.math.roundToInt
 
 // Свет в комнате рассчитан в коде: ночной версии обстановки у дизайнеров нет.
 //
@@ -89,6 +92,14 @@ private const val LAMP_SWITCH_MS = 600
  */
 private const val LAMP_BREATH = 0.93f
 private const val LAMP_BREATH_MS = 3000
+
+/**
+ * Шаг яркости дыхания. Свет торшера читают все освещённые предметы и все тени на полу,
+ * и плавное дыхание перерисовывало их заново на каждом кадре — даже когда в комнате
+ * ничего не двигалось. На S23 (120 Гц) кадр комнаты шёл 14–17 мс при бюджете 8.3.
+ * Ступенька в полпроцента на глаз не видна, а свет меняется около пяти раз в секунду.
+ */
+private const val LAMP_BREATH_STEP = 0.005f
 
 /**
  * Сколько света забирает тень. Не весь: свет отражается от стен и пола,
@@ -320,6 +331,14 @@ internal class RoomLighting(
 ) {
     val occluders = mutableStateListOf<Occluder>()
 
+    /**
+     * С чем записан каждый слой тени. Свет пола перерисовывается целиком, стоит одному
+     * предмету сдвинуться, и раньше заново записывал и размывал тени всех: пока ребёнок
+     * тащил игрушку, кадр шёл 17–21 мс. Теперь слой пишется, только если его тень
+     * изменилась; поза питомца в тень попадает и так — слой ссылается на его отрисовку.
+     */
+    val recorded = WeakHashMap<GraphicsLayer, Any>()
+
     private val lampPoint = interior.lamp.point()
 
     val lampLevel: Float get() = lamp.value * breath.value
@@ -429,7 +448,10 @@ internal fun rememberRoomLighting(
     )
     // Без анимаций дыхание застыло бы на пригашенной лампе — свет ровный.
     val steady = remember { mutableFloatStateOf(1f) }
-    val light = if (LocalAnimations.current) breath else steady
+    val smooth = if (LocalAnimations.current) breath else steady
+    val light = remember(smooth) {
+        derivedStateOf { (smooth.value / LAMP_BREATH_STEP).roundToInt() * LAMP_BREATH_STEP }
+    }
     return remember(lamp, light, window, ceiling, interior) { RoomLighting(lamp, light, ufo, window, ceiling, interior) }
 }
 
@@ -502,7 +524,7 @@ internal fun Modifier.roomLight(lighting: RoomLighting): Modifier = drawWithCach
                         else -> Unit
                     }
                 }
-                for (occluder in occluders) drawCut(occluder, glow, index, full)
+                for (occluder in occluders) drawCut(occluder, glow, index, full, lighting.recorded)
             }
         }
 
@@ -514,7 +536,7 @@ internal fun Modifier.roomLight(lighting: RoomLighting): Modifier = drawWithCach
                 }
             }
             for (i in 0 until used) drawLayer(casters[i])
-            for (occluder in occluders) drawContact(occluder, full)
+            for (occluder in occluders) drawContact(occluder, full, lighting.recorded)
         }
         drawLayer(light)
 
@@ -570,12 +592,12 @@ private fun DrawScope.drawLightmap(lighting: RoomLighting, origin: Offset, canva
  * Рисуется в слое источника, уже записанном в четверть разрешения, поэтому
  * силуэт уменьшается так же.
  */
-private fun DrawScope.drawCut(occluder: Occluder, glow: Glow, index: Int, canvas: Size) {
+private fun DrawScope.drawCut(occluder: Occluder, glow: Glow, index: Int, canvas: Size, recorded: MutableMap<GraphicsLayer, Any>) {
     val shown = occluder.visibility().coerceIn(0f, 1f)
     if (shown <= 0f) return
     val solid = occluder.solid
     if (solid != null) {
-        drawSolidCut(occluder, solid, glow.caster ?: return, index, canvas, shown)
+        drawSolidCut(occluder, solid, glow.caster ?: return, index, canvas, shown, recorded)
         return
     }
     val source = glow.shadow ?: return
@@ -605,7 +627,6 @@ private fun DrawScope.drawCut(occluder: Occluder, glow: Glow, index: Int, canvas
     cut.alpha = SHADOW_DEPTH * shown
     // Размытие считается в мелком слое, до растяжки, поэтому и радиус мельче.
     val blur = box.height * SHADOW_BLUR / LIGHT_SCALE
-    cut.renderEffect = BlurEffect(blur, blur)
 
     // Границы тени — квадрат питомца с запасом на прыжок, положенный на пол.
     val padX = box.width * PET_PAD
@@ -616,7 +637,7 @@ private fun DrawScope.drawCut(occluder: Occluder, glow: Glow, index: Int, canvas
     ).map { floor.map(it) + topLeft }
     val bounds = Rect(laid.minOf { it.x }, laid.minOf { it.y }, laid.maxOf { it.x }, laid.maxOf { it.y })
 
-    drawFitted(cut, bounds, blur) {
+    drawFitted(cut, bounds, blur, key = listOf(place, footing, source, canvas, size), recorded) {
         translate(topLeft.x, topLeft.y) {
             withTransform({ transform(floor) }) { drawLayer(occluder.body) }
         }
@@ -635,7 +656,17 @@ private fun DrawScope.drawSolidCut(
     index: Int,
     canvas: Size,
     shown: Float,
+    recorded: MutableMap<GraphicsLayer, Any>,
 ) {
+    val cut = occluder.cuts[index]
+    cut.blendMode = BlendMode.DstOut
+    cut.alpha = SHADOW_DEPTH * shown
+    val blur = canvas.height * SOLID_BLUR / LIGHT_SCALE
+    val key = listOf(solid, caster, canvas, size)
+    if (recorded[cut] == key) {
+        drawLayer(cut)
+        return
+    }
     val shadow = Path()
     for (part in solid.parts) {
         val fallen = part.mapNotNull { caster.toFloor(it) }
@@ -643,12 +674,7 @@ private fun DrawScope.drawSolidCut(
         shadow.addHull(fallen.map { RoomSpace.project(it) }, canvas)
     }
 
-    val cut = occluder.cuts[index]
-    cut.blendMode = BlendMode.DstOut
-    cut.alpha = SHADOW_DEPTH * shown
-    val blur = canvas.height * SOLID_BLUR / LIGHT_SCALE
-    cut.renderEffect = BlurEffect(blur, blur)
-    drawFitted(cut, shadow.getBounds(), blur) { drawPath(shadow, Color.Black) }
+    drawFitted(cut, shadow.getBounds(), blur, key, recorded) { drawPath(shadow, Color.Black) }
 }
 
 /** Добавляет к пути выпуклую оболочку точек, заданных в долях холста. */
@@ -664,19 +690,23 @@ private fun Path.addHull(points: List<Offset>, canvas: Size) {
 }
 
 /** Затемнение карты света под мебелью: пол темнеет, но остаётся своего цвета. */
-private fun DrawScope.drawContact(occluder: Occluder, canvas: Size) {
+private fun DrawScope.drawContact(occluder: Occluder, canvas: Size, recorded: MutableMap<GraphicsLayer, Any>) {
     val shown = occluder.visibility().coerceIn(0f, 1f)
     if (shown <= 0f) return
 
     val solid = occluder.solid
     if (solid != null) {
-        val footprint = Path()
-        footprint.addHull(solid.parts.flatten().map { RoomSpace.project(it.copy(y = 0f)) }, canvas)
         val contact = occluder.contact
         contact.alpha = shown
         val blur = canvas.height * SOLID_BLUR * 2f / LIGHT_SCALE
-        contact.renderEffect = BlurEffect(blur, blur)
-        drawFitted(contact, footprint.getBounds(), blur) {
+        val key = listOf(solid, canvas, size)
+        if (recorded[contact] == key) {
+            drawLayer(contact)
+            return
+        }
+        val footprint = Path()
+        footprint.addHull(solid.parts.flatten().map { RoomSpace.project(it.copy(y = 0f)) }, canvas)
+        drawFitted(contact, footprint.getBounds(), blur, key, recorded) {
             drawPath(footprint, Color.Black.copy(alpha = CONTACT_ALPHA))
         }
         return
@@ -772,8 +802,15 @@ private fun DrawScope.drawFitted(
     layer: GraphicsLayer,
     bounds: Rect,
     blur: Float,
+    key: Any,
+    recorded: MutableMap<GraphicsLayer, Any>,
     block: DrawScope.() -> Unit,
 ) {
+    // Тень не изменилась — слой уже записан и размыт, его остаётся только положить.
+    if (recorded[layer] == key) {
+        drawLayer(layer)
+        return
+    }
     // Размытие растекается за край фигуры, поэтому запас в три радиуса.
     val margin = blur * 3f
     val left = (bounds.left / LIGHT_SCALE - margin).coerceAtLeast(0f)
@@ -783,6 +820,8 @@ private fun DrawScope.drawFitted(
     if (right - left < 1f || bottom - top < 1f) return
 
     layer.topLeft = IntOffset(left.toInt(), top.toInt())
+    layer.renderEffect = BlurEffect(blur, blur)
+    recorded[layer] = key
     layer.record(IntSize(ceil(right - left).toInt() + 1, ceil(bottom - top).toInt() + 1)) {
         translate(-left.toInt().toFloat(), -top.toInt().toFloat()) {
             scale(1f / LIGHT_SCALE, pivot = Offset.Zero, block)

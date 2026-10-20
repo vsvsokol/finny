@@ -73,7 +73,7 @@ internal sealed interface Caster {
     fun toFloor(p: Point3): Point3?
 
     /** Лампа, НЛО: лучи расходятся из одной точки, и тень тем длиннее, чем она ближе. */
-    class Point(val at: Point3) : Caster {
+    data class Point(val at: Point3) : Caster {
         override fun toFloor(p: Point3): Point3? {
             if (p.y >= at.y) return null
             return at + (p - at) * (at.y / (at.y - p.y))
@@ -84,7 +84,7 @@ internal sealed interface Caster {
      * Луна: так далеко, что лучи параллельны. [ray] — куда смещается тень
      * на единицу высоты, его y равен −1.
      */
-    class Parallel(val ray: Point3) : Caster {
+    data class Parallel(val ray: Point3) : Caster {
         override fun toFloor(p: Point3): Point3 = p + ray * p.y
     }
 }

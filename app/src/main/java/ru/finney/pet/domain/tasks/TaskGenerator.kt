@@ -7,6 +7,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.intOrNull
+import ru.finney.pet.domain.model.ReceiptTask
 import ru.finney.pet.domain.model.ReserveTask
 import ru.finney.pet.domain.model.SorterTask
 import ru.finney.pet.domain.model.TaskDefinition
@@ -25,7 +26,8 @@ import kotlin.random.Random
  *
  * [generate] превращает шаблон в обычное [TaskDefinition]: одно зерно — одни и те же
  * числа, поэтому попытку можно повторить и проверить. Экран получает готовые числа.
- * Вещи «Конвейера» он ещё и перемешивает тем же зерном, даже если разброса в шаблоне нет.
+ * Вещи «Конвейера» и строки «Проверь чек» он ещё и перемешивает тем же зерном, даже если
+ * разброса в шаблоне нет.
  */
 object TaskGenerator {
 
@@ -60,7 +62,7 @@ object TaskGenerator {
     fun generate(template: JsonObject, seed: Long): TaskDefinition = shuffleOrder(numbers(template, seed), seed)
 
     private fun numbers(template: JsonObject, seed: Long): TaskDefinition {
-        if (!isRandom(template)) return base(template)
+        if (!isRandom(template) && !makesMistakes(template)) return base(template)
         val random = Random(seed)
         val base = base(template)
         repeat(TRIES) {
@@ -75,9 +77,15 @@ object TaskGenerator {
      * «Конвейер»: в tasks.json вещи записаны через одну — нужное, хочется, нужное, — и корзину
      * угадывали по очереди, не думая (20.10). Одно зерно — один порядок; соль — чтобы порядок
      * не зависел от того, сколько чисел зерно уже выдало на разброс.
+     * «Проверь чек»: ошибка всегда стояла на одном месте, и при повторе её находили по памяти.
+     * Перемешиваются строки чека и товары в пакете; ошибки привязаны к id строк, поэтому
+     * оценка не меняется.
      */
     private fun shuffleOrder(task: TaskDefinition, seed: Long): TaskDefinition = when (task) {
         is SorterTask -> task.copy(items = task.items.shuffled(Random(seed xor ORDER_SALT)))
+        is ReceiptTask -> Random(seed xor ORDER_SALT).let { random ->
+            task.copy(lines = task.lines.shuffled(random), cart = task.cart.shuffled(random))
+        }
         else -> task
     }
 
@@ -90,14 +98,14 @@ object TaskGenerator {
     private fun withWorstCase(task: TaskDefinition, base: TaskDefinition): TaskDefinition =
         if (task is ReserveTask && base is ReserveTask) task.copy(worstCase = TaskEngines.surprisesTotal(base)) else task
 
-    /** Есть ли в [element] хоть один разброс. Без разброса задание не зависит от зерна. */
     /** Меняется ли задание от попытки к попытке: разброс в шаблоне или перемешанный порядок. */
     fun varies(template: JsonObject): Boolean =
         isRandom(template) || (template["engine"] as? JsonPrimitive)?.content in SHUFFLED_ENGINES
 
     /** Движки, чей порядок [shuffleOrder] перемешивает зерном попытки. */
-    private val SHUFFLED_ENGINES = setOf("sorter")
+    private val SHUFFLED_ENGINES = setOf("sorter", "receipt")
 
+    /** Есть ли в [element] хоть один разброс. Без разброса задание не зависит от зерна. */
     fun isRandom(element: JsonElement): Boolean = when (element) {
         is JsonObject -> spreadKind(element) != null || element.values.any(::isRandom)
         is JsonArray -> element.any(::isRandom)
@@ -107,8 +115,13 @@ object TaskGenerator {
     private fun build(template: JsonObject, random: Random?): TaskDefinition {
         val resolved = resolve(template, random) as JsonObject
         val facts = TaskEngines.facts(json.decodeFromJsonElement<TaskDefinition>(resolved))
-        return json.decodeFromJsonElement<TaskDefinition>(substitute(resolved, resolved, facts))
+        val task = json.decodeFromJsonElement<TaskDefinition>(substitute(resolved, resolved, facts))
+        // Ошибки чека — не разброс одного числа, их пишет ReceiptMaker; у base — одни и те же.
+        return if (task is ReceiptTask) ReceiptMaker.make(task, random ?: Random(0)) else task
     }
+
+    /** Чек, ошибки в котором придумываются на каждую попытку: он меняется и без разброса. */
+    private fun makesMistakes(template: JsonObject): Boolean = template["mistakes"] != null
 
     // ---------- Разброс ----------
 
