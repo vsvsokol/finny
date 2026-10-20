@@ -23,7 +23,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TaskAttemptEntity::class,
         ItemUseEntity::class,
     ],
-    version = 14,
+    version = 15,
     exportSchema = true,
 )
 abstract class FinneyDatabase : RoomDatabase() {
@@ -35,7 +35,7 @@ abstract class FinneyDatabase : RoomDatabase() {
 
         fun create(context: Context): FinneyDatabase =
             Room.databaseBuilder(context.applicationContext, FinneyDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
+                .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15)
                 .fallbackToDestructiveMigration(dropAllTables = true)
                 .build()
 
@@ -172,6 +172,18 @@ abstract class FinneyDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE profiles ADD COLUMN roomWindow TEXT")
                 db.execSQL("ALTER TABLE profiles ADD COLUMN roomLamp TEXT")
                 db.execSQL("ALTER TABLE profiles ADD COLUMN wornLook TEXT")
+            }
+        }
+
+        /**
+         * 14 → 15: ковёр в игровой — четвёртая часть комнаты. Он из той же темы, что и стена:
+         * до версии 15 ковра не было, а тему ребёнок выбирал целиком или по частям, и стена
+         * ближе всего к тому, «какая у него комната».
+         */
+        val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE profiles ADD COLUMN roomRug TEXT")
+                db.execSQL("UPDATE profiles SET roomRug = roomWall")
             }
         }
     }

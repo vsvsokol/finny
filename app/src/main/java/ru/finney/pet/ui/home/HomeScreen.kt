@@ -481,6 +481,12 @@ internal fun HomeContent(
     // выбирают, интерфейс главной расступается, а камера подлетает к питомцу или вещи.
     var roomEdit by rememberSaveable { mutableStateOf<EditTab?>(null) }
     val editing = roomEdit != null
+    // Панель живёт в спальне, а ковёр лежит в игровой: на вкладке «Ковёр» питомец уходит туда,
+    // с остальных вкладок — обратно. Закрыли панель — остаётся, где был.
+    LaunchedEffect(roomEdit) {
+        val tab = roomEdit ?: return@LaunchedEffect
+        spot = if (tab.room == InteriorPart.RUG) RoomSpot.PLAY else RoomSpot.LIVING
+    }
     val editScope = rememberCoroutineScope()
     // Комната — из сохранения (ядро помнит её после перезапуска). «Вся комната» ставит
     // части по очереди и сверяется со свежей комнатой, а не с той, что была при нажатии.
@@ -833,6 +839,7 @@ internal fun HomeContent(
             interior = interior,
             focus = roomEdit?.room?.let { interior.focusOf(it) },
             focusPet = roomEdit?.pet == true,
+            focusRug = roomEdit?.room == InteriorPart.RUG,
             focusBottom = pickerCovers,
             onToyDrag = ::onToyDrag,
             onToyDrop = ::onToyDrop,

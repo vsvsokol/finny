@@ -262,6 +262,8 @@ private val UfoPauseMs = 20_000L..45_000L
  *   падает сверху и мигает, включаясь.
  * @param focus что показать крупно, пока выбирают интерьер ([focusOf]); null — обычный вид.
  * @param focusPet показать крупно питомца в спальне. Важнее [focus].
+ * @param focusRug показать крупно ковёр игровой. Его место знает только сцена: оно
+ *   зависит от ширины экрана (RoomRugs.kt). Важнее [focus].
  * @param focusBottom сколько снизу закрыто панелью выбора: часть [focus] встаёт
  *   посередине того, что над ней осталось.
  */
@@ -286,6 +288,7 @@ fun RoomScene(
     interior: RoomInterior = Interiors.Default,
     focus: RelRect? = null,
     focusPet: Boolean = false,
+    focusRug: Boolean = false,
     focusBottom: Dp = 0.dp,
     pet: @Composable BoxScope.() -> Unit = {},
 ) {
@@ -325,6 +328,8 @@ fun RoomScene(
         delay((LAMP_SWAP_MS * (LAMP_FLICKERS - LAMP_LANDS)).toLong())
         sounds.play(Sfx.Tap)
     }
+    // Ковёр шуршит, как ткань.
+    val rugs = rememberPartSwap(interior.rug, RUG_SWAP_MS) { sounds.play(Sfx.ToyRustle) }
 
     // Отход ко сну: питомец прыгает в капсулу (walk 0 → 1), камера наезжает,
     // закрывается дверь, гаснет свет. Живёт на всю сцену, а не на зал:
@@ -546,7 +551,8 @@ fun RoomScene(
         // Масштаб не меньше «холст во всю ширину» и сдвиг зажат, как у камеры сна:
         // за краем холста пусто, и показывать это нельзя.
         val edit = with(density) {
-            val target = (if (focusPet) Room.petGround(RoomSpot.LIVING) else focus)?.let { rect ->
+            val rug = rugRect(toyFloor, interior.rug).mirrored(mirrorAxis)
+            val target = (if (focusPet) Room.petGround(RoomSpot.LIVING) else if (focusRug) rug else focus)?.let { rect ->
                 val w = maxWidth.toPx()
                 val h = (maxHeight - focusBottom).toPx().coerceAtLeast(1f)
                 val left = shiftX.toPx()
@@ -608,6 +614,7 @@ fun RoomScene(
                     walls = walls,
                     windows = windows,
                     lamps = lamps,
+                    rugs = rugs,
                     flyer = flyer,
                     capsule = capsule,
                     walk = { walk.value },
@@ -698,6 +705,7 @@ private fun RoomCanvas(
     walls: PartSwap<WallSkin>,
     windows: PartSwap<WindowSkin>,
     lamps: PartSwap<LampSkin>,
+    rugs: PartSwap<RugSkin>,
     flyer: WindowFlyer,
     capsule: Boolean,
     walk: () -> Float,
@@ -738,6 +746,9 @@ private fun RoomCanvas(
         ) {
             Box(modifier = Modifier.fillMaxSize().roomLight(lighting)) {
                 WallSwap(walls, canvasW, canvasH)
+                // Ковёр плоский, лежит на полу под всем, что стоит, и свет комнаты ложится на него
+                // как на пол. Тени у него нет.
+                if (room == RoomSpot.PLAY) RugSwap(rugs, toyFloor, canvasW, canvasH, mirrored = mirrorAxis != null)
                 if (room.hasWindow) {
                     // На кухне питомец крупнее и сидит выше, окно за ним почти пропадало
                     // под головой и кнопками. Растёт от подоконника вверх: вниз окно

@@ -1,5 +1,6 @@
 package ru.finney.pet.ui.room
 
+import androidx.annotation.DrawableRes
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.geometry.Offset
 import ru.finney.pet.R
@@ -34,6 +35,15 @@ data class WallSkin(val back: RoomLayer, val floorTop: Float)
  */
 @Immutable
 data class LampSkin(val layer: RoomLayer, val shade: Offset, val pool: Offset)
+
+/**
+ * Ковёр игровой. Нарисован отдельно от холста, уже в перспективе пола, поэтому места
+ * на холсте у него нет: его кладёт [rugRect] по ширине экрана, как ящик для игрушек.
+ *
+ * @param aspect ширина к высоте рисунка — печатает tools/pack_room.py.
+ */
+@Immutable
+data class RugSkin(@DrawableRes val image: Int, val aspect: Float)
 
 /** Что видно в окне. */
 @Immutable
@@ -127,6 +137,7 @@ data class RoomInterior(
     val wall: WallSkin,
     val window: WindowSkin,
     val lamp: LampSkin,
+    val rug: RugSkin,
 )
 
 /**
@@ -158,6 +169,7 @@ object Interiors {
             life = WindowLife.Flyer(Room.WindowUfo, facesRight = null, glows = true, sound = Sfx.Ufo),
         ),
         lamp = LampSkin(Room.Lamp, shade = Offset(0.152f, 0.092f), pool = Offset(0.160f, 0.500f)),
+        rug = RugSkin(R.drawable.room_rug_default, aspect = 2.3148f),
     )
 
     /** Цирк: круглое окно с перекладинами, за ним шатёр и колесо обозрения; торшер — воздушный шар. */
@@ -186,6 +198,7 @@ object Interiors {
                 life = WindowLife.Wheel(wheel, stand, cabins, hub = Offset(0.8243f, 0.2138f)),
             ),
             lamp = LampSkin(lamp, shade = Offset(0.1681f, 0.1625f), pool = Offset(0.1694f, 0.4654f)),
+            rug = RugSkin(R.drawable.room_rug_circus, aspect = 2.2779f),
         )
     }
 
@@ -202,6 +215,7 @@ object Interiors {
             wall = WallSkin(back, floorTop = 0.4850f),
             window = WindowSkin.picture(frame, view, glass = 0.5278f..0.8264f, life = WindowLife.Flyer(bee, facesRight = false)),
             lamp = LampSkin(lamp, shade = Offset(0.1403f, 0.1575f), pool = Offset(0.1458f, 0.4896f)),
+            rug = RugSkin(R.drawable.room_rug_honey, aspect = 2.2779f),
         )
     }
 
@@ -218,6 +232,7 @@ object Interiors {
             wall = WallSkin(back, floorTop = 0.4758f),
             window = WindowSkin.picture(frame, view, glass = 0.5486f..0.8208f, life = WindowLife.Flyer(fish, facesRight = true)),
             lamp = LampSkin(lamp, shade = Offset(0.1382f, 0.1763f), pool = Offset(0.1368f, 0.4896f)),
+            rug = RugSkin(R.drawable.room_rug_sea, aspect = 2.0325f),
         )
     }
 
@@ -239,6 +254,7 @@ object Interiors {
                 life = WindowLife.Twinkle(fireflies),
             ),
             lamp = LampSkin(lamp, shade = Offset(0.1563f, 0.2333f), pool = Offset(0.1563f, 0.5075f)),
+            rug = RugSkin(R.drawable.room_rug_forest, aspect = 2.4570f),
         )
     }
 
@@ -254,14 +270,18 @@ object Interiors {
             wall = WallSkin(back, floorTop = 0.5058f),
             window = WindowSkin.picture(frame, view, glass = 0.5972f..0.8542f),
             lamp = LampSkin(lamp, shade = Offset(0.1688f, 0.1583f), pool = Offset(0.1674f, 0.4992f)),
+            rug = RugSkin(R.drawable.room_rug_town, aspect = 2.4390f),
         )
     }
 
     val all = listOf(Default, Circus, Honey, Sea, Forest, Town)
 }
 
-/** Что в комнате меняется по отдельности: вкладки выбора и куда смотрит камера. */
-enum class InteriorPart(val label: String) { WALL("Стена"), WINDOW("Окно"), LAMP("Торшер") }
+/**
+ * Что в комнате меняется по отдельности: вкладки выбора и куда смотрит камера.
+ * Стена, окно и торшер — в спальне, ковёр — в игровой.
+ */
+enum class InteriorPart(val label: String) { WALL("Стена"), WINDOW("Окно"), LAMP("Торшер"), RUG("Ковёр") }
 
 /** Тема, из которой взята часть [part]. У смешанной комнаты у каждой части своя. */
 fun RoomInterior.themeOf(part: InteriorPart): RoomInterior = Interiors.all.firstOrNull { theme ->
@@ -269,11 +289,12 @@ fun RoomInterior.themeOf(part: InteriorPart): RoomInterior = Interiors.all.first
         InteriorPart.WALL -> theme.wall == wall
         InteriorPart.WINDOW -> theme.window == window
         InteriorPart.LAMP -> theme.lamp == lamp
+        InteriorPart.RUG -> theme.rug == rug
     }
 } ?: Interiors.Default
 
 /**
- * Эта комната, где часть [part] взята из темы [from]. Все три части из одной
+ * Эта комната, где часть [part] взята из темы [from]. Все части из одной
  * темы — это сама тема; из разных — своя комната ребёнка.
  */
 fun RoomInterior.withPart(part: InteriorPart, from: RoomInterior): RoomInterior {
@@ -281,19 +302,24 @@ fun RoomInterior.withPart(part: InteriorPart, from: RoomInterior): RoomInterior 
         InteriorPart.WALL -> copy(wall = from.wall)
         InteriorPart.WINDOW -> copy(window = from.window)
         InteriorPart.LAMP -> copy(lamp = from.lamp)
+        InteriorPart.RUG -> copy(rug = from.rug)
     }
-    return Interiors.all.firstOrNull { it.wall == mixed.wall && it.window == mixed.window && it.lamp == mixed.lamp }
+    return Interiors.all.firstOrNull {
+        it.wall == mixed.wall && it.window == mixed.window && it.lamp == mixed.lamp && it.rug == mixed.rug
+    }
         ?: mixed.copy(id = "mix", label = "Своя комната")
 }
 
 /**
- * Что показать крупно, пока выбирают часть [part], — доли холста. Стена — вся,
- * от потолка до шва с полом и чуть ниже: обои и пол меняются вместе.
+ * Что показать крупно, пока выбирают часть [part], — доли холста спальни. Стена — вся,
+ * от потолка до шва с полом и чуть ниже: обои и пол меняются вместе. Ковёр — null:
+ * он в игровой, и где он лежит, знает только сцена (RoomScene, `focusRug`).
  */
-fun RoomInterior.focusOf(part: InteriorPart): RelRect = when (part) {
+fun RoomInterior.focusOf(part: InteriorPart): RelRect? = when (part) {
     InteriorPart.WALL -> RelRect(0f, 0f, 1f, wall.floorTop + 0.15f)
     InteriorPart.WINDOW -> window.frame.rect
     InteriorPart.LAMP -> lamp.layer.rect
+    InteriorPart.RUG -> null
 }
 
 /** Тема по id из ядра ([RoomThemes]); незнакомый id — базовая, комната не пропадает. */
@@ -306,10 +332,12 @@ fun Interiors.byId(id: String): RoomInterior = all.firstOrNull { it.id == id } ?
 fun RoomChoice.toInterior(): RoomInterior = Interiors.byId(wall)
     .withPart(InteriorPart.WINDOW, Interiors.byId(window))
     .withPart(InteriorPart.LAMP, Interiors.byId(lamp))
+    .withPart(InteriorPart.RUG, Interiors.byId(rug))
 
 /** Та же часть комнаты в ядре: вкладки выбора и [RoomPart] совпадают по смыслу. */
 val InteriorPart.core: RoomPart get() = when (this) {
     InteriorPart.WALL -> RoomPart.WALL
     InteriorPart.WINDOW -> RoomPart.WINDOW
     InteriorPart.LAMP -> RoomPart.LAMP
+    InteriorPart.RUG -> RoomPart.RUG
 }

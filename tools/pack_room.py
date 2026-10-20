@@ -26,6 +26,7 @@
 
 Запуск из корня репозитория (нужен Pillow: pip install Pillow):
     py tools/pack_room.py
+    py tools/pack_room.py rugs   — только ковры игровой
 
 Перезапускать после каждого нового экспорта — и переносить напечатанные RelRect
 в RoomLayers.kt, иначе предмет уедет с места.
@@ -243,6 +244,38 @@ def pack_interiors() -> dict[str, list[tuple[str, str, tuple[float, float, float
     return themes
 
 
+# ---------- Ковры игровой ----------
+#
+# Ковёр — не слой холста: художник рисует его отдельно, уже в перспективе пола, на
+# квадрате 2000×2000. Место на полу ему выбирает код (RoomRugs.kt) по ширине экрана,
+# как ящику для игрушек, поэтому здесь только обрезка и размер. Ширина — чуть меньше
+# экрана 1080p: на телефоне ковёр почти во всю ширину видимой части комнаты.
+#
+# Имя файла — id темы. arabic нарисован без темы: в ресурсы не идёт, пока её нет.
+
+RUGS = SRC / "rugs"
+RUG_THEMES = ("default", "circus", "honey", "sea", "forest", "town")
+RUG_WIDTH = 1000
+
+
+def pack_rugs() -> list[tuple[str, float, int]]:
+    """По теме: (имя ресурса, ширина к высоте, байт на диске)."""
+    packed = []
+    for theme in RUG_THEMES:
+        path = next(RUGS.glob(f"{theme}.[pP][nN][gG]"))
+        image = Image.open(path).convert("RGBA")
+        box = image.split()[3].point(lambda v: 255 if v > ALPHA_FLOOR else 0).getbbox()
+        if box is None:
+            raise SystemExit(f"{path.name}: ни одного непрозрачного пикселя")
+        cropped = image.crop(box)
+        height = round(cropped.height * RUG_WIDTH / cropped.width)
+        cropped = cropped.resize((RUG_WIDTH, height), Image.LANCZOS)
+        out = RES / f"room_rug_{theme}.webp"
+        cropped.save(out, "WEBP", lossless=True, method=6)
+        packed.append((out.stem, RUG_WIDTH / height, out.stat().st_size))
+    return packed
+
+
 def kotlin_rect(rel: tuple[float, float, float, float]) -> str:
     return f"RelRect({rel[0]:.4f}f, {rel[1]:.4f}f, {rel[2]:.4f}f, {rel[3]:.4f}f)"
 
@@ -252,6 +285,15 @@ def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
 
     RES.mkdir(parents=True, exist_ok=True)
+    rugs = pack_rugs()
+    print("Для RoomRugs.kt (ширина к высоте):\n")
+    for target, aspect, _ in rugs:
+        print(f"    R.drawable.{target} — {aspect:.4f}f")
+    print(f"\nКовров {len(rugs)}, {sum(size for *_, size in rugs) // 1024} КБ на диске\n")
+    # Только ковры: остальные слои не трогаем, их числа уже в RoomLayers.kt.
+    if sys.argv[1:] == ["rugs"]:
+        return
+
     packed = [pack(source, target) for source, target in LAYERS.items()] + [pack_sky()]
     themes = pack_interiors()
 

@@ -44,6 +44,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -77,6 +79,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -109,7 +112,8 @@ import ru.finney.pet.ui.theme.StrokeRegular
 // Выбор ставится сразу, без «Применить»: так его и пробуют.
 
 /** Высота панели без системной полоски снизу: по ней комната знает, сколько закрыто. */
-val InteriorPickerHeight = 214.dp
+// 224, а не 214: у комнаты вкладки в два этажа (значок над подписью), иначе карточки срезало снизу.
+val InteriorPickerHeight = 224.dp
 
 /** Сколько висит предложение взять тему целиком: прочитать и решить, но не мешать дальше. */
 private const val OFFER_MS = 4_500L
@@ -124,6 +128,7 @@ enum class EditTab(val label: String, val room: InteriorPart?) {
     WALL("Стена", InteriorPart.WALL),
     WINDOW("Окно", InteriorPart.WINDOW),
     LAMP("Торшер", InteriorPart.LAMP),
+    RUG("Ковёр", InteriorPart.RUG),
     ;
 
     val pet: Boolean get() = room == null
@@ -414,11 +419,13 @@ private fun PartTab(tab: EditTab, selected: Boolean, onClick: () -> Unit, modifi
     val sounds = LocalSounds.current
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
-    val shape = RoundedCornerShape(percent = 50)
+    // У комнаты четыре вкладки: в ряд значок с подписью не помещаются уже на 360 dp с крупным
+    // шрифтом, поэтому значок над подписью, а подпись ужимается, если и так не влезла.
+    val stacked = tab.room != null
+    val shape = if (stacked) RoundedCornerShape(20.dp) else RoundedCornerShape(percent = 50)
     val lift by animateDpAsState(if (selected) (-2).dp else 0.dp, spring(dampingRatio = 0.5f), label = "tabLift")
-    Row(
-        modifier = modifier
-            .height(48.dp)
+    val tabModifier = modifier
+            .height(if (stacked) 58.dp else 48.dp)
             .graphicsLayer {
                 translationY = lift.toPx()
                 val s = if (pressed) 0.96f else 1f
@@ -437,16 +444,35 @@ private fun PartTab(tab: EditTab, selected: Boolean, onClick: () -> Unit, modifi
                 if (!selected) sounds.play(Sfx.Tap)
                 onClick()
             }
-            .semantics { this.selected = selected },
-        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (tab == EditTab.OUTFIT) {
-            FinneyIcon(FinneyIcons.Hanger, size = 24.dp)
-        } else {
-            Canvas(Modifier.size(24.dp)) { tabIcon(tab) }
+            .semantics { this.selected = selected }
+    val style = MaterialTheme.typography.titleMedium.copy(color = FinneyInk)
+    if (stacked) {
+        Column(
+            modifier = tabModifier.padding(horizontal = 4.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Canvas(Modifier.size(20.dp)) { tabIcon(tab) }
+            BasicText(
+                tab.label,
+                style = style,
+                maxLines = 1,
+                autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = style.fontSize),
+            )
         }
-        Text(tab.label, style = MaterialTheme.typography.titleMedium, color = FinneyInk, maxLines = 1)
+    } else {
+        Row(
+            modifier = tabModifier,
+            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (tab == EditTab.OUTFIT) {
+                FinneyIcon(FinneyIcons.Hanger, size = 24.dp)
+            } else {
+                Canvas(Modifier.size(24.dp)) { tabIcon(tab) }
+            }
+            Text(tab.label, style = style, maxLines = 1)
+        }
     }
 }
 
@@ -607,7 +633,7 @@ private fun TakeAllOffer(label: String, onAccept: () -> Unit) {
 
 /**
  * Вещь темы для карточки — из тех же слоёв, что и в комнате. Стена — верх
- * задника с полом, окно — вид с рамкой, торшер — целиком.
+ * задника с полом, окно — вид с рамкой, торшер и ковёр — целиком.
  */
 @Composable
 private fun PartThumb(theme: RoomInterior, part: InteriorPart, modifier: Modifier = Modifier) {
@@ -661,6 +687,20 @@ private fun PartThumb(theme: RoomInterior, part: InteriorPart, modifier: Modifie
                 lamp?.let { drawLayer(it, area, area, fitUnit(area)) }
             }
         }
+
+        InteriorPart.RUG -> {
+            val rug = thumbBitmap(theme.rug.image)
+            Canvas(modifier) {
+                rug ?: return@Canvas
+                // Ковёр плоский и широкий: по ширине карточки, посередине по высоте.
+                val h = size.width / theme.rug.aspect
+                drawImage(
+                    rug,
+                    dstOffset = IntOffset(0, ((size.height - h) / 2f).toInt()),
+                    dstSize = IntSize(size.width.toInt(), h.toInt()),
+                )
+            }
+        }
     }
 }
 
@@ -707,7 +747,7 @@ private fun thumbBitmap(@DrawableRes res: Int): ImageBitmap? {
     return image
 }
 
-/** Значки вкладок обводкой ink: капля краски, обои в кирпичик, окно с перекладиной, торшер. */
+/** Значки вкладок обводкой ink: капля краски, обои в кирпичик, окно с перекладиной, торшер, ковёр. */
 private fun DrawScope.tabIcon(tab: EditTab) {
     val u = size.width / 26f
     val path = Path()
@@ -743,6 +783,12 @@ private fun DrawScope.tabIcon(tab: EditTab) {
             path.lineTo(4 * u, 11 * u); path.close()
             path.moveTo(13 * u, 11 * u); path.lineTo(13 * u, 22 * u)
             path.moveTo(8 * u, 23 * u); path.lineTo(18 * u, 23 * u)
+        }
+
+        // Овальный ковёр на полу с каймой.
+        EditTab.RUG -> {
+            path.addOval(Rect(2 * u, 8 * u, 24 * u, 20 * u))
+            path.addOval(Rect(7 * u, 11 * u, 19 * u, 17 * u))
         }
     }
     drawPath(path, FinneyInk, style = Stroke(2.6f * u, cap = StrokeCap.Round, join = StrokeJoin.Round))

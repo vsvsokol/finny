@@ -11,8 +11,11 @@ object RoomThemes {
     val ALL = listOf(BASE, "circus", "honey", "sea", "forest", "town")
 }
 
-/** Что в комнате меняется по отдельности — как вкладки выбора комнаты. */
-enum class RoomPart { WALL, WINDOW, LAMP }
+/**
+ * Что в комнате меняется по отдельности — как вкладки выбора комнаты. Ковёр лежит в игровой,
+ * остальное — в спальне, но тема у них общая: получил тему — получил и её ковёр.
+ */
+enum class RoomPart { WALL, WINDOW, LAMP, RUG }
 
 /**
  * Выбранная комната: из какой темы каждая часть. Все части из одной темы — это сама тема,
@@ -22,21 +25,24 @@ data class RoomChoice(
     val wall: String = RoomThemes.BASE,
     val window: String = RoomThemes.BASE,
     val lamp: String = RoomThemes.BASE,
+    val rug: String = RoomThemes.BASE,
 ) {
     fun themeOf(part: RoomPart): String = when (part) {
         RoomPart.WALL -> wall
         RoomPart.WINDOW -> window
         RoomPart.LAMP -> lamp
+        RoomPart.RUG -> rug
     }
 
     fun with(part: RoomPart, themeId: String): RoomChoice = when (part) {
         RoomPart.WALL -> copy(wall = themeId)
         RoomPart.WINDOW -> copy(window = themeId)
         RoomPart.LAMP -> copy(lamp = themeId)
+        RoomPart.RUG -> copy(rug = themeId)
     }
 
     companion object {
-        fun whole(themeId: String) = RoomChoice(themeId, themeId, themeId)
+        fun whole(themeId: String) = RoomChoice(themeId, themeId, themeId, themeId)
     }
 }
 
