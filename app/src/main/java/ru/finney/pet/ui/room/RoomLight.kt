@@ -306,13 +306,16 @@ internal data class Footing(
  */
 internal class Occluder(
     val body: GraphicsLayer,
-    val place: RelRect,
+    private val placeOf: () -> RelRect,
     val footing: Footing?,
     val solid: Solid?,
     val cuts: List<GraphicsLayer>,
     val contact: GraphicsLayer,
     val visibility: () -> Float,
-)
+) {
+    /** Где предмет сейчас. Читается на отрисовке: идущий питомец не пересобирает комнату. */
+    val place: RelRect get() = placeOf()
+}
 
 /**
  * Свет в комнате в данный момент: торшер с его дыханием, НЛО за окном
@@ -390,7 +393,32 @@ internal class RoomLighting(
 
     fun ufoNow(): Pair<Offset, Float>? = if (window) ufo() else null
 
-    fun glows(): List<Glow> = buildList {
+    /** С чем собраны [glows]: пока свет тот же, список один и тот же, без новых объектов на кадр. */
+    private var glowsKey: GlowsKey? = null
+    private var glowsNow: List<Glow> = emptyList()
+
+    /**
+     * Источники света сейчас. Состояния читаются на каждом вызове, поэтому отрисовка
+     * по-прежнему подписана на них; собирается список заново, только когда свет сменился.
+     */
+    fun glows(): List<Glow> {
+        val key = GlowsKey(lampLevel, if (ceiling) null else lampSkin, windows.lit(), wallSkin.floorTop, ufoNow())
+        if (key != glowsKey) {
+            glowsNow = buildGlows()
+            glowsKey = key
+        }
+        return glowsNow
+    }
+
+    private data class GlowsKey(
+        val lampLevel: Float,
+        val lamp: LampSkin?,
+        val window: Pair<WindowSkin, Float>,
+        val floorTop: Float,
+        val ufo: Pair<Offset, Float>?,
+    )
+
+    private fun buildGlows(): List<Glow> = buildList {
         if (ceiling) {
             add(
                 Glow(
@@ -592,9 +620,9 @@ private fun DrawScope.drawGlow(lighting: RoomLighting, glow: Glow, origin: Offse
  * в том месте, где он светит. [origin] — где на холсте лежит левый верхний
  * угол того, что сейчас освещается, [area] — его размер.
  */
-private fun DrawScope.drawLightmap(lighting: RoomLighting, origin: Offset, canvas: Size, area: Size) {
-    drawRect(lighting.ambient(), size = area)
-    for (glow in lighting.glows()) drawGlow(lighting, glow, origin, canvas)
+private fun DrawScope.drawLightmap(lighting: RoomLighting, glows: List<Glow>, ambient: Color, origin: Offset, canvas: Size, area: Size) {
+    drawRect(ambient, size = area)
+    for (glow in glows) drawGlow(lighting, glow, origin, canvas)
 }
 
 /**
@@ -751,6 +779,29 @@ internal fun LitBody(
     padTop: Float = pad,
     content: @Composable BoxScope.() -> Unit,
 ) {
+    val current = rememberUpdatedState(place)
+    LitBody(lighting, { current.value }, footing, modifier, solid, visibility, pad, padTop, content)
+}
+
+/**
+ * То же для предмета, который движется: [place] читается на раскладке и отрисовке,
+ * поэтому шаги питомца перерисовывают свет и тень, но не пересобирают комнату.
+ */
+@Composable
+internal fun LitBody(
+    lighting: RoomLighting,
+    place: () -> RelRect,
+    footing: Footing?,
+    modifier: Modifier = Modifier,
+    solid: Solid? = null,
+    visibility: () -> Float = { 1f },
+    pad: Float = 0f,
+    padTop: Float = pad,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    val placeOf = rememberUpdatedState(place)
+    // Не состояние: ключ нужен только отрисовке и не должен её перезапускать.
+    val lightKey = remember { LightmapHolder() }
     val body = rememberGraphicsLayer()
     val lit = rememberGraphicsLayer()
     val light = rememberGraphicsLayer()
@@ -758,8 +809,8 @@ internal fun LitBody(
     if (footing != null || solid != null) {
         val cuts = List(MAX_SHADOWS) { rememberGraphicsLayer() }
         val contact = rememberGraphicsLayer()
-        DisposableEffect(lighting, place, footing, solid) {
-            val occluder = Occluder(body, place, footing, solid, cuts, contact, visibility)
+        DisposableEffect(lighting, footing, solid) {
+            val occluder = Occluder(body, { placeOf.value() }, footing, solid, cuts, contact, visibility)
             lighting.occluders += occluder
             onDispose { lighting.occluders -= occluder }
         }
@@ -769,23 +820,35 @@ internal fun LitBody(
         modifier = modifier.drawWithContent {
             body.record { this@drawWithContent.drawContent() }
 
+            val place = placeOf.value()
             val canvas = Size(size.width / place.width, size.height / place.height)
             val origin = Offset(canvas.width * place.left, canvas.height * place.top)
             val margin = IntOffset((size.width * pad).toInt(), (size.height * padTop).toInt())
             val below = (size.height * pad).toInt()
             val padded = IntSize(size.width.toInt() + margin.x * 2, size.height.toInt() + margin.y + below)
 
-            light.blendMode = BlendMode.Modulate
-            light.stretch()
-            light.record(padded.shrunk()) {
-                scale(1f / LIGHT_SCALE, pivot = Offset.Zero) {
-                    drawLightmap(
-                        lighting,
-                        origin = origin - Offset(margin.x.toFloat(), margin.y.toFloat()),
-                        canvas = canvas,
-                        area = Size(padded.width.toFloat(), padded.height.toFloat()),
-                    )
+            // Карта света переписывается, только если свет или место сменились: у питомца
+            // отрисовка меняется каждый кадр (дыхание, моргание), а свет на нём — редко.
+            val glows = lighting.glows()
+            val ambient = lighting.ambient()
+            val from = origin - Offset(margin.x.toFloat(), margin.y.toFloat())
+            val key = LightmapKey(glows, ambient, from, canvas, padded)
+            if (lightKey.value != key) {
+                light.blendMode = BlendMode.Modulate
+                light.stretch()
+                light.record(padded.shrunk()) {
+                    scale(1f / LIGHT_SCALE, pivot = Offset.Zero) {
+                        drawLightmap(
+                            lighting,
+                            glows,
+                            ambient,
+                            origin = from,
+                            canvas = canvas,
+                            area = Size(padded.width.toFloat(), padded.height.toFloat()),
+                        )
+                    }
                 }
+                lightKey.value = key
             }
 
             // Свет накладывается в своём слое поверх копии предмета, и слой
@@ -919,4 +982,11 @@ private fun moonPatch(w: Float, h: Float, window: WindowSkin, floorTop: Float): 
             close()
         }
     }
+}
+
+/** С чем записана карта света предмета; см. [LitBody]. */
+private data class LightmapKey(val glows: List<Glow>, val ambient: Color, val origin: Offset, val canvas: Size, val area: IntSize)
+
+private class LightmapHolder {
+    var value: LightmapKey? = null
 }

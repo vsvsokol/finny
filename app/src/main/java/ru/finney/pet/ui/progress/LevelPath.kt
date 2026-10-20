@@ -69,11 +69,19 @@ data class CurrentLevel(
     val goal: GoalProgress?,
 )
 
-internal fun levelNodes(game: Game, content: GameContent, state: GameState, character: PetCharacter? = null): List<LevelNode> {
+internal fun levelNodes(
+    game: Game,
+    content: GameContent,
+    state: GameState,
+    character: PetCharacter? = null,
+    // Главному нужны только узлы мини-дорожки: остальные не собираем.
+    levels: IntRange = 1..content.economy.maxLevel,
+): List<LevelNode> {
     val current = game.level(state)
     // Период играли на уровне, который был до него: проигранный период уровень не двигает.
-    val played = state.periods.filter { it.result != null }.groupBy { game.levelAfter(state, it.number - 1) }
-    return (1..content.economy.maxLevel).map { level ->
+    val levelOf = game.levelsPlayed(state)
+    val played = state.periods.filter { it.result != null }.groupBy { levelOf.getValue(it.number) }
+    return levels.map { level ->
         val periods = played[level].orEmpty()
         val passed = periods.firstOrNull { game.isPassed(it) == true }
         val status = when {

@@ -475,7 +475,10 @@ class HomeViewModel(
             title = game.title(state),
             upcoming = homeUnlocks(game, content, state, saved.profile.appearance.character),
             newPlaces = newPlaces(level, state.isDemo, saved.profile.appearance.character),
-            path = miniPathWindow(ru.finney.pet.ui.progress.levelNodes(game, content, state, saved.profile.appearance.character)),
+            path = ru.finney.pet.ui.progress.levelNodes(
+                game, content, state, saved.profile.appearance.character,
+                levels = miniPathLevels(level, content.economy.maxLevel),
+            ),
             upcomingFood = content.forSale.filter { it.effect.satiety > 0 && !game.isUnlocked(state, it) }
                 .minByOrNull { it.unlockLevel },
             check = check,
