@@ -9,9 +9,7 @@ import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.ImageShader
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.ShaderBrush
-import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -50,7 +48,7 @@ fun partIcon(part: PlanPart): FinneyIcons = when (part) {
 /** Сторона плитки узора в dp: узор повторяется ею во все стороны. */
 private fun tileSide(part: PlanPart): Float = when (part) {
     PlanPart.NEEDS -> 22f
-    PlanPart.WANTS -> 28f
+    PlanPart.WANTS -> 24f
     PlanPart.SAVINGS -> 20f
 }
 
@@ -91,31 +89,23 @@ private fun DrawScope.drawGingham(k: Float) {
     drawRect(band, size = Size(22f * k, 11f * k))
 }
 
-// Конфетти: две ленточки, кружок и треугольник — кремовые и жёлтые с тонким контуром.
+// Конфетти с доски «2 · клетка · конфетти · монетки», в 1.3 раза крупнее: без контуров —
+// кремовая и синяя ленточки, жёлтый и кремовый кружки. Координаты — как на доске (плитка 18).
 private fun DrawScope.drawConfetti(k: Float) {
-    val line = Stroke(1f * k, join = StrokeJoin.Round)
+    val m = k * ConfettiScale
     drawRect(FinneyPeach)
-    ribbon(FinneyCream, x = 3f, y = 5f, angle = 30f, k = k, line = line)
-    ribbon(FinneyYellow, x = 15f, y = 17f, angle = -35f, k = k, line = line)
-    drawCircle(FinneyCream, 2.6f * k, Offset(22f * k, 6f * k))
-    drawCircle(FinneyInk, 2.6f * k, Offset(22f * k, 6f * k), style = line)
-    val triangle = Path().apply {
-        moveTo(6f * k, 19f * k)
-        lineTo(8.6f * k, 23.2f * k)
-        lineTo(3.4f * k, 23.2f * k)
-        close()
-    }
-    drawPath(triangle, FinneyYellow)
-    drawPath(triangle, FinneyInk, style = line)
+    ribbon(FinneyCream, x = 2f, y = 3f, angle = 30f, m = m)
+    ribbon(FinneyInk.copy(alpha = 0.5f), x = 10f, y = 11f, angle = -35f, m = m)
+    drawCircle(FinneyYellow, 1.6f * m, Offset(14f * m, 4f * m))
+    drawCircle(FinneyCream, 1.6f * m, Offset(4.5f * m, 13.5f * m))
 }
 
-private fun DrawScope.ribbon(fill: Color, x: Float, y: Float, angle: Float, k: Float, line: Stroke) {
-    val topLeft = Offset(x * k, y * k)
-    val size = Size(10f * k, 3.6f * k)
-    val corner = CornerRadius(1.8f * k)
-    rotate(angle, pivot = Offset((x + 5f) * k, (y + 1.8f) * k)) {
-        drawRoundRect(fill, topLeft, size, corner)
-        drawRoundRect(FinneyInk, topLeft, size, corner, style = line)
+/** Во сколько раз конфетти крупнее, чем на доске: плитка 18 → 24 dp. */
+private const val ConfettiScale = 24f / 18f
+
+private fun DrawScope.ribbon(fill: Color, x: Float, y: Float, angle: Float, m: Float) {
+    rotate(angle, pivot = Offset((x + 3f) * m, (y + 1.1f) * m)) {
+        drawRoundRect(fill, Offset(x * m, y * m), Size(6f * m, 2.2f * m), CornerRadius(1f * m))
     }
 }
 
