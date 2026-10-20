@@ -178,7 +178,7 @@ private fun StarsBeat(state: PeriodResultUiState.Ready, nextLabel: String, onNex
         var n = 0
         tiles.forEachIndexed { i, t ->
             if (!t.done) return@forEachIndexed
-            sounds.play(Sfx.Coin, 1f + 0.12f * n++)
+            sounds.play(Sfx.Star, 1f + 0.12f * n++)
             lit[i].animateTo(1f, spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMediumLow))
             delay(160)
         }
@@ -331,7 +331,7 @@ private fun GrowBeat(state: PeriodResultUiState.Ready, nextLabel: String, onNext
         // Силуэт проявляется быстро: на полпути видно и питомца, и обводку — кадр мутный.
         glow.animateTo(1f, tween(120))
         pulse.animateTo(1.07f, tween(180)); pulse.animateTo(1f, tween(160)); pulse.animateTo(1.12f, tween(220))
-        sounds.play(Sfx.LevelUp)
+        sounds.play(Sfx.Grow)
         launch { flash.animateTo(1f, tween(120)); flash.animateTo(0f, tween(420)) }
         stage = state.stageAfter
         launch { pulse.animateTo(1f, spring(dampingRatio = 0.4f, stiffness = Spring.StiffnessMediumLow)) }
@@ -608,7 +608,7 @@ private fun NewBeat(state: PeriodResultUiState.Ready, nextLabel: String, onNext:
         if (!motionEnabled()) { appear.forEach { it.snapTo(1f) }; return@LaunchedEffect }
         delay(350)
         appear.forEachIndexed { i, a ->
-            sounds.play(Sfx.Coin, 1.2f + 0.1f * i)
+            sounds.play(if (i == 0) Sfx.NewThing else Sfx.Tap)
             launch { a.animateTo(1f, spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessMediumLow)) }
             delay(420)
         }

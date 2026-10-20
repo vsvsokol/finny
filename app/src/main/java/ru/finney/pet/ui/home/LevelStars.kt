@@ -70,10 +70,10 @@ internal fun LevelStars(
             flights.add(flight)
             launch {
                 kotlinx.coroutines.delay(i * 250L)
-                sounds.play(Sfx.Correct)
+                sounds.play(Sfx.Whoosh)
                 flight.animateTo(1f, tween(900, easing = FastOutSlowInEasing))
                 flights.remove(flight)
-                sounds.play(Sfx.Coin, 1.3f)
+                sounds.play(Sfx.Star)
                 arrive()
             }
         }

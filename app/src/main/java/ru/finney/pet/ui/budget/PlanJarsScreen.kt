@@ -324,8 +324,21 @@ private fun PlanJarColumn(
     val scope = rememberCoroutineScope()
     LaunchedEffect(sealed) {
         if (sealed && lid.value < 1f) {
-            if (animations) { delay(sealDelay.toLong()); lid.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMedium)) }
-            else lid.snapTo(1f)
+            if (animations) {
+                delay(sealDelay.toLong())
+                var sounded = false
+                lid.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMedium)) {
+                    // Клинк при первом касании банки, без повторов на отскоках пружины.
+                    if (!sounded && this.value >= 1f) {
+                        sounds.play(Sfx.JarLid)
+                        sounded = true
+                    }
+                }
+            } else {
+                lid.snapTo(1f)
+                delay(sealDelay.toLong())
+                sounds.play(Sfx.JarLid)
+            }
         }
     }
     val add: (Int) -> Boolean = { n ->

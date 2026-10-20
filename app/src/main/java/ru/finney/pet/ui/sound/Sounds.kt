@@ -111,7 +111,7 @@ class SoundPlayer(
         .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
         .build()
 
-    // Грузится всё сразу: эффекты мелкие, вместе меньше 200 КБ.
+    // Короткие эффекты грузятся заранее, чтобы совпадать с действием на экране.
     private val ids: Map<Sfx, Int> = Sfx.entries.associateWith { pool.load(app, it.res, 1) }
 
     override val settings: StateFlow<SoundSettings> =
