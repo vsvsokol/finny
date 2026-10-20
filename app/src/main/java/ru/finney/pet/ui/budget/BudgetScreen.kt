@@ -615,7 +615,9 @@ internal fun ActiveContent(state: BudgetUiState.Active, onBack: () -> Unit,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.semantics(mergeDescendants = true) {},
             ) {
-                OutlinedText("Уровень", style = MaterialTheme.typography.titleLarge)
+                // Отступ под контур: он выходит за букву, а прокрутка экрана режет всё по своему краю —
+                // у «У» срезало левый бок.
+                OutlinedText("Уровень", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 4.dp))
                 LevelBadge(level = state.level, size = 44.dp)
             }
             // Монетка с числом в плашке, как кошелёк на главном: так видно, что это деньги сейчас.

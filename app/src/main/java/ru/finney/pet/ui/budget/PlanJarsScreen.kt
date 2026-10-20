@@ -71,6 +71,7 @@ import ru.finney.pet.ui.components.FinneyScreen
 import ru.finney.pet.ui.components.FinniHead
 import ru.finney.pet.ui.components.FinniSays
 import ru.finney.pet.ui.components.OutlinedText
+import ru.finney.pet.ui.components.PlanJarShape
 import ru.finney.pet.ui.components.PlanPart
 import ru.finney.pet.ui.components.buttonFill
 import ru.finney.pet.ui.components.partIcon
@@ -430,8 +431,8 @@ private fun PlanJarColumn(
     }
 }
 
-/** Форма банки: скругление сверху шире, чем снизу, — горлышко. */
-private val JarShape = RoundedCornerShape(topStart = 40.dp, topEnd = 40.dp, bottomStart = 26.dp, bottomEnd = 26.dp)
+/** Форма банки — общая с «План и факт» ([PlanJarShape]). */
+private val JarShape = PlanJarShape
 
 /**
  * Заливка узором части снизу на [shown] высоты, сверху — ровная линия уровня. Узор

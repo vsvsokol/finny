@@ -3,6 +3,7 @@ package ru.finney.pet.ui.room
 import ru.finney.pet.ui.motion.motionEnabled
 import ru.finney.pet.ui.motion.LocalAnimations
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationSpec
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -118,6 +119,9 @@ private const val LEAP_OVERSHOOT = 0.02f
  * Так на концепте игровой (20.10): шар виден целиком, край стойки чуть срезан.
  */
 private const val PLAY_LAMP_PEEK = 0.04f
+
+/** За сколько камера выбора интерьера возвращается: столько же уезжает панель выбора (HomeScreen). */
+private const val FOCUS_RETURN_MS = 250
 
 /**
  * Прогулка по игровой: раз в несколько секунд питомец сам скачет в случайное место.
@@ -263,11 +267,13 @@ private val UfoPauseMs = 20_000L..45_000L
  *   с анимацией: стену прокатывает валик, окно схлопывается и раскрывается, торшер
  *   падает сверху и мигает, включаясь.
  * @param focus что показать крупно, пока выбирают интерьер ([focusOf]); null — обычный вид.
- * @param focusPet показать крупно питомца в спальне. Важнее [focus].
+ * @param focusPet показать крупно питомца там, где он стоит. Важнее [focus].
  * @param focusRug показать крупно ковёр игровой. Его место знает только сцена: оно
  *   зависит от ширины экрана (RoomRugs.kt). Важнее [focus].
  * @param focusBottom сколько снизу закрыто панелью выбора: часть [focus] встаёт
  *   посередине того, что над ней осталось.
+ * @param focusSolid сколько снизу панель закрывает сплошь. Над этим краем низ холста
+ *   подниматься не может: между кнопками над рамкой и в её углах видно, что за панелью.
  */
 @Composable
 fun RoomScene(
@@ -292,6 +298,7 @@ fun RoomScene(
     focusPet: Boolean = false,
     focusRug: Boolean = false,
     focusBottom: Dp = 0.dp,
+    focusSolid: Dp = focusBottom,
     pet: @Composable BoxScope.() -> Unit = {},
 ) {
     // Где питомец в игровой сейчас: сдвиг от его обычного места, доля ширины холста.
@@ -552,30 +559,49 @@ fun RoomScene(
         // Камера выбора интерьера: выбранная часть крупно над панелью выбора.
         // Масштаб не меньше «холст во всю ширину» и сдвиг зажат, как у камеры сна:
         // за краем холста пусто, и показывать это нельзя.
+        //
+        // В игровой холст отражён: стена, окно и торшер стоят зеркально, и их рамки
+        // отражаются той же осью, а края, за которые не заглядывать, — края отражённого холста.
+        val play = spot == RoomSpot.PLAY
         val edit = with(density) {
             val rug = rugRect(toyFloor, interior.rug).mirrored(mirrorAxis)
-            val target = (if (focusPet) Room.petGround(RoomSpot.LIVING) else if (focusRug) rug else focus)?.let { rect ->
+            val pet = if (play) Room.petGround(RoomSpot.PLAY).shiftedX(stroll.value).mirrored(mirrorAxis) else Room.petGround(spot)
+            val part = if (play) focus?.mirrored(mirrorAxis) else focus
+            val target = (if (focusPet) pet else if (focusRug) rug else part)?.let { rect ->
                 val w = maxWidth.toPx()
                 val h = (maxHeight - focusBottom).toPx().coerceAtLeast(1f)
-                val left = shiftX.toPx()
-                val top = shiftY.toPx()
+                val floor = (maxHeight - focusSolid).toPx()
                 val cw = canvasW.toPx()
                 val ch = canvasH.toPx()
+                val left = shiftX.toPx() + if (play) cw * (2f * mirrorAxis - 1f) else 0f
+                val top = shiftY.toPx()
                 val pad = FOCUS_PAD.toPx()
                 val rw = cw * rect.width
                 val rh = ch * rect.height
                 val s = minOf((w - 2 * pad) / rw, (h - 2 * pad) / rh, FOCUS_MAX_ZOOM).coerceAtLeast(w / cw)
-                val cx = left + cw * (rect.left + rect.width / 2f)
+                val cx = shiftX.toPx() + cw * (rect.left + rect.width / 2f)
                 val cy = top + ch * (rect.top + rect.height / 2f)
                 val x = (w / 2f - s * cx).coerceIn(minOf(w - s * (left + cw), -s * left), -s * left)
-                val y = (h / 2f - s * cy).coerceIn(minOf(h - s * (top + ch), -s * top), -s * top)
+                val y = (h / 2f - s * cy).coerceIn(minOf(floor - s * (top + ch), -s * top), -s * top)
                 Triple(s, x, y)
-            } ?: Triple(1f, 0f, 0f)
-            val spec = if (animations) spring<Float>(dampingRatio = 0.8f, stiffness = Spring.StiffnessVeryLow) else snap()
+            }
+            // Без перелёта: масштаб и сдвиг идут одной кривой, и по дороге край холста
+            // не отходит от края экрана. С пружиной 0.8 они расходились — проглядывал фон.
+            //
+            // Низ холста при выборе может стоять выше низа экрана — его закрывает панель. Панель
+            // уезжает за 250 мс (HomeScreen), а камера отъезжала пружиной дольше секунды, и
+            // под уехавшей панелью был виден кремовый фон. Поэтому назад — за то же время и
+            // кривой, что не отстаёт от панели: низ холста всё время ниже её верха.
+            val spec: AnimationSpec<Float> = when {
+                !animations -> snap()
+                target == null -> tween(FOCUS_RETURN_MS, easing = LinearOutSlowInEasing)
+                else -> spring(dampingRatio = 1f, stiffness = Spring.StiffnessVeryLow)
+            }
+            val goal = target ?: Triple(1f, 0f, 0f)
             Triple(
-                animateFloatAsState(target.first, spec, label = "focusScale"),
-                animateFloatAsState(target.second, spec, label = "focusX"),
-                animateFloatAsState(target.third, spec, label = "focusY"),
+                animateFloatAsState(goal.first, spec, label = "focusScale"),
+                animateFloatAsState(goal.second, spec, label = "focusX"),
+                animateFloatAsState(goal.third, spec, label = "focusY"),
             )
         }
 
@@ -958,7 +984,7 @@ internal fun Window(window: WindowSkin, canvasW: Dp, canvasH: Dp, flyer: WindowF
     val life = window.life
     val lifeImages = when (life) {
         is WindowLife.Flyer -> listOf(life.layer)
-        is WindowLife.Wheel -> listOf(life.wheel, life.stand) + life.cabins
+        is WindowLife.Wheel -> listOf(life.wheel, life.stand) + life.cabins.map { it.layer }
         is WindowLife.Twinkle -> listOf(life.layer)
         null -> emptyList()
     }.map { ImageBitmap.imageResource(it.image) }
@@ -1023,11 +1049,15 @@ internal fun Window(window: WindowSkin, canvasW: Dp, canvasH: Dp, flyer: WindowF
                         val cos = cos(radians)
                         val sin = sin(radians)
                         life.cabins.forEachIndexed { i, cabin ->
-                            val r = cabin.rect
-                            val hang = Offset(((r.left + r.right) / 2f - hole.left) * unit.width, (r.top - hole.top) * unit.height) - hub
+                            val r = cabin.layer.rect
+                            val attachment = cabin.attachment
+                            // Обод и подвес вращаются вокруг одной оси в пикселях:
+                            // доли ширины и высоты у портретного холста различаются.
+                            val hang = Offset((attachment.x - hole.left) * unit.width, (attachment.y - hole.top) * unit.height) - hub
                             val moved = Offset(hang.x * cos - hang.y * sin, hang.x * sin + hang.y * cos)
+                            val at = Offset(attachment.x - r.width / 2f, attachment.y)
                             translate(moved.x - hang.x, moved.y - hang.y) {
-                                drawRoomImage(lifeImages[2 + i], r, hole, unit, blend = BlendMode.SrcAtop)
+                                drawRoomImage(lifeImages[2 + i], r, hole, unit, at = at, blend = BlendMode.SrcAtop)
                             }
                         }
                     }

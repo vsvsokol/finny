@@ -58,7 +58,7 @@ internal fun goalCompletedFeedback(game: Game, content: GameContent, before: Gam
         "Выбери новую цель в копилке."
     }
     return ActionFeedback(
-        title = "${goal?.label ?: "Цель"} — твоя!",
+        title = "Награда получена!",
         lines = changesBetween(before, after),
         why = buildList {
             add(when {

@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -46,9 +47,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import ru.finney.pet.R
-import ru.finney.pet.ui.components.FinneyIcon
-import ru.finney.pet.ui.components.FinneyIcons
 import ru.finney.pet.ui.components.OutlinedText
 import ru.finney.pet.ui.components.SpeechLeadColor
 import ru.finney.pet.ui.motion.LocalAnimations
@@ -88,7 +86,8 @@ internal fun MiniPath(nodes: List<LevelNode>, onOpen: () -> Unit, modifier: Modi
             .clickable(onClickLabel = "Открыть «Мой путь»", onClick = onOpen)
             .padding(top = 14.dp, bottom = 34.dp),
     ) {
-        BoxWithConstraints(Modifier.fillMaxWidth().height(AreaHeight)) {
+        // Поля по бокам: у крайнего узла подарок и «ты здесь» шире своего столбца и иначе срезались рамкой.
+        BoxWithConstraints(Modifier.fillMaxWidth().padding(horizontal = 10.dp).height(AreaHeight)) {
             val n = nodes.size
             val slot = maxWidth / n
             fun centerX(i: Int): Dp = slot * i + slot / 2
@@ -129,7 +128,8 @@ internal fun MiniPath(nodes: List<LevelNode>, onOpen: () -> Unit, modifier: Modi
                         NodeStatus.DONE -> Row(horizontalArrangement = Arrangement.spacedBy((-3).dp)) {
                             repeat(3) { Star(filled = it < node.stars, modifier = Modifier.size(17.dp)) }
                         }
-                        NodeStatus.CURRENT -> Text("ты здесь", style = MaterialTheme.typography.bodyLarge, color = SpeechLeadColor, textAlign = TextAlign.Center)
+                        NodeStatus.CURRENT -> Text("ты здесь", style = MaterialTheme.typography.bodyLarge, color = SpeechLeadColor,
+                            textAlign = TextAlign.Center, maxLines = 1, softWrap = false, modifier = Modifier.wrapContentWidth(unbounded = true))
                         NodeStatus.FUTURE -> Unit
                     }
                 }
@@ -185,8 +185,8 @@ private fun MiniNode(node: LevelNode, size: Dp) {
                 NodeStatus.FUTURE -> Text("${node.level}", style = MaterialTheme.typography.titleLarge, color = FinneyInk.copy(alpha = 0.55f))
             }
         }
-        if (node.status == NodeStatus.FUTURE) node.chips.firstOrNull()?.let {
-            Gift(it, Modifier.align(Alignment.TopEnd).offset(x = 10.dp, y = (-12).dp))
+        if (node.status == NodeStatus.FUTURE) reward(node)?.let {
+            Gift(it, Modifier.align(Alignment.TopEnd).offset(x = 6.dp, y = (-12).dp))
         }
     }
 }
@@ -201,7 +201,14 @@ private fun Modifier.dashedCircle(): Modifier = drawBehind {
     )
 }
 
-/** Что откроется — в белом кружке у узла: вещь или цель рисунком, игра значком игр, звание кубком. */
+/**
+ * Награда впереди — то, ради чего идти: вещь цели, иначе вещь магазина. Игры и звания
+ * у узла не рисуем: геймпад на каждом втором узле ничего не обещал (разбор 20.10).
+ */
+private fun reward(node: LevelNode): UnlockChip? =
+    node.chips.firstOrNull { it.art != null && it.label.startsWith("Цель") } ?: node.chips.firstOrNull { it.art != null }
+
+/** Награда в белом кружке у узла — рисунком самой вещи. */
 @Composable
 private fun Gift(chip: UnlockChip, modifier: Modifier = Modifier) {
     Box(
@@ -213,19 +220,14 @@ private fun Gift(chip: UnlockChip, modifier: Modifier = Modifier) {
             .semantics { contentDescription = chip.label },
         contentAlignment = Alignment.Center,
     ) {
-        val art = chip.art ?: if (!chip.label.startsWith("Звание")) R.drawable.ic_level_game else null
-        if (art != null) {
-            Image(painterResource(art), contentDescription = null, modifier = Modifier.size(26.dp))
-        } else {
-            FinneyIcon(chip.icon ?: FinneyIcons.Trophy, size = 26.dp)
-        }
+        chip.art?.let { Image(painterResource(it), contentDescription = null, modifier = Modifier.size(26.dp)) }
     }
 }
 
 private fun spoken(node: LevelNode): String = when (node.status) {
     NodeStatus.DONE -> "Уровень ${node.level} пройден, звёзд: ${node.stars}"
     NodeStatus.CURRENT -> "Уровень ${node.level}, ты здесь"
-    NodeStatus.FUTURE -> "Уровень ${node.level} впереди" + (node.chips.firstOrNull()?.let { ": ${it.label}" } ?: "")
+    NodeStatus.FUTURE -> "Уровень ${node.level} впереди" + (reward(node)?.let { ": ${it.label}" } ?: "")
 }
 
 private fun nodeSize(node: LevelNode): Dp = if (node.status == NodeStatus.CURRENT) CurrentSize else NodeSize
