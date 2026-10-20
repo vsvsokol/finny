@@ -8,6 +8,15 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.lerp
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -159,9 +168,10 @@ internal fun CategoryChip(category: Category, modifier: Modifier = Modifier) {
 }
 
 /**
- * Монета с номиналом — жёлтый кружок с цифрой, как «1» в ките. Отличается от
- * монеты игровой валюты: на кассе важен номинал, а не значок финки.
- * Номинал подписан цифрой, цвет — только помощь глазу.
+ * Монета с номиналом: ободок с насечкой, блик и цифра. Отличается от монеты
+ * игровой валюты: на кассе важен номинал, а не значок финки. Номинал подписан
+ * цифрой, цвет — только помощь глазу. Плоский кружок с цифрой на плейтесте 20.10
+ * на монету не походил, поэтому края и блик.
  */
 @Composable
 internal fun DenominationCoin(
@@ -170,26 +180,60 @@ internal fun DenominationCoin(
     size: Dp = 52.dp,
     faded: Boolean = false,
 ) {
-    val fill = when (value) {
-        1 -> FinneyYellow
-        2 -> FinneyBlue
-        5 -> FinneyPeach
+    val fill = when {
+        faded -> FinneySand
+        value == 1 -> FinneyYellow
+        value == 2 -> FinneyBlue
+        value == 5 -> FinneyPeach
         else -> FinneyGreen
     }
+    val ink = if (faded) FinneyInk.copy(alpha = 0.35f) else FinneyInk
     Box(
         modifier = modifier
             .size(size)
-            .clip(CircleShape)
-            .background(if (faded) FinneySand else fill)
-            .border(StrokeRegular, if (faded) FinneyInk.copy(alpha = 0.35f) else FinneyInk, CircleShape)
             .clearAndSetSemantics { contentDescription = "монета $value" },
         contentAlignment = Alignment.Center,
     ) {
+        Canvas(Modifier.fillMaxSize()) {
+            val r = this.size.minDimension / 2f
+            val c = center
+            val edge = lerp(fill, FinneyInk, 0.22f)
+            // Ободок с насечкой, как гурт у настоящей монеты. Насечек столько же при любом
+            // размере, поэтому мелкая сдача в чеке и крупная монета в ящике — одна монета.
+            drawCircle(edge, r * 0.97f, c)
+            drawCircle(ink, r * 0.97f, c, style = Stroke(1.5.dp.toPx()))
+            val notch = lerp(fill, FinneyInk, 0.5f)
+            val notches = 36
+            for (i in 0 until notches) {
+                val a = (2 * PI * i / notches).toFloat()
+                val dx = cos(a)
+                val dy = sin(a)
+                drawLine(
+                    notch,
+                    Offset(c.x + r * 0.84f * dx, c.y + r * 0.84f * dy),
+                    Offset(c.x + r * 0.93f * dx, c.y + r * 0.93f * dy),
+                    strokeWidth = (r * 0.05f).coerceAtLeast(1f),
+                    cap = StrokeCap.Round,
+                )
+            }
+            // Лицо монеты и тонкий ободок внутри.
+            drawCircle(fill, r * 0.80f, c)
+            drawCircle(ink, r * 0.80f, c, style = Stroke(1.5.dp.toPx()))
+            drawCircle(edge, r * 0.68f, c, style = Stroke(1.2.dp.toPx()))
+            // Блик сверху слева — монета выпуклая, а не плоская.
+            if (!faded) drawArc(
+                Color.White.copy(alpha = 0.7f),
+                startAngle = 200f, sweepAngle = 60f, useCenter = false,
+                topLeft = Offset(c.x - r * 0.58f, c.y - r * 0.58f),
+                size = Size(r * 1.16f, r * 1.16f),
+                style = Stroke(r * 0.09f, cap = StrokeCap.Round),
+            )
+        }
         OutlinedText(
             value.toString(),
-            style = MaterialTheme.typography.titleLarge.copy(fontSize = (size.value * 0.42f).sp),
+            style = MaterialTheme.typography.titleLarge.copy(fontSize = (size.value * 0.40f).sp),
             fill = if (faded) FinneySand else FinneyCream,
-            outline = if (faded) FinneyInk.copy(alpha = 0.35f) else FinneyInk,
+            outline = ink,
         )
     }
 }
