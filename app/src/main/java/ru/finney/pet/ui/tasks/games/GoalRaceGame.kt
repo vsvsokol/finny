@@ -40,6 +40,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
@@ -153,11 +155,22 @@ internal fun GoalRaceGame(
                 )
             },
         ) {
-            Road(task, deposits, day, character, sad = mood == 0, pet = pet)
-            // Пока выбирают соблазн, в банке нечего показывать заранее: монеты ещё не разложены.
-            PiggyJarRow(task, saved = saved, pending = if (decided) today else 0, mood = mood, lastDeposit = deposits.lastOrNull(), depositCount = deposits.size)
-            Spacer(Modifier.weight(1f))
-            ScenePanel(title = null, modifier = Modifier.fillMaxWidth()) {
+            // Дорога занимает всё от верха до панели: высота — видимая часть минус панель
+            // и один промежуток колонки. Копилка — в нижнем углу дороги, над панелью.
+            val viewport = LocalSceneViewport.current
+            val density = LocalDensity.current
+            var panelHeight by remember { mutableStateOf(0.dp) }
+            val roadHeight = if (viewport == Dp.Unspecified) 0.dp else viewport - panelHeight - 12.dp
+            Road(task, deposits, day, character, sad = mood == 0, pet = pet, height = roadHeight) { atEnd, modifier ->
+                // Пока выбирают соблазн, в банке нечего показывать заранее: монеты ещё не разложены.
+                PiggyJarRow(
+                    task, saved = saved, pending = if (decided) today else 0, mood = mood,
+                    lastDeposit = deposits.lastOrNull(), depositCount = deposits.size, atEnd = atEnd, modifier = modifier,
+                )
+            }
+            // Высота панели — наибольшая из виденных: карточка соблазна выше ящиков, и без этого
+            // дорога прыгала бы от дня ко дню.
+            ScenePanel(title = null, modifier = Modifier.fillMaxWidth().onSizeChanged { panelHeight = maxOf(panelHeight, with(density) { it.height.toDp() }) }) {
                 // Ящики и соблазн — по очереди на одном месте. Обе карточки стоят друг на друге,
                 // высота берётся по большей: кнопки не прыгают, когда одна сменяет другую.
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -169,11 +182,13 @@ internal fun GoalRaceGame(
                         onPiggy = { split(today + task.step) },
                         onJoy = { split(today - task.step) },
                     )
-                    event?.let {
+                    // В день без соблазна — невидимая карточка первого соблазна: панель с первого
+                    // дня той же высоты, и дорога над ней не прыгает, когда соблазн появится.
+                    (event ?: task.events.firstOrNull())?.let {
                         EventCard(
                             task = task,
                             event = it,
-                            shown = !decided,
+                            shown = event != null && !decided,
                             moodCounts = mood > 0,
                             onBuy = { split((task.incomePerDay - it.price) / task.step * task.step) },
                             onSkip = { split(task.incomePerDay) },
@@ -488,7 +503,17 @@ private fun ChoiceButton(
  * Финни: отдельная шкала сердечек дублировала его и занимала строку.
  */
 @Composable
-private fun PiggyJarRow(task: GoalRaceTask, saved: Int, pending: Int, mood: Int, lastDeposit: Int?, depositCount: Int) {
+private fun PiggyJarRow(
+    task: GoalRaceTask,
+    saved: Int,
+    pending: Int,
+    mood: Int,
+    lastDeposit: Int?,
+    depositCount: Int,
+    /** Банка у правого края: число слева от неё, а не справа. */
+    atEnd: Boolean,
+    modifier: Modifier = Modifier,
+) {
     val feeling = when {
         mood == 0 -> "Финни грустит"
         mood < task.mood -> "Финни спокоен"
@@ -496,16 +521,16 @@ private fun PiggyJarRow(task: GoalRaceTask, saved: Int, pending: Int, mood: Int,
     }
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clearAndSetSemantics { contentDescription = "В копилке $saved из ${task.goal.price}. $feeling" },
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = modifier.clearAndSetSemantics { contentDescription = "В копилке $saved из ${task.goal.price}. $feeling" },
     ) {
+        val sum = @Composable { OutlinedText("$saved / ${task.goal.price}", style = MaterialTheme.typography.headlineMedium) }
+        if (atEnd) sum()
         Box(contentAlignment = Alignment.TopCenter) {
             PiggyJar(saved = saved, pending = pending, price = task.goal.price, mood = mood, maxMood = task.mood)
             DepositPop(lastDeposit, depositCount)
         }
-        OutlinedText("$saved / ${task.goal.price}", style = MaterialTheme.typography.headlineMedium)
+        if (!atEnd) sum()
     }
 }
 
@@ -609,37 +634,66 @@ private fun DrawScope.drawJarFace(top: Float, mood: Int, maxMood: Int) {
 }
 
 /**
- * Дорога зигзагом: кружки дней по очереди выше и ниже, над текущим — фишка-питомец,
- * под днями с соблазном — его картинка (видно заранее, где будет трудно), на финише —
- * цель с ценой. Прошлый соблазн, от которого отказались, бледнеет. Одной строкой
- * дорога была узкой полосой, и под ней пустовал экран (плейтест 20.10); зигзагом
- * кружки и фишка крупнее, а соседние дни не налезают друг на друга.
+ * Дорога змейкой по рядам: по три дня в ряд, на краях разворот дугой, как на поле
+ * настольной игры. Над текущим днём — фишка-питомец, под днями с соблазном — его
+ * картинка (видно заранее, где будет трудно), последняя клетка — цель с ценой.
+ * Прошлый соблазн, от которого отказались, бледнеет.
+ *
+ * Дорога занимает всё место от верха до панели (плейтест 20.10: зигзаг в одну строку
+ * оставлял пустым полэкрана). Копилка [jar] — в нижнем углу, где дальше от дороги.
+ * Не хватает места — дорога не сжимается меньше [minRoadHeight], экран прокручивается.
  */
 @Composable
-private fun Road(task: GoalRaceTask, deposits: List<Int>, day: Int, character: PetCharacter, sad: Boolean, pet: PetReactions) {
+private fun Road(
+    task: GoalRaceTask,
+    deposits: List<Int>,
+    day: Int,
+    character: PetCharacter,
+    sad: Boolean,
+    pet: PetReactions,
+    height: Dp,
+    jar: @Composable (atEnd: Boolean, modifier: Modifier) -> Unit,
+) {
+    val cells = task.days + 1
+    val rows = (cells + RoadColumns - 1) / RoadColumns
     BoxWithConstraints(
         Modifier
             .fillMaxWidth()
-            .height(RoadHeight)
+            .height(maxOf(height, minRoadHeight(rows)))
             .semantics { contentDescription = "День $day из ${task.days}" },
     ) {
-        val goalSlot = 64.dp
-        val stepX = (maxWidth - goalSlot) / task.days
-        // Соседние дни разведены по высоте на ZigZag, поэтому кружок ограничен шагом через день.
-        val circle = (stepX * 2 - 8.dp).coerceIn(30.dp, 48.dp)
-        // Фишка — голова питомца; низ головы — около 0.92 квадрата, шляпа почти до верха.
-        val token = 96.dp
+        val circle = DayCircle
+        val token = RoadToken
         val top = token * 0.9f + circle / 2
-        fun cx(i: Int): Dp = stepX * i + stepX / 2
-        fun cy(i: Int): Dp = if (i % 2 == 0) top else top + ZigZag
-        val goalX = maxWidth - goalSlot / 2
-        val goalY = top + ZigZag / 2
+        // Неполный последний ряд оставляет угол свободным — там копилка, и ряды тянутся до низа.
+        // Полный — копилка под ним, в своей полосе.
+        val inLast = cells - RoadColumns * (rows - 1)
+        val freeCorner = inLast < RoadColumns
+        val lastRowLeftToRight = (rows - 1) % 2 == 0
+        val bottom = maxHeight - circle / 2 - 2.dp - EventIcon - if (freeCorner) 0.dp else JarHeight + 8.dp
+        val step = if (rows > 1) (bottom - top) / (rows - 1) else 0.dp
+        fun col(i: Int): Int = (i % RoadColumns).let { c -> if ((i / RoadColumns) % 2 == 0) c else RoadColumns - 1 - c }
+        fun cx(i: Int): Dp = maxWidth * RoadXs[col(i)]
+        fun cy(i: Int): Dp = top + step * (i / RoadColumns)
+        val goal = cells - 1
 
         Canvas(Modifier.fillMaxSize()) {
+            val bend = maxWidth.toPx() * 0.16f
             val path = Path().apply {
                 moveTo(cx(0).toPx(), cy(0).toPx())
-                for (i in 1 until task.days) lineTo(cx(i).toPx(), cy(i).toPx())
-                lineTo(goalX.toPx(), goalY.toPx())
+                for (i in 1..goal) {
+                    val ax = cx(i - 1).toPx()
+                    val ay = cy(i - 1).toPx()
+                    val bx = cx(i).toPx()
+                    val by = cy(i).toPx()
+                    if (ay == by) {
+                        lineTo(bx, by)
+                    } else {
+                        // Разворот на краю: дуга наружу, к краю экрана.
+                        val out = if (ax > maxWidth.toPx() / 2) bend else -bend
+                        cubicTo(ax + out, ay, bx + out, by, bx, by)
+                    }
+                }
             }
             drawPath(path, FinneyCream, style = Stroke(12.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
             drawPath(
@@ -663,24 +717,38 @@ private fun Road(task: GoalRaceTask, deposits: List<Int>, day: Int, character: P
             ) {
                 Text(d.toString(), style = MaterialTheme.typography.titleMedium, color = FinneyInk)
             }
-            // Картинка соблазна — под кружком: у верхнего там развилка дороги, у нижнего — пусто.
+            // Картинка соблазна — под кружком, чуть к середине экрана: у края она уходила бы за него.
             task.events.firstOrNull { it.day == d }?.let { event ->
                 val refused = d < day && deposits.getOrNull(d - 1)?.let { !TaskEngines.raceTaken(task, event, it) } == true
+                val nudge = if (x < maxWidth / 2) 10.dp else (-10).dp
                 ItemPicture(
                     event,
                     event.label,
-                    28.dp,
-                    Modifier.offset(x - 14.dp, y + circle / 2 + 2.dp).alpha(if (refused) 0.35f else 1f),
+                    EventIcon,
+                    Modifier.offset(x - EventIcon / 2 + nudge, y + circle / 2 + 2.dp).alpha(if (refused) 0.35f else 1f),
                 )
             }
         }
 
-        Column(Modifier.offset(goalX - goalSlot / 2, goalY - 30.dp).width(goalSlot), horizontalAlignment = Alignment.CenterHorizontally) {
-            ItemPicture(task.goal, task.goal.label, 48.dp)
+        Column(
+            Modifier.offset(cx(goal) - GoalSlot / 2, cy(goal) - 40.dp).width(GoalSlot),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            ItemPicture(task.goal, task.goal.label, 56.dp)
             PriceTag(task.goal.price.toString())
         }
 
-        // Фишка переходит на следующий день плавно, а не прыжком, — и вверх-вниз по зигзагу.
+        // Копилка — в том нижнем углу, где дальше всего до дней и цели последних рядов.
+        val jarY = maxHeight - JarHeight / 2
+        fun clearance(x: Dp): Dp = (0..goal).minOf { i ->
+            val dx = (cx(i) - x).value
+            val dy = (cy(i) - jarY).value
+            kotlin.math.sqrt(dx * dx + dy * dy).dp
+        }
+        val atEnd = if (freeCorner) lastRowLeftToRight else clearance(maxWidth - 40.dp) > clearance(40.dp)
+        jar(atEnd, Modifier.align(if (atEnd) Alignment.BottomEnd else Alignment.BottomStart))
+
+        // Фишка переходит на следующий день плавно, а не прыжком, — и по ряду, и вниз на разворотах.
         val now = (day - 1).coerceIn(0, task.days - 1)
         val hereX by animateDpAsState(cx(now), tween(500), label = "tokenX")
         val hereY by animateDpAsState(cy(now), tween(500), label = "tokenY")
@@ -694,11 +762,20 @@ private fun Road(task: GoalRaceTask, deposits: List<Int>, day: Int, character: P
     }
 }
 
-/** Насколько нижние дни зигзага ниже верхних. */
-private val ZigZag = 72.dp
+/** Дней в ряду змейки и где стоят их середины — доли ширины. */
+private const val RoadColumns = 3
+private val RoadXs = listOf(0.18f, 0.5f, 0.82f)
+private val DayCircle = 44.dp
+/** Фишка — голова питомца; низ головы — около 0.92 квадрата, шляпа почти до верха. */
+private val RoadToken = 96.dp
+private val EventIcon = 40.dp
+private val GoalSlot = 72.dp
+/** Банка копилки — [PiggyJar] 76 dp в высоту. */
+private val JarHeight = 76.dp
 
-/** Высота дороги: фишка над верхним кружком, зигзаг и картинка соблазна под нижним. */
-private val RoadHeight = 240.dp
+/** Меньше дорога не сжимается: ряды не ближе 76 dp, чтобы картинка соблазна не легла на следующий ряд. */
+private fun minRoadHeight(rows: Int): Dp =
+    RoadToken * 0.9f + DayCircle / 2 + 76.dp * (rows - 1) + DayCircle / 2 + 2.dp + EventIcon + 8.dp + JarHeight
 
 /** Сердечки настроения Финни: [count] горят из [max]. */
 @Composable
