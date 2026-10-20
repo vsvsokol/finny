@@ -586,7 +586,9 @@ private fun PartIntro(
                     .padding(top = 30.dp)
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(30.dp))
-                    .background(FinneyCream)
+                    // Окно — в узоре своей банки: клетка, конфетти, монетки. Ребёнок
+                    // запоминает узор здесь и потом узнаёт часть по банке.
+                    .background(rememberPartBrush(part))
                     .drawBehind {
                         // Тень по низу внутри окна — тёплая, как у окон карточки игры.
                         drawRect(Color(0xFFFBDDB4), topLeft = Offset(0f, size.height - 8.dp.toPx()), size = Size(size.width, 8.dp.toPx()))

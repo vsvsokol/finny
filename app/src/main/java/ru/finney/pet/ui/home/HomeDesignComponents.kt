@@ -67,6 +67,14 @@ import ru.finney.pet.ui.tasks.games.PillShade
 import ru.finney.pet.ui.tasks.games.insetShade
 import ru.finney.pet.ui.theme.*
 
+/**
+ * Сколько места на экране занимает любая круглая кнопка главного — с кольцом прогресса
+ * или без. Кольцо добавляет 12 % диаметра с каждой стороны, поэтому у кнопок с кольцом
+ * сам круг меньше: снаружи все кнопки одного размера, и ни одна не выглядит главнее
+ * другой. Крупнее только уровень (LevelBadgeSize в HomeScreen.kt).
+ */
+internal val HomeButtonSize = 68.dp
+
 /** Исходная основа и пиктограмма остаются отдельными слоями, кольцо показывает реальные данные. */
 @Composable
 internal fun DesignerHomeButton(
@@ -81,7 +89,7 @@ internal fun DesignerHomeButton(
     ready: Boolean = false,
     selected: Boolean = false,
     enabled: Boolean = true,
-    diameter: Dp = 56.dp,
+    diameter: Dp = if (progress != null) HomeButtonSize / 1.24f else HomeButtonSize,
     @DrawableRes goalArt: Int? = null,
     ringModifier: Modifier = Modifier,
 ) {

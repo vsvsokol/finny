@@ -124,6 +124,8 @@ data class BathShelf(
     val hygiene: Int = 0,
     /** Питомец и так чистый: мыть незачем, мыло сбережём. */
     val clean: Boolean = false,
+    /** Чистота не ниже порога нужного: для уровня мыться хватит, «совсем чистый» — по желанию. */
+    val enough: Boolean = false,
     /** Водой ещё можно сполоснуться: чистота ниже потолка воды. */
     val canRinse: Boolean = false,
     /** Шкала чистоты полная: и зубы чистить некуда. */
@@ -561,14 +563,18 @@ private fun guide(shelf: BathShelf, session: BathSession, petName: String): Bath
     val step = session.step
     // Закрытые зубы не зовём: купить щётку ещё нельзя, круг кончается на душе.
     val teethNext = !shelf.full && BathStep.TEETH !in session.done && shelf.teethLockedUntil == null
+    // Круг мыла прошли и нужное закрыто — второй раз не зовём, домыть до «совсем чистого»
+    // можно и самому. На 1-м уровне круг даёт 40 → 80 из 90, и обучение просило мыться
+    // дважды подряд (плейтест 20.10).
+    val dirty = !shelf.clean && !(shelf.enough && BathStep.RINSE in session.done)
     return when {
         step != null -> BathGuide(hint(step, petName), NoteKind.Info, null)
         session.soaped -> BathGuide("Смой пену — нажми «Душ»", NoteKind.Info, BathStep.RINSE)
         // Один круг мыла грязнулю не отмывает: прибавка за раз меньше, чем от нуля до чистого.
-        !shelf.clean && shelf.soap != null && BathStep.RINSE in session.done ->
+        dirty && shelf.soap != null && BathStep.RINSE in session.done ->
             BathGuide("Ещё не отмылся — ещё раз «Мыло»", NoteKind.Info, BathStep.SOAP)
-        !shelf.clean && shelf.soap != null -> BathGuide("Нажми «Мыло» — начнём мыть", NoteKind.Info, BathStep.SOAP)
-        !shelf.clean -> BathGuide("Мыло кончилось — купи новое", NoteKind.Warn, BathStep.SOAP)
+        dirty && shelf.soap != null -> BathGuide("Нажми «Мыло» — начнём мыть", NoteKind.Info, BathStep.SOAP)
+        dirty -> BathGuide("Мыло кончилось — купи новое", NoteKind.Warn, BathStep.SOAP)
         teethNext && shelf.hasTeeth -> BathGuide("Почисти зубы — нажми «Зубы»", NoteKind.Info, BathStep.TEETH)
         teethNext && BathStep.SOAP in session.done ->
             BathGuide("Для зубов нужны щётка и паста", NoteKind.Warn, BathStep.TEETH)
