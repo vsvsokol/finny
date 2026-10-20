@@ -187,9 +187,11 @@ internal const val DOOR_MS = 600
 
 /**
  * Сколько питомец прыгает в капсулу и обратно: приседание [HOP_CROUCH_MS]
- * и полёт по дуге.
+ * и полёт по дуге [HOP_FLIGHT_MS] — столько же, сколько его прыжок
+ * [ru.finney.pet.ui.pet.PetAnimation.playJoy]. При 900 мс он приземлялся
+ * раньше, чем долетал, и последнюю четверть пути скользил по полу.
  */
-internal const val WALK_MS = 900
+internal const val WALK_MS = HOP_CROUCH_MS.toInt() + HOP_FLIGHT_MS
 
 /** Высота дуги прыжка в капсулу, доля высоты холста: около 50 dp на телефоне. */
 private const val CAPSULE_JUMP_ARC = 0.06f
