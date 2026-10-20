@@ -57,6 +57,7 @@ import ru.finney.pet.ui.theme.FinneyPeach
 import ru.finney.pet.ui.theme.FinneyYellow
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import ru.finney.pet.ui.theme.FinneyCream
 import ru.finney.pet.ui.theme.FinneyGreen
@@ -116,13 +117,13 @@ internal fun LevelRoadmap(
  * спорить с узлами.
  */
 private fun DrawScope.scenery(level: Int, x: Float, y: Float) {
-    val tint = listOf(FinneyYellow, FinneyPeach, FinneyBlue, FinneyGreen)[level % 4]
-    val r = 60.dp.toPx()
-    drawCircle(tint.copy(alpha = 0.14f), radius = r, center = Offset(x, y + r * 0.35f))
-    drawCircle(tint.copy(alpha = 0.10f), radius = r * 0.55f, center = Offset(x + r * 0.8f * (if (level % 2 == 0) 1 else -1), y + r * 0.6f))
-    val dot = 5.dp.toPx()
-    listOf(-0.6f to -0.9f, 0.5f to -1.1f, 0.1f to -0.55f).forEach { (dx, dy) ->
-        drawCircle(FinneyInk.copy(alpha = 0.10f), radius = dot, center = Offset(x + r * dx, y + r * dy))
+    // Цвета холмов — из концепта карты: песочный, жёлтый, сиреневый, зелёный, все бледные.
+    val tint = listOf(Color(0xFFFBE2BC), FinneyYellow.copy(alpha = 0.45f), Color(0xFFE6E2F7), FinneyGreen.copy(alpha = 0.28f))[level % 4]
+    val r = 70.dp.toPx()
+    drawOval(tint, topLeft = Offset(x - r * 1.2f, y - r * 0.6f), size = androidx.compose.ui.geometry.Size(r * 2.4f, r * 1.8f))
+    val dot = 2.6.dp.toPx()
+    listOf(-0.6f to -0.9f, 0.5f to -1.1f, 0.1f to -0.5f, -0.2f to 1.0f).forEach { (dx, dy) ->
+        drawCircle(FinneyPeach.copy(alpha = 0.35f), radius = dot, center = Offset(x + r * dx, y + r * dy))
     }
 }
 
@@ -152,12 +153,17 @@ private fun PathStep(node: LevelNode, next: LevelNode?, selected: Boolean, onCli
                 val b = Offset(x(bias(next.level)), half + StepHeight.toPx())
                 val bend = (b.y - a.y) * 0.6f
                 val road = Path().apply { moveTo(a.x, a.y); cubicTo(a.x, a.y + bend, b.x, b.y - bend, b.x, b.y) }
-                val width = 16.dp.toPx()
-                drawPath(road, FinneyInk, style = Stroke(width + StrokeRegular.toPx() * 2, cap = StrokeCap.Round))
-                drawPath(road, if (reached) FinneyYellow else FinneyCream, style = Stroke(width, cap = StrokeCap.Round))
-                if (!reached) {
-                    drawPath(road, FinneyInkFaded, style = Stroke(3.dp.toPx(), cap = StrokeCap.Round,
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(12.dp.toPx(), 10.dp.toPx()))))
+                // Как в концепте: светлая дорога в синей обводке; пройденная — с жёлтой
+                // полосой посередине, будущая — в бледной обводке и с пунктиром.
+                val edge = 22.dp.toPx()
+                val inner = 14.dp.toPx()
+                drawPath(road, if (reached) FinneyInk else FinneyInk.copy(alpha = 0.3f), style = Stroke(edge, cap = StrokeCap.Round))
+                drawPath(road, RoadLight, style = Stroke(inner, cap = StrokeCap.Round))
+                if (reached) {
+                    drawPath(road, FinneyYellow, style = Stroke(6.dp.toPx(), cap = StrokeCap.Round))
+                } else {
+                    drawPath(road, FinneyInk.copy(alpha = 0.45f), style = Stroke(3.dp.toPx(), cap = StrokeCap.Round,
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(8.dp.toPx(), 9.dp.toPx()))))
                 }
             },
     ) {
@@ -254,5 +260,7 @@ private fun nodeDescription(node: LevelNode): String = when (node.status) {
     NodeStatus.FUTURE -> "Уровень ${node.level}, впереди"
 }
 
+/** Светлое полотно дороги — теплее кремового фона, чтобы дорога читалась на нём. */
+private val RoadLight = androidx.compose.ui.graphics.Color(0xFFFFF7E9)
 private val NodeSize = 64.dp
 private val StepHeight = 104.dp

@@ -3,6 +3,7 @@ package ru.finney.pet.ui.home
 import ru.finney.pet.R
 import androidx.compose.foundation.layout.heightIn
 import ru.finney.pet.ui.progress.NextProgress
+import ru.finney.pet.ui.period.NewPlace
 import androidx.annotation.DrawableRes
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.layout.ContentScale
@@ -244,6 +245,7 @@ fun HomeScreen(
         }
     }
 
+    val newSeen = rememberNewSeen()
     when (val s = state) {
         HomeUiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = FinneyInk)
@@ -251,8 +253,11 @@ fun HomeScreen(
         is HomeUiState.Ready -> HomeContent(
             state = s,
             onOpenBudget = onOpenBudget,
-            onOpenShop = onOpenShop,
-            onOpenGoals = onOpenGoals,
+            // Зашёл туда, где «Новое», — наклейка снята до следующего уровня.
+            onOpenShop = { newSeen.mark(NewPlace.SHOP, s.level); onOpenShop() },
+            onOpenGoals = { newSeen.mark(NewPlace.GOALS, s.level); onOpenGoals() },
+            newStickers = s.newPlaces.filterNot { newSeen.seen(it, s.level) }.toSet(),
+            onGamesSeen = { newSeen.mark(NewPlace.GAMES, s.level) },
             onOpenTasks = onOpenTasks,
             onOpenTask = onOpenTask,
             onOpenWardrobe = onOpenWardrobe,
@@ -369,6 +374,8 @@ internal fun HomeContent(
     purchased: ActionFeedback? = null,
     onHidePurchased: () -> Unit = {},
     rejectShown: Boolean = false,
+    newStickers: Set<NewPlace> = emptySet(),
+    onGamesSeen: () -> Unit = {},
     actionLayout: HomeActionLayout = HomeActionLayout.SPLIT,
     shopContent: @Composable (Int, () -> Unit) -> Unit = { balance, click -> HomeShopButton(balance, click) },
 ) {
@@ -480,6 +487,8 @@ internal fun HomeContent(
 
     // Панель «Игры уровня»: обязательная игра и две по желанию.
     var gamesOpen by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(gamesOpen) { if (gamesOpen) onGamesSeen() }
+    var shopBounds by remember { mutableStateOf(Rect.Zero) }
 
     // Панель «Финни / Комната»: какая вкладка открыта; null — панель закрыта. Пока
     // выбирают, интерфейс главной расступается, а камера подлетает к питомцу или вещи.
@@ -929,7 +938,9 @@ internal fun HomeContent(
                 modifier = Modifier.weight(1f),
                 contentAlignment = Alignment.CenterStart,
             ) {
-                shopContent(state.balance, onOpenShop)
+                Box(Modifier.onGloballyPositioned { val b = it.boundsInRoot(); if (shopBounds != b) shopBounds = b }) {
+                    shopContent(state.balance, onOpenShop)
+                }
             }
 
             // Уровень — главный показатель роста, поэтому в полтора раза крупнее кнопок по краям.
@@ -1635,6 +1646,19 @@ internal fun HomeContent(
             )
         }
 
+        // Наклейки — только на открытой комнате: во сне, в игре и в ванной боковых кнопок
+        // не видно, а панели и окна поверх них не должны пестреть «Новым».
+        val roomFree = !sleeping && playing == null && !inBath && care == null && bathShop == null &&
+            roomEdit == null && !levelOpen && !menuOpen && !gamesOpen && !debugOpen
+        if (roomFree) {
+            NewStickers(newStickers, bounds = { place ->
+                when (place) {
+                    NewPlace.SHOP -> shopBounds
+                    NewPlace.GAMES -> gamesBounds
+                    NewPlace.GOALS -> savingsBounds
+                }
+            })
+        }
         LevelStars(
             state = state,
             from = { petBounds().takeIf { it != Rect.Zero } ?: badgeBounds },
