@@ -27,7 +27,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.CompositionLocalProvider
@@ -44,15 +43,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.vector.PathParser
 import kotlin.math.cos
 import kotlin.math.sin
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.addOutline
@@ -62,28 +65,22 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.lerp
 import ru.finney.pet.domain.model.PetCharacter
 import ru.finney.pet.ui.components.Coin
 import ru.finney.pet.ui.components.CloseButton
-import ru.finney.pet.ui.components.FinneyIconButton
 import ru.finney.pet.ui.components.MenuBackdrop
 import ru.finney.pet.ui.components.menuBackdrop
 import ru.finney.pet.ui.components.OutlinedText
+import ru.finney.pet.ui.components.SpeechBubble
+import ru.finney.pet.ui.components.Tail
 import ru.finney.pet.ui.components.fadingScroll
-import ru.finney.pet.ui.sound.Sfx
-import ru.finney.pet.ui.pet.PetAnimation
 import ru.finney.pet.ui.pet.PetMood
 import ru.finney.pet.ui.pet.PetPose
 import ru.finney.pet.ui.pet.PetView
-import ru.finney.pet.ui.pet.rememberPetAnimation
-import ru.finney.pet.ui.pet.rememberPoseProvider
 import ru.finney.pet.ui.theme.FinneyBlue
 import ru.finney.pet.ui.theme.FinneyCream
 import ru.finney.pet.ui.theme.FinneyGreen
@@ -415,9 +412,104 @@ private fun Meadow(dusk: () -> Float) {
         drawCircle(sun.copy(alpha = 0.5f), 42.dp.toPx(), c)
         drawCircle(FinneyInk, 32.dp.toPx(), c)
         drawCircle(sun, 28.dp.toPx(), c)
-        drawRect(lerp(FinneyGreen, Color(0xFF6FB679), t), topLeft = Offset(0f, horizon), size = size.copy(height = size.height - horizon))
+        // Луг нарисован в пикселях скриншота шириной 900, старый горизонт там на y = 1160.
+        val s = size.width / LAWN_W
+        withTransform({
+            translate(0f, horizon - LAWN_HORIZON * s)
+            scale(s, s, Offset.Zero)
+        }) { lawn(t) }
     }
 }
+
+/**
+ * Два холма с фиолетовым контуром, как у панелей и кнопок: дальний светлее, из-за кромок
+ * торчат кустики, облака и садящееся солнце уходят за дальний холм. Вдоль кромки — светлая
+ * полоса, тот же объём, что у кнопок, только блик сверху. На ближнем — травинки и цветочки
+ * тон в тон с лугом, чтобы не спорили с репликой и кнопкой. Вечером зелень темнеет.
+ */
+private fun DrawScope.lawn(dusk: Float) {
+    fun g(c: Color) = lerp(c, Color.Black, 0.13f * dusk)
+    val outline = Stroke(7f, join = StrokeJoin.Round)
+
+    tuft(270f, 1104f, 0.8f, g(LawnFar))
+    tuft(720f, 1102f, 0.8f, g(LawnFar))
+    drawPath(LawnBack, g(LawnFar))
+    clipPath(LawnBack) { drawPath(LawnBack, g(LawnFarLight), style = Stroke(24f)) }
+    drawPath(LawnBack, FinneyInk, style = outline)
+
+    tuft(145f, 1202f, 1f, g(FinneyGreen))
+    tuft(315f, 1224f, 0.75f, g(FinneyGreen))
+    tuft(485f, 1221f, 1f, g(FinneyGreen))
+    tuft(820f, 1192f, 1f, g(FinneyGreen))
+    drawPath(LawnFront, g(FinneyGreen))
+    clipPath(LawnFront) {
+        val bottom = LawnFront.getBounds().bottom
+        var y = 1200f
+        while (y < bottom) {
+            var x = 0f
+            while (x < LAWN_W) {
+                translate(x, y) { meadowTile(::g) }
+                x += 210f
+            }
+            y += 170f
+        }
+        drawPath(LawnFront, g(LawnNearLight), style = Stroke(26f))
+    }
+    drawPath(LawnFront, FinneyInk, style = outline)
+}
+
+/** Кустик травы над кромкой холма: низ уходит под холм, его закрывает заливка. */
+private fun DrawScope.tuft(x: Float, y: Float, k: Float, color: Color) {
+    withTransform({
+        translate(x, y)
+        scale(k, k, Offset.Zero)
+    }) {
+        drawPath(LawnTuft, color)
+        drawPath(LawnTuft, FinneyInk, style = Stroke(6.5f, join = StrokeJoin.Round))
+    }
+}
+
+/** Плитка узора ближнего луга, 210 × 170: травинки, точки и два цветочка. */
+private fun DrawScope.meadowTile(g: (Color) -> Color) {
+    val dark = g(LawnPattern)
+    drawPath(LawnBlades, dark, style = Stroke(5f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+    drawCircle(dark, 4f, Offset(100f, 80f))
+    drawCircle(dark, 3.5f, Offset(18f, 96f))
+    flower(Offset(184f, 56f), 1f, g(Color.White), 3.6f, g(FinneyYellow))
+    flower(Offset(128f, 150f), 0.8f, g(FinneyPeach), 3f, g(FinneyCream))
+}
+
+/** Цветочек из пяти лепестков-кружков и серединки радиусом [core]. */
+private fun DrawScope.flower(c: Offset, k: Float, petal: Color, core: Float, middle: Color) {
+    Petals.forEach { drawCircle(petal, 5f * k, c + it * k) }
+    drawCircle(middle, core, c)
+}
+
+private const val LAWN_W = 900f
+private const val LAWN_HORIZON = 1160f
+
+/** Дальний холм. Низ — далеко под экраном: на вытянутых телефонах луг длиннее скриншота. */
+private val LawnBack = svgPath(
+    "M-20,2600 L-20,1145 L-15,1145 Q60,1140 170,1117.5 Q280,1095 375,1122.5 Q470,1150 555,1135 " +
+        "Q640,1120 720,1102.5 Q800,1085 900,1110 L920,1112 L920,2600 Z",
+)
+private val LawnFront = svgPath(
+    "M-15,2600 L-15,1206 Q60,1190 145,1202 Q230,1214 315,1224 Q400,1234 485,1221 Q570,1208 655,1196 " +
+        "Q740,1184 820,1192 Q900,1200 950,1207.5 L950,2600 Z",
+)
+private val LawnTuft = svgPath("M-32,20 L-23,-15 L-11,5 L0,-31 L11,5 L23,-17 L32,20 Z")
+private val LawnBlades = svgPath(
+    "M22 36l7 15 7-15 M120 22l6 13 6-13 6 13 6-13 M66 118l7 15 7-15 M166 106l6 13 6-13",
+)
+private val Petals = listOf(Offset(0f, -6f), Offset(5.7f, -1.9f), Offset(3.5f, 4.9f), Offset(-3.5f, 4.9f), Offset(-5.7f, -1.9f))
+
+private fun svgPath(d: String): Path = PathParser().parsePathString(d).toPath()
+
+/** Оттенки FinneyGreen #86CC8E: новых цветов в палитре нет. */
+private val LawnFar = Color(0xFFB4E0AE)
+private val LawnFarLight = Color(0xFFCDEBC7)
+private val LawnNearLight = Color(0xFFA5DBA9)
+private val LawnPattern = Color(0xFF72BD7C)
 
 /** Облако из трёх кругов: сначала обводка всех, потом заливка — контур общий, без швов внутри. */
 private fun DrawScope.cloud(center: Offset, scale: Float) {
@@ -561,11 +653,21 @@ internal fun PetSays(
     petSize: Dp = 180.dp,
     mood: PetMood = PetMood.HAPPY,
     reactions: PetReactions = rememberPetReactions(),
+    // Тень на траве: без неё питомец на лугу висит в воздухе.
+    shadow: Boolean = false,
 ) {
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {
-        Bubble(text, Tail.RIGHT, Modifier.weight(1f, fill = false), maxWidth = 240.dp)
-        ScenePet(character, petSize, Modifier.width(petSize), mood = mood, reactions = reactions)
+        SpeechBubble(text, Tail.RIGHT, Modifier.weight(1f, fill = false).widthIn(max = 240.dp), style = MaterialTheme.typography.bodyMedium)
+        val ground = if (shadow) Modifier.drawBehind { petShadow() } else Modifier
+        ScenePet(character, petSize, ground.width(petSize), mood = mood, reactions = reactions)
     }
+}
+
+/** Тень под головой: в макете эллипс 300 × 44 под питомцем в 200 dp, чуть заходит под подбородок. */
+private fun DrawScope.petShadow() {
+    val w = size.width * 0.68f
+    val h = size.width * 0.1f
+    drawOval(LawnPattern, Offset((size.width - w) / 2, size.height * 0.83f - h / 2), Size(w, h))
 }
 
 /** Питомец сам по себе, у правого края сцены — там же, где он говорит в [PetSays]. */
@@ -579,60 +681,6 @@ internal fun PetAtRight(
 ) {
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         ScenePet(character, petSize, Modifier.width(petSize), mood = mood, reactions = reactions)
-    }
-}
-
-/** Куда смотрит хвостик реплики — в сторону того, кто говорит. */
-enum class Tail { LEFT, RIGHT, DOWN_LEFT, DOWN_RIGHT }
-
-/** Реплика в белом пузыре, как в концептах. Текст короткий — одна-две строки. */
-@Composable
-internal fun Bubble(text: String, tail: Tail, modifier: Modifier = Modifier, maxWidth: Dp = 200.dp) {
-    val tailSize = 12.dp
-    val shape = remember(tail) { BubbleShape(tail, 16.dp, tailSize) }
-    Text(
-        text = text,
-        style = MaterialTheme.typography.bodyMedium,
-        color = FinneyInk,
-        modifier = modifier
-            .widthIn(max = maxWidth)
-            .background(Color.White, shape)
-            .border(StrokeRegular, FinneyInk, shape)
-            .padding(
-                start = 12.dp + if (tail == Tail.LEFT) tailSize else 0.dp,
-                end = 12.dp + if (tail == Tail.RIGHT) tailSize else 0.dp,
-                top = 8.dp,
-                bottom = 8.dp + if (tail == Tail.DOWN_LEFT || tail == Tail.DOWN_RIGHT) tailSize else 0.dp,
-            ),
-    )
-}
-
-/** Пузырь реплики: скруглённое тело и треугольный хвостик с одной стороны. */
-private class BubbleShape(private val tail: Tail, private val radius: Dp, private val tailSize: Dp) : Shape {
-    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
-        val r = with(density) { radius.toPx() }
-        val t = with(density) { tailSize.toPx() }
-        val down = tail == Tail.DOWN_LEFT || tail == Tail.DOWN_RIGHT
-        val body = RoundRect(
-            left = if (tail == Tail.LEFT) t else 0f,
-            top = 0f,
-            right = size.width - if (tail == Tail.RIGHT) t else 0f,
-            bottom = size.height - if (down) t else 0f,
-            cornerRadius = CornerRadius(r),
-        )
-        val path = Path().apply {
-            addRoundRect(body)
-            when (tail) {
-                Tail.LEFT -> { moveTo(t, r); lineTo(0f, r + t * 0.6f); lineTo(t, r + t * 1.4f); close() }
-                Tail.RIGHT -> { moveTo(size.width - t, r); lineTo(size.width, r + t * 0.6f); lineTo(size.width - t, r + t * 1.4f); close() }
-                Tail.DOWN_LEFT -> { moveTo(r, body.bottom); lineTo(r + t * 0.3f, size.height); lineTo(r + t * 1.4f, body.bottom); close() }
-                Tail.DOWN_RIGHT -> {
-                    moveTo(size.width - r, body.bottom); lineTo(size.width - r - t * 0.3f, size.height)
-                    lineTo(size.width - r - t * 1.4f, body.bottom); close()
-                }
-            }
-        }
-        return Outline.Generic(path)
     }
 }
 

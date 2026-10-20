@@ -1,5 +1,7 @@
 package ru.finney.pet.ui.budget
 
+import ru.finney.pet.ui.components.SpeechBubble
+import ru.finney.pet.ui.components.Tail
 import ru.finney.pet.ui.goals.rewardArt
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
@@ -56,12 +58,12 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -84,7 +86,6 @@ import ru.finney.pet.ui.components.CheckBadge
 import ru.finney.pet.ui.components.WarningBadge
 import ru.finney.pet.ui.components.CoinAmount
 import ru.finney.pet.ui.components.FeedbackSound
-import ru.finney.pet.ui.components.FillBar
 import ru.finney.pet.ui.components.FinneyButton
 import ru.finney.pet.ui.components.FinneyCard
 import ru.finney.pet.ui.components.FinneyScreen
@@ -99,23 +100,13 @@ import ru.finney.pet.ui.pet.glassesPlacement
 import ru.finney.pet.ui.pet.hatPlacement
 import ru.finney.pet.ui.pet.skin
 import androidx.compose.foundation.layout.requiredSize
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathOperation
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
-import kotlin.math.cos
-import kotlin.math.sin
 import ru.finney.pet.ui.theme.FinneyBlue
 import ru.finney.pet.ui.theme.FinneyCream
 import ru.finney.pet.ui.theme.FinneyInk
 import ru.finney.pet.ui.theme.FinneyPink
 import ru.finney.pet.ui.theme.FinneyTheme
 import ru.finney.pet.ui.theme.RadiusCard
-import ru.finney.pet.ui.theme.StrokeThin
 import ru.finney.pet.ui.theme.StrokeRegular
 import ru.finney.pet.ui.sound.LocalSounds
 import ru.finney.pet.ui.sound.Sfx
@@ -643,13 +634,16 @@ internal fun ActiveContent(state: BudgetUiState.Active, onBack: () -> Unit,
 
         // Вывод говорит сам питомец: плейтест спрашивал, «что я должен понять» из чисел, —
         // вот это одной фразой. Уровень ещё идёт, это не итог, поэтому без зелёного и розового.
-        // Как в редизайне 28.09: одна голова питомца слева внизу, над ней справа — овальный
-        // пузырь, хвостик которого смотрит на голову.
+        // Как в редизайне 28.09: одна голова питомца слева внизу, над ней справа — пузырь,
+        // хвостик которого смотрит на голову.
         // Пузырь начинается выше головы, а не над ней целиком: так пара занимает высоту
         // головы, и на 360 dp экран помещается без прокрутки.
         Row(modifier = Modifier.fillMaxWidth()) {
             PetHead(state.character, state.worn, HeadSize, Modifier.padding(top = HeadSize * 0.3f))
-            SpeechBalloon(verdictSpeech(state.verdict), Modifier.weight(1f))
+            SpeechBubble(
+                verdictSpeech(state.verdict), Tail.LEFT, Modifier.weight(1f), tailAt = 0.8f,
+                style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center,
+            )
         }
         when (state.verdict) {
             is PlanVerdict.SavingsShort -> FinneyButton("Отложить в копилку", onClick = onOpenGoals)
@@ -703,55 +697,6 @@ private fun PetHead(character: PetCharacter, worn: List<String>, size: Dp, modif
         }
     }
 }
-
-/**
- * Пузырь реплики из редизайна: белый овал с обводкой и изогнутый хвостик слева внизу.
- * Овал и хвостик — одна фигура (объединение путей), чтобы обводка не шла поперёк хвостика.
- */
-@Composable
-private fun SpeechBalloon(text: String, modifier: Modifier = Modifier) {
-    val stroke = StrokeRegular
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = modifier
-            .drawWithCache {
-                val t = BalloonTail.toPx()
-                val body = Rect(t * 0.8f, 0f, size.width, size.height - t)
-                val rx = body.width / 2
-                val ry = body.height / 2
-                fun onOval(degrees: Float): Offset {
-                    val a = Math.toRadians(degrees.toDouble())
-                    return Offset(body.center.x + rx * cos(a).toFloat(), body.center.y + ry * sin(a).toFloat())
-                }
-                val from = onOval(118f)
-                val to = onOval(150f)
-                val tip = Offset(0f, size.height)
-                val tail = Path().apply {
-                    moveTo(from.x, from.y)
-                    quadraticTo(from.x - t * 0.4f, tip.y - t * 0.2f, tip.x, tip.y)
-                    quadraticTo(to.x - t * 0.2f, to.y + t * 0.6f, to.x, to.y)
-                    close()
-                }
-                val outline = Path().apply { op(Path().apply { addOval(body) }, tail, PathOperation.Union) }
-                val ink = Stroke(stroke.toPx(), join = StrokeJoin.Round)
-                onDrawBehind {
-                    drawPath(outline, Color.White)
-                    drawPath(outline, FinneyInk, style = ink)
-                }
-            }
-            .padding(start = BalloonTail + 18.dp, end = 18.dp, top = 18.dp, bottom = BalloonTail + 18.dp),
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.titleLarge,
-            color = FinneyInk,
-            textAlign = TextAlign.Center,
-        )
-    }
-}
-
-/** Сколько места под пузырём и слева от него занимает хвостик. */
-private val BalloonTail = 20.dp
 
 /** Вывод «План и факт» репликой питомца — коротко, как говорят вслух (ТЗ п. 2.5.9). */
 private fun verdictSpeech(verdict: PlanVerdict): String = when (verdict) {

@@ -55,6 +55,13 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.lerp
+import ru.finney.pet.ui.pet.PetMood
+import ru.finney.pet.ui.pet.PetView
+import ru.finney.pet.ui.pet.rememberPoseProvider
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -190,7 +197,7 @@ private fun Morning(
                 if (inputError != null) Note(inputErrorText(inputError), color = FinneyPeach)
             }
             Spacer(Modifier.weight(1f))
-            PetSays(character, "Сколько взять, чтобы хватило всем гостям?", petSize = 200.dp, reactions = pet)
+            PetSays(character, "Сколько взять, чтобы хватило всем гостям?", petSize = 200.dp, reactions = pet, shadow = true)
         }
     }
 }
@@ -439,46 +446,152 @@ private fun CupStrip(cups: Int, poured: Int) {
     }
 }
 
-/** Лавка: полосатый навес с фестонами, столбики, питомец за прилавком. */
+/**
+ * Лавка: деревянный ларёк с полосатой маркизой, Финни за прилавком целиком, с туловищем
+ * и руками, ноги за стойкой. На столешнице кувшин, лимоны и стопка стаканов, чтобы было
+ * видно, чем торгуют. Слои: тень и задняя стенка, питомец, маркиза и прилавок поверх.
+ */
 @Composable
 private fun Stall(character: PetCharacter, cupPrice: Int, pet: PetReactions) {
-    Box(Modifier.fillMaxWidth(0.85f).height(330.dp)) {
-        Canvas(Modifier.fillMaxSize()) {
-            val awning = 44.dp.toPx()
-            val stripe = 26.dp.toPx()
-            val stroke = 4.dp.toPx()
-            // Столбики
-            listOf(10.dp.toPx(), size.width - 18.dp.toPx()).forEach { x ->
-                drawRect(Color(0xFFA0715A), Offset(x, awning), Size(8.dp.toPx(), size.height - awning))
-                drawRect(FinneyInk, Offset(x, awning), Size(8.dp.toPx(), size.height - awning), style = Stroke(3.dp.toPx()))
-            }
-            // Навес
-            var x = 0f
-            var odd = false
-            while (x < size.width) {
-                drawRect(if (odd) FinneyPeach else FinneyYellow, Offset(x, 0f), Size(minOf(stripe, size.width - x), awning))
-                x += stripe
-                odd = !odd
-            }
-            var s = 0f
-            while (s < size.width) {
-                drawCircle(FinneyPeach, stripe / 2, Offset(s + stripe / 2, awning))
-                drawCircle(FinneyInk, stripe / 2, Offset(s + stripe / 2, awning), style = Stroke(3.dp.toPx()))
-                s += stripe
-            }
-            drawRect(FinneyInk, Offset.Zero, Size(size.width, awning), style = Stroke(stroke))
-        }
-        ScenePet(character, 225.dp, Modifier.width(225.dp).align(Alignment.BottomCenter).offset(y = (-52).dp), reactions = pet)
+    Box(Modifier.fillMaxWidth(0.9f).height(340.dp)) {
+        Canvas(Modifier.fillMaxSize()) { stallBack() }
+        PetView(
+            character = character,
+            mood = if (pet.current == PetReaction.FAIL) PetMood.SAD else PetMood.HAPPY,
+            pose = rememberPoseProvider(pet.body),
+            accessories = LocalPlayerAccessory.current,
+            modifier = Modifier.width(230.dp).align(Alignment.BottomCenter).offset(y = (-26).dp),
+        )
+        Canvas(Modifier.fillMaxSize()) { stallFront() }
         Box(
             Modifier
                 .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(70.dp)
+                .padding(bottom = 30.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(Color.White)
-                .border(4.dp, FinneyInk, RoundedCornerShape(10.dp)),
-            contentAlignment = Alignment.Center,
-        ) { OutlinedText("Стакан: ${coins(cupPrice)}", style = MaterialTheme.typography.titleLarge) }
+                .background(FinneyCream)
+                .border(StrokeRegular, FinneyInk, RoundedCornerShape(10.dp))
+                .padding(horizontal = 14.dp, vertical = 2.dp),
+        ) { OutlinedText("Стакан: ${coins(cupPrice)}", style = MaterialTheme.typography.titleMedium) }
+    }
+}
+
+private val Wood = Color(0xFFA0715A)
+private val WoodLight = lerp(Wood, Color.White, 0.35f)
+private val WoodDark = lerp(Wood, FinneyInk, 0.25f)
+private val StallRoof = 40.dp
+private val StallCounter = 92.dp
+
+/** Тень на траве, стойки и задняя стенка из досок: всё, что за питомцем. */
+private fun DrawScope.stallBack() {
+    val w = size.width
+    val h = size.height
+    val ink = 3.dp.toPx()
+    drawOval(Color(0xFF72BD7C), Offset(w * 0.02f, h - 16.dp.toPx()), Size(w * 0.96f, 26.dp.toPx()))
+    val top = StallRoof.toPx()
+    val wallBottom = h - StallCounter.toPx()
+    val post = 10.dp.toPx()
+    val left = 12.dp.toPx()
+    val right = w - 12.dp.toPx() - post
+    drawRect(FinneyCream, Offset(left + post, top), Size(right - left - post, wallBottom - top))
+    var x = left + post + 30.dp.toPx()
+    while (x < right - 8.dp.toPx()) {
+        drawLine(lerp(FinneyCream, Wood, 0.25f), Offset(x, top), Offset(x, wallBottom), 2.dp.toPx())
+        x += 30.dp.toPx()
+    }
+    val postH = h - top - 14.dp.toPx()
+    listOf(left, right).forEach { px ->
+        drawRect(Wood, Offset(px, top), Size(post, postH))
+        drawRect(WoodLight, Offset(px + 2.dp.toPx(), top), Size(3.dp.toPx(), postH))
+        drawRect(FinneyInk, Offset(px, top), Size(post, postH), style = Stroke(ink))
+    }
+}
+
+/** Маркиза с фестонами и прилавок со столешницей, кувшином, лимонами и стаканами: перед питомцем. */
+private fun DrawScope.stallFront() {
+    val w = size.width
+    val h = size.height
+    val ink = 3.dp.toPx()
+    val roof = StallRoof.toPx()
+
+    // Маркиза трапецией, к краю шире: навес будто наклонён к зрителю.
+    val n = 8
+    val inset = w * 0.07f
+    for (i in 0 until n) {
+        val t0 = i / n.toFloat()
+        val t1 = (i + 1) / n.toFloat()
+        val stripe = Path().apply {
+            moveTo(inset + (w - 2 * inset) * t0, 0f)
+            lineTo(inset + (w - 2 * inset) * t1, 0f)
+            lineTo(w * t1, roof)
+            lineTo(w * t0, roof)
+            close()
+        }
+        drawPath(stripe, if (i % 2 == 0) FinneyYellow else FinneyPeach)
+    }
+    val r = w / n / 2
+    for (i in 0 until n) {
+        val tl = Offset(w * i / n, roof - r)
+        drawArc(if (i % 2 == 0) FinneyYellow else FinneyPeach, 0f, 180f, useCenter = true, topLeft = tl, size = Size(2 * r, 2 * r))
+        drawArc(FinneyInk, 0f, 180f, useCenter = false, topLeft = tl, size = Size(2 * r, 2 * r), style = Stroke(ink))
+    }
+    val outline = Path().apply {
+        moveTo(inset, 0f); lineTo(w - inset, 0f); lineTo(w, roof); lineTo(0f, roof); close()
+    }
+    drawPath(outline, FinneyInk, style = Stroke(4.dp.toPx(), join = StrokeJoin.Round))
+
+    // Прилавок: столешница с выступом и передняя стенка из досок.
+    val counterTop = h - StallCounter.toPx()
+    val slab = 14.dp.toPx()
+    val frontBottom = h - 14.dp.toPx()
+    val side = 6.dp.toPx()
+    val front = Size(w - 2 * side, frontBottom - counterTop - slab)
+    drawRect(Wood, Offset(side, counterTop + slab), front)
+    var x = side + 28.dp.toPx()
+    while (x < w - side - 6.dp.toPx()) {
+        drawLine(WoodDark, Offset(x, counterTop + slab), Offset(x, frontBottom), 2.dp.toPx())
+        x += 28.dp.toPx()
+    }
+    drawRect(FinneyInk, Offset(side, counterTop + slab), front, style = Stroke(4.dp.toPx()))
+    drawRect(WoodLight, Offset(0f, counterTop), Size(w, slab))
+    drawRect(FinneyInk, Offset(0f, counterTop), Size(w, slab), style = Stroke(4.dp.toPx()))
+
+    // Кувшин с лимонадом слева, два лимона рядом, стопка стаканов справа.
+    val jugW = 38.dp.toPx()
+    val jugH = 50.dp.toPx()
+    val jx = w * 0.16f
+    val jug = Path().apply {
+        moveTo(jx, counterTop - jugH)
+        lineTo(jx + jugW, counterTop - jugH)
+        lineTo(jx + jugW * 1.1f, counterTop)
+        lineTo(jx - jugW * 0.1f, counterTop)
+        close()
+    }
+    drawArc(
+        FinneyInk, -90f, 180f, useCenter = false,
+        topLeft = Offset(jx + jugW - 6.dp.toPx(), counterTop - jugH * 0.85f),
+        size = Size(22.dp.toPx(), jugH * 0.55f),
+        style = Stroke(5.dp.toPx()),
+    )
+    drawPath(jug, Color.White.copy(alpha = 0.85f))
+    clipPath(jug) { drawRect(Color(0xFFF9E27A), Offset(jx - jugW, counterTop - jugH * 0.7f), Size(jugW * 3, jugH)) }
+    drawPath(jug, FinneyInk, style = Stroke(ink, join = StrokeJoin.Round))
+    val lemon = Size(22.dp.toPx(), 15.dp.toPx())
+    listOf(jx + jugW * 1.35f to 0f, jx + jugW * 1.75f to 2.dp.toPx()).forEach { (lx, dy) ->
+        val tl = Offset(lx, counterTop - lemon.height + dy)
+        drawOval(FinneyYellow, tl, lemon)
+        drawOval(FinneyInk, tl, lemon, style = Stroke(ink))
+    }
+    val cupW = 22.dp.toPx()
+    val cupH = 16.dp.toPx()
+    val cx = w * 0.8f
+    for (k in 0 until 3) {
+        val y = counterTop - cupH * (k + 1) + k * 5.dp.toPx()
+        val cup = Path().apply {
+            moveTo(cx - cupW / 2, y); lineTo(cx + cupW / 2, y)
+            lineTo(cx + cupW * 0.38f, y + cupH); lineTo(cx - cupW * 0.38f, y + cupH); close()
+        }
+        drawPath(cup, Color.White)
+        drawPath(cup, FinneyInk, style = Stroke(ink, join = StrokeJoin.Round))
     }
 }
 

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -46,13 +47,14 @@ import ru.finney.pet.ui.components.AlertBadge
 import ru.finney.pet.ui.components.CheckBadge
 import ru.finney.pet.ui.components.Coin
 import ru.finney.pet.ui.components.FinneyButton
+import ru.finney.pet.ui.components.SpeechBubble
+import ru.finney.pet.ui.components.Tail
 import ru.finney.pet.ui.components.FinneyIcon
 import ru.finney.pet.ui.components.FinneyIconButton
 import ru.finney.pet.ui.components.FinneyIcons
 import ru.finney.pet.ui.components.FinneyQuietButton
 import ru.finney.pet.ui.components.FinneyScreen
 import ru.finney.pet.ui.components.OutlinedText
-import ru.finney.pet.ui.tasks.games.Bubble
 import ru.finney.pet.ui.tasks.games.GameScene
 import ru.finney.pet.ui.tasks.games.LocalPlayerAccessory
 import ru.finney.pet.ui.tasks.games.PetAtRight
@@ -61,7 +63,6 @@ import ru.finney.pet.ui.tasks.games.ResultBody
 import ru.finney.pet.ui.tasks.games.SceneBody
 import ru.finney.pet.ui.tasks.games.SceneStage
 import ru.finney.pet.ui.tasks.games.ScenePanel
-import ru.finney.pet.ui.tasks.games.Tail
 import ru.finney.pet.ui.tasks.games.TaskGame
 import ru.finney.pet.ui.tasks.games.backdropFor
 import ru.finney.pet.ui.tasks.games.introBackdropFor
@@ -316,11 +317,12 @@ internal fun TaskResultScene(state: TaskUiState.Ready, onReplay: () -> Unit, onD
                 Spacer(Modifier.weight(1f))
                 // Объяснение — репликой питомца во всю ширину, хвостиком к нему: так оно
                 // отделено от пунктов и читается как совет, а не как ещё один абзац.
-                Bubble(
+                SpeechBubble(
                     TaskEngines.explanation(state.task, result.outcome, result.details),
-                    Tail.DOWN_RIGHT,
+                    Tail.DOWN,
                     Modifier.fillMaxWidth(),
-                    maxWidth = 600.dp,
+                    tailAt = 0.8f,
+                    style = MaterialTheme.typography.bodyMedium,
                 )
                 // Итог: получилось — два прыжка и конфетти, не вышло — грустит и капля.
                 val pet = rememberPetReactions()

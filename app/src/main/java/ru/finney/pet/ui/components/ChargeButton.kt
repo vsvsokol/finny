@@ -63,6 +63,21 @@ fun ChargeButton(
     onCharged: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    /**
+     * Сама кнопка под кольцом. Своя — на экранах со своим обликом (знакомство):
+     * зарядка, звук и кольцо остаются здесь, кнопка только рисуется. Звук она не играет.
+     */
+    button: @Composable (onClick: () -> Unit, interaction: MutableInteractionSource, modifier: Modifier) -> Unit =
+        { onClick, interaction, buttonModifier ->
+            FinneyButton(
+                text = text,
+                onClick = onClick,
+                enabled = enabled,
+                sound = null,
+                interactionSource = interaction,
+                modifier = buttonModifier,
+            )
+        },
 ) {
     val sounds = LocalSounds.current
     val haptics = LocalHapticFeedback.current
@@ -116,9 +131,8 @@ fun ChargeButton(
         }
     }
 
-    FinneyButton(
-        text = text,
-        onClick = {
+    button(
+        {
             if (animations) {
                 // TalkBack жмёт без касания — Press не приходит, зарядку запускает клик.
                 start()
@@ -127,10 +141,8 @@ fun ChargeButton(
                 charged()
             }
         },
-        enabled = enabled,
-        sound = null,
-        interactionSource = interaction,
-        modifier = modifier
+        interaction,
+        modifier
             .graphicsLayer {
                 val s = 1f + SwellScale * charge.value * (1f - flash.value)
                 scaleX = s

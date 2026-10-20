@@ -6,12 +6,12 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,10 +23,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -38,6 +34,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlin.random.Random
 import ru.finney.pet.domain.model.GlossaryTerm
+import ru.finney.pet.ui.components.SpeechBubble
+import ru.finney.pet.ui.components.Tail
 import ru.finney.pet.ui.components.CheckBadge
 import ru.finney.pet.ui.components.FinneyButton
 import ru.finney.pet.ui.components.FinneyCard
@@ -97,7 +95,7 @@ fun sleepCard(terms: List<GlossaryTerm>, random: Random, avoid: String? = null):
 }
 
 /**
- * Облачко-мысль над спящим: три пузырька от головы и облако с книжкой и «?».
+ * Облачко-мысль над спящим: пузырь с книжкой и «?», хвостиком к голове.
  * Покачивается, пока анимации включены. [done] — карточки на этот сон кончились:
  * в облаке «Zz», нажатие ничего не открывает. Размер облака — [DreamCloudSize].
  */
@@ -126,10 +124,16 @@ fun DreamCloud(done: Boolean, animate: Boolean, onClick: () -> Unit, modifier: M
                     onClick = onClick,
                 ),
             ),
-        contentAlignment = Alignment.TopEnd,
     ) {
-        Canvas(Modifier.fillMaxSize()) { drawThoughtCloud() }
-        Box(Modifier.size(CloudBody), contentAlignment = Alignment.Center) {
+        // Мысль — тем же пузырём, что и реплики: облако из кругов и отдельные пузырьки
+        // выглядели чужими рядом с остальными пузырями. Хвостик — к голове, в левый нижний угол.
+        SpeechBubble(
+            Tail.DOWN,
+            Modifier.fillMaxSize(),
+            tailAt = 0f,
+            padding = PaddingValues(0.dp),
+            contentAlignment = Alignment.Center,
+        ) {
             if (done) {
                 OutlinedText("Zz", style = MaterialTheme.typography.headlineLarge)
             } else {
@@ -143,38 +147,8 @@ fun DreamCloud(done: Boolean, animate: Boolean, onClick: () -> Unit, modifier: M
     }
 }
 
-/** Всё облако с пузырьками: хвост из пузырьков идёт в левый нижний угол — к голове питомца. */
+/** Размер облачка-мысли вместе с хвостиком. */
 val DreamCloudSize = 112.dp
-
-/** Само облако, без пузырьков: правый верхний угол [DreamCloudSize]. */
-private val CloudBody = 84.dp
-
-/** Облако из кругов с синей обводкой и пузырьки-хвост, как «мысль» в комиксе. */
-private fun DrawScope.drawThoughtCloud() {
-    val body = CloudBody.toPx()
-    val left = size.width - body
-    val stroke = 3.dp.toPx()
-    // Облако — пять кругов внахлёст: сначала все обводки, потом все заливки, чтобы
-    // внутренние линии пропали и остался один контур.
-    val puffs = listOf(
-        Offset(0.30f, 0.55f) to 0.24f,
-        Offset(0.52f, 0.36f) to 0.28f,
-        Offset(0.74f, 0.52f) to 0.24f,
-        Offset(0.52f, 0.66f) to 0.24f,
-        Offset(0.32f, 0.34f) to 0.18f,
-    ).map { (c, r) -> Offset(left + c.x * body, c.y * body) to r * body }
-    puffs.forEach { (c, r) -> drawCircle(FinneyInk, r + stroke, c) }
-    puffs.forEach { (c, r) -> drawCircle(Color.White, r, c) }
-    // Пузырьки хвоста — всё мельче к голове.
-    listOf(
-        Offset(left + body * 0.18f, body * 0.92f) to 7.dp.toPx(),
-        Offset(left - body * 0.02f, body * 1.10f) to 5.dp.toPx(),
-        Offset(left - body * 0.16f, body * 1.24f) to 3.5.dp.toPx(),
-    ).forEach { (c, r) ->
-        drawCircle(Color.White, r, c)
-        drawCircle(FinneyInk, r, c, style = Stroke(stroke * 0.8f))
-    }
-}
 
 /**
  * Карточка сна. [picked] — какое слово выбрано, null — ещё не отвечали. После ответа

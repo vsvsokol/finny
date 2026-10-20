@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -51,6 +52,8 @@ import ru.finney.pet.domain.model.PetCharacter
 import ru.finney.pet.domain.tasks.TaskEngines
 import ru.finney.pet.domain.tasks.TaskInput
 import ru.finney.pet.ui.components.FinneyButton
+import ru.finney.pet.ui.components.SpeechBubble
+import ru.finney.pet.ui.components.Tail
 import ru.finney.pet.ui.components.fadingScroll
 import ru.finney.pet.ui.theme.FinneyPeach
 import ru.finney.pet.ui.theme.FinneyCream
@@ -147,7 +150,7 @@ internal fun ChangeGame(task: ChangeTask, character: PetCharacter, onClose: () -
                             verticalArrangement = Arrangement.SpaceBetween,
                         ) {
                             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Bubble(customerLine(current.target, tray.sum(), checked, paid = current.paid ?: 0), Tail.LEFT)
+                                SpeechBubble(customerLine(current.target, tray.sum(), checked, paid = current.paid ?: 0), Tail.LEFT, Modifier.widthIn(max = 200.dp), style = MaterialTheme.typography.bodyMedium)
                                 Display(current.price, current.paid ?: 0, if (solved) current.target.toString() else "?")
                             }
                             ItemPicture(current, current.label, 64.dp)
@@ -158,7 +161,7 @@ internal fun ChangeGame(task: ChangeTask, character: PetCharacter, onClose: () -
                                 ItemPicture(current, current.label, 76.dp)
                                 PriceTag(current.price.toString())
                             }
-                            Bubble(ownLine(current.price, tray.sum(), checked), Tail.RIGHT)
+                            SpeechBubble(ownLine(current.price, tray.sum(), checked), Tail.RIGHT, Modifier.widthIn(max = 200.dp), style = MaterialTheme.typography.bodyMedium)
                         }
                         ScenePet(character, HeadSize, Modifier.width(HeadSize), reactions = pet)
                     }
