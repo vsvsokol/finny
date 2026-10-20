@@ -8,7 +8,7 @@ package ru.finney.pet.domain.model
 object RoomThemes {
     const val BASE = "default"
 
-    val ALL = listOf(BASE, "circus", "honey", "sea", "forest", "town")
+    val ALL = listOf(BASE, "circus", "honey", "sea", "forest", "town", "oasis")
 }
 
 /**

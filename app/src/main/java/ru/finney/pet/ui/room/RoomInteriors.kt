@@ -274,7 +274,25 @@ object Interiors {
         )
     }
 
-    val all = listOf(Default, Circus, Honey, Sea, Forest, Town)
+    /** Оазис: стрельчатое окно со шторами на пустыню с пальмами; торшер — солнце. За окном ничего не движется. */
+    val Oasis = run {
+        val back = RoomLayer(R.drawable.room_oasis_back, RelRect(0.0000f, 0.0000f, 1.0000f, 1.0000f))
+        val frame = RoomLayer(R.drawable.room_oasis_window_frame, RelRect(0.5215f, 0.0175f, 0.9757f, 0.3721f))
+        val view = RoomLayer(R.drawable.room_oasis_window_view, RelRect(0.5896f, 0.0450f, 0.9049f, 0.3488f))
+        val lamp = RoomLayer(R.drawable.room_oasis_lamp, RelRect(0.0514f, 0.0575f, 0.3771f, 0.5325f))
+        RoomInterior(
+            id = "oasis",
+            label = "Оазис",
+            wall = WallSkin(back, floorTop = 0.4725f),
+            // Стекло между шторами — среднее на трети и двух третях высоты: шторы расходятся книзу.
+            window = WindowSkin.picture(frame, view, glass = 0.6306f..0.8625f),
+            // Абажур — круг солнца, свет под ним.
+            lamp = LampSkin(lamp, shade = Offset(0.2150f, 0.1550f), pool = Offset(0.2125f, 0.5067f)),
+            rug = RugSkin(R.drawable.room_rug_oasis, aspect = 3.1847f),
+        )
+    }
+
+    val all = listOf(Default, Circus, Honey, Sea, Forest, Town, Oasis)
 }
 
 /**

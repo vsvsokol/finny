@@ -24,5 +24,6 @@
   { "id": "goal_room_circus",       "label": "Комната «Цирк»",    "price": 220, "moodBonus": 50, "reward": "circus", "rewardKind": "room", "unlockLevel": 20 },
   { "id": "goal_hat_sun",           "label": "Шляпа с бантом",   "price": 235, "moodBonus": 50, "reward": "hat_sun", "unlockLevel": 23 },
   { "id": "goal_room_town",         "label": "Комната «Городок»", "price": 250, "moodBonus": 55, "reward": "town",   "rewardKind": "room", "unlockLevel": 26 },
-  { "id": "goal_hat_top",           "label": "Цилиндр",          "price": 260, "moodBonus": 55, "reward": "hat_top", "unlockLevel": 28 }
+  { "id": "goal_hat_top",           "label": "Цилиндр",          "price": 260, "moodBonus": 55, "reward": "hat_top", "unlockLevel": 28 },
+  { "id": "goal_room_oasis",        "label": "Комната «Оазис»",   "price": 270, "moodBonus": 60, "reward": "oasis",  "rewardKind": "room", "unlockLevel": 30 }
 ]

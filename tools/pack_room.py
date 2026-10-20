@@ -170,6 +170,7 @@ INTERIOR_LIFE = {
     "sea": ("fish",),
     "forest": ("fireflies",),
     "town": (),
+    "oasis": (),
 }
 
 # Кабинки колеса обозрения нарисованы одним слоем, а вращаются по отдельности
@@ -251,10 +252,10 @@ def pack_interiors() -> dict[str, list[tuple[str, str, tuple[float, float, float
 # как ящику для игрушек, поэтому здесь только обрезка и размер. Ширина — чуть меньше
 # экрана 1080p: на телефоне ковёр почти во всю ширину видимой части комнаты.
 #
-# Имя файла — id темы. arabic нарисован без темы: в ресурсы не идёт, пока её нет.
+# Имя файла — id темы.
 
 RUGS = SRC / "rugs"
-RUG_THEMES = ("default", "circus", "honey", "sea", "forest", "town")
+RUG_THEMES = ("default", "circus", "honey", "sea", "forest", "town", "oasis")
 RUG_WIDTH = 1000
 
 
