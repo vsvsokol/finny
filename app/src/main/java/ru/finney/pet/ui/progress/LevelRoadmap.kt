@@ -53,6 +53,11 @@ import ru.finney.pet.ui.components.OutlinedText
 import ru.finney.pet.ui.sound.LocalSounds
 import ru.finney.pet.ui.sound.Sfx
 import ru.finney.pet.ui.theme.FinneyBlue
+import ru.finney.pet.ui.theme.FinneyPeach
+import ru.finney.pet.ui.theme.FinneyYellow
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.Path
 import ru.finney.pet.ui.theme.FinneyCream
 import ru.finney.pet.ui.theme.FinneyGreen
 import ru.finney.pet.ui.theme.FinneyInk
@@ -105,6 +110,22 @@ internal fun LevelRoadmap(
     }
 }
 
+/**
+ * Пейзаж у дороги: мягкий холм с той стороны, где узла нет, и пара точек. Рисуется
+ * в строке пути, поэтому едет вместе с картой. Цвета палитры, но бледные: фон не должен
+ * спорить с узлами.
+ */
+private fun DrawScope.scenery(level: Int, x: Float, y: Float) {
+    val tint = listOf(FinneyYellow, FinneyPeach, FinneyBlue, FinneyGreen)[level % 4]
+    val r = 60.dp.toPx()
+    drawCircle(tint.copy(alpha = 0.14f), radius = r, center = Offset(x, y + r * 0.35f))
+    drawCircle(tint.copy(alpha = 0.10f), radius = r * 0.55f, center = Offset(x + r * 0.8f * (if (level % 2 == 0) 1 else -1), y + r * 0.6f))
+    val dot = 5.dp.toPx()
+    listOf(-0.6f to -0.9f, 0.5f to -1.1f, 0.1f to -0.55f).forEach { (dx, dy) ->
+        drawCircle(FinneyInk.copy(alpha = 0.10f), radius = dot, center = Offset(x + r * dx, y + r * dy))
+    }
+}
+
 /** Доля ширины, на которой стоит узел: змейка из четырёх положений. */
 private fun bias(level: Int): Float = listOf(0f, 0.55f, 0f, -0.55f)[(level - 1) % 4]
 
@@ -120,18 +141,24 @@ private fun PathStep(node: LevelNode, next: LevelNode?, selected: Boolean, onCli
             .fillMaxWidth()
             .height(StepHeight)
             .drawBehind {
-                next ?: return@drawBehind
                 val half = NodeSize.toPx() / 2
                 fun x(b: Float) = (size.width - NodeSize.toPx()) * (b + 1) / 2 + half
+                scenery(node.level, x(-bias(node.level) * 0.9f), half + StepHeight.toPx() / 2)
+                next ?: return@drawBehind
                 val reached = next.status != NodeStatus.FUTURE
-                drawLine(
-                    color = if (reached) FinneyInk else FinneyInkFaded,
-                    start = Offset(x(bias(node.level)), half),
-                    end = Offset(x(bias(next.level)), half + StepHeight.toPx()),
-                    strokeWidth = StrokeBold.toPx(),
-                    cap = StrokeCap.Round,
-                    pathEffect = if (reached) null else PathEffect.dashPathEffect(floatArrayOf(18f, 16f)),
-                )
+                // Дорога, а не линия: S-кривая с вертикальными касательными у узлов,
+                // пройденная — жёлтая, будущая — кремовая с пунктиром посередине.
+                val a = Offset(x(bias(node.level)), half)
+                val b = Offset(x(bias(next.level)), half + StepHeight.toPx())
+                val bend = (b.y - a.y) * 0.6f
+                val road = Path().apply { moveTo(a.x, a.y); cubicTo(a.x, a.y + bend, b.x, b.y - bend, b.x, b.y) }
+                val width = 16.dp.toPx()
+                drawPath(road, FinneyInk, style = Stroke(width + StrokeRegular.toPx() * 2, cap = StrokeCap.Round))
+                drawPath(road, if (reached) FinneyYellow else FinneyCream, style = Stroke(width, cap = StrokeCap.Round))
+                if (!reached) {
+                    drawPath(road, FinneyInkFaded, style = Stroke(3.dp.toPx(), cap = StrokeCap.Round,
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(12.dp.toPx(), 10.dp.toPx()))))
+                }
             },
     ) {
         Column(

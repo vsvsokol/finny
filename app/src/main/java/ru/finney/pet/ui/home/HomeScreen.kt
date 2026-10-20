@@ -1514,7 +1514,7 @@ internal fun HomeContent(
             ) {
                 LevelPanel(
                     level = state.level,
-                    upcoming = state.upcoming,
+                    path = state.path,
                     check = state.check,
                     levelGame = state.levelGame,
                     planGap = state.planGap,
@@ -1581,6 +1581,7 @@ internal fun HomeContent(
             onOpenHelp = onOpenHelp,
             onOpenGlossary = onOpenGlossary,
             onOpenSettings = onOpenSettings,
+            onOpenProgress = onOpenProgress,
         )
 
         if (debugOpen && isDebuggable) {
@@ -1746,7 +1747,7 @@ private fun LevelPanel(
     onOpenProgress: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
-    upcoming: NextProgress? = null,
+    path: List<ru.finney.pet.ui.progress.LevelNode> = emptyList(),
 ) {
     var confirmRestart by rememberSaveable { mutableStateOf(false) }
     var careOpen by rememberSaveable { mutableStateOf(false) }
@@ -1786,10 +1787,8 @@ private fun LevelPanel(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            upcoming?.let { next ->
-                Text("На уровне ${next.level}:", style = MaterialTheme.typography.titleMedium, color = FinneyInk)
-                next.changes.forEach { Text(it, style = MaterialTheme.typography.bodyLarge, color = FinneyInk) }
-            }
+            // Вместо строк «На уровне N: …» — кусок карты: что откроется, видно картинкой.
+            MiniPath(path, onOpen = onOpenProgress)
             if (!check.planConfirmed) {
                 Text(
                     "Уровень начинается с плана: реши, сколько на нужное, сколько на «хочется» и сколько отложить.",
@@ -1896,14 +1895,6 @@ private fun LevelPanel(
             }
             // Уже основной: рядом с главным действием второстепенные не должны
             // спорить с ним ни цветом, ни шириной.
-            FinneyButton(
-                text = "Итоги и история",
-                onClick = onOpenProgress,
-                fillWidth = false,
-                calm = true,
-                textStyle = LevelSideButtonText,
-                modifier = Modifier.fillMaxWidth(SideButtonWidth),
-            )
             if (check.planConfirmed && !check.willPass) {
                 // Сдаться можно, но только спокойной кнопкой и через вопрос: уровень не
                 // засчитается, и ребёнок должен знать это до нажатия, а не после.
