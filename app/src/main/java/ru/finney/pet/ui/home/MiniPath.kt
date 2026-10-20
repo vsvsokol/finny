@@ -68,11 +68,10 @@ import ru.finney.pet.ui.theme.StrokeRegular
 // карты виден сразу: пройденные узлы со звёздами, «ты здесь» и подарки впереди — картинкой.
 // Вся полоска — кнопка, а узлы похожи на большую карту, поэтому переход туда не удивляет.
 
-/** Пять узлов вокруг текущего: два позади, два впереди; у края пути окно сдвигается. */
-internal fun miniPathWindow(nodes: List<LevelNode>): List<LevelNode> {
-    val current = nodes.indexOfFirst { it.status == NodeStatus.CURRENT }.coerceAtLeast(0)
-    val start = (current - 2).coerceIn(0, (nodes.size - MiniNodes).coerceAtLeast(0))
-    return nodes.drop(start).take(MiniNodes)
+/** Пять уровней вокруг текущего: два позади, два впереди; у края пути окно сдвигается. */
+internal fun miniPathLevels(current: Int, maxLevel: Int): IntRange {
+    val start = (current - 2).coerceIn(1, (maxLevel - MiniNodes + 1).coerceAtLeast(1))
+    return start..minOf(maxLevel, start + MiniNodes - 1)
 }
 
 @Composable

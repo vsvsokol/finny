@@ -156,6 +156,20 @@ class Game(
         economy,
     )
 
+    /**
+     * На каком уровне играли каждый период: номер периода → уровень до него. То же, что
+     * `levelAfter(state, number - 1)` для каждого периода, но за один проход по истории.
+     */
+    fun levelsPlayed(state: GameState): Map<Int, Int> {
+        var passedSoFar = 0
+        val result = HashMap<Int, Int>(state.periods.size)
+        state.periods.sortedBy { it.number }.forEach { period ->
+            result[period.number] = Progression.level(passedSoFar, economy)
+            if (period.result?.let { Progression.passed(it, economy) } == true) passedSoFar++
+        }
+        return result
+    }
+
     /** Пройден ли уровень, сыгранный в этом периоде; null — период ещё идёт. */
     fun isPassed(period: Period): Boolean? = period.result?.let { Progression.passed(it, economy) }
 
