@@ -93,7 +93,8 @@ fun backdropFor(task: TaskDefinition, finished: Boolean = false): Backdrop = whe
     is GoalRaceTask -> Backdrop.FIELD
     is ReserveTask -> if (finished) Backdrop.DOTS_RAIN else Backdrop.DOTS
     is StandTask -> if (finished) Backdrop.SUNSET else Backdrop.SKY
-    is ChangeTask, is ReceiptTask -> Backdrop.STORE
+    is ChangeTask -> Backdrop.TILL
+    is ReceiptTask -> Backdrop.STORE
     is ChoresTask, is DistributorTask, is GoalSliderTask -> Backdrop.DOTS
 }
 

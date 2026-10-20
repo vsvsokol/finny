@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -44,6 +45,8 @@ import ru.finney.pet.domain.tasks.TaskEngines
 import ru.finney.pet.domain.tasks.TaskEvaluation
 import ru.finney.pet.domain.tasks.TaskInput
 import ru.finney.pet.ui.components.FinneyButton
+import ru.finney.pet.ui.components.SpeechBubble
+import ru.finney.pet.ui.components.Tail
 import ru.finney.pet.ui.components.OutlinedText
 import ru.finney.pet.ui.sound.LocalSounds
 import ru.finney.pet.ui.sound.Sfx
@@ -111,7 +114,7 @@ internal fun ReceiptGame(task: ReceiptTask, character: PetCharacter, onClose: ()
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Guest(cashier, 96.dp, Modifier.width(96.dp))
-                Bubble(cashierLine(checked, solved, details), Tail.LEFT, Modifier.weight(1f, fill = false), maxWidth = 230.dp)
+                SpeechBubble(cashierLine(checked, solved, details), Tail.LEFT, Modifier.weight(1f, fill = false).widthIn(max = 230.dp), style = MaterialTheme.typography.bodyMedium)
             }
             Bag(task.cart)
             ReceiptPaper(

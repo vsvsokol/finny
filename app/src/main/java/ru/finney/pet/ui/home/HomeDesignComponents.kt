@@ -32,30 +32,21 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Outline
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathOperation
-import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import ru.finney.pet.R
-import ru.finney.pet.domain.pet.Emotion
+import ru.finney.pet.ui.components.SpeechBubble
+import ru.finney.pet.ui.components.Tail
 import ru.finney.pet.ui.motion.motionEnabled
 import ru.finney.pet.ui.components.ActionFeedback
 import ru.finney.pet.ui.components.ActionFeedbackSummary
@@ -63,8 +54,6 @@ import androidx.compose.foundation.border
 import ru.finney.pet.ui.motion.LocalAnimations
 import ru.finney.pet.ui.sound.LocalSounds
 import ru.finney.pet.ui.sound.Sfx
-import ru.finney.pet.ui.tasks.games.PillShade
-import ru.finney.pet.ui.tasks.games.insetShade
 import ru.finney.pet.ui.theme.*
 
 /**
@@ -240,7 +229,6 @@ internal fun PetSpeechBubble(
     tailAbove: Boolean = false, @DrawableRes icon: Int? = null,
 ) {
     val animations = LocalAnimations.current
-    val shape = remember(tailAbove) { SpeechShape(tailAbove) }
     Box(modifier) {
         AnimatedVisibility(visible,
             enter = if (animations) fadeIn(tween(180)) + scaleIn(
@@ -249,35 +237,30 @@ internal fun PetSpeechBubble(
             exit = if (animations) fadeOut(tween(220)) + scaleOut(tween(220), targetScale = 0.94f,
                 transformOrigin = TransformOrigin(SpeechTailAt, if (tailAbove) 0f else 1f)) else ExitTransition.None,
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            SpeechBubble(
+                tail = if (tailAbove) Tail.UP else Tail.DOWN,
+                tailAt = SpeechTailAt,
+                padding = PaddingValues(start = 12.dp, end = 16.dp, top = 10.dp, bottom = 14.dp),
                 modifier = Modifier
                     .widthIn(max = 236.dp)
-                    .background(Color.White, shape)
-                    .insetShade(shape, PillShade, 5.dp)
-                    .border(StrokeRegular, FinneyInk, shape)
-                    .clickable(enabled = visible, role = Role.Button, onClickLabel = "Помочь питомцу", onClick = onClick)
-                    .padding(
-                        start = 12.dp, end = 16.dp,
-                        top = 10.dp + if (tailAbove) SpeechTail else 0.dp,
-                        bottom = 14.dp + if (tailAbove) 0.dp else SpeechTail,
-                    ),
+                    .clickable(enabled = visible, role = Role.Button, onClickLabel = "Помочь питомцу", onClick = onClick),
             ) {
-                if (icon != null) {
-                    Box(
-                        Modifier.size(44.dp).background(FinneyCream, CircleShape).border(StrokeThin, FinneyInk, CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) { Image(painterResource(icon), contentDescription = null, modifier = Modifier.size(30.dp)) }
-                }
-                AnimatedContent(text, transitionSpec = {
-                    if (animations) fadeIn(tween(180, delayMillis = 80)) togetherWith fadeOut(tween(100))
-                    else EnterTransition.None togetherWith ExitTransition.None
-                }, label = "petSpeechText") { message ->
-                    Text(
-                        message, style = MaterialTheme.typography.titleMedium, color = FinneyInk,
-                        textAlign = if (icon != null) TextAlign.Start else TextAlign.Center,
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (icon != null) {
+                        Box(
+                            Modifier.size(44.dp).background(FinneyCream, CircleShape).border(StrokeThin, FinneyInk, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) { Image(painterResource(icon), contentDescription = null, modifier = Modifier.size(30.dp)) }
+                    }
+                    AnimatedContent(text, transitionSpec = {
+                        if (animations) fadeIn(tween(180, delayMillis = 80)) togetherWith fadeOut(tween(100))
+                        else EnterTransition.None togetherWith ExitTransition.None
+                    }, label = "petSpeechText") { message ->
+                        Text(
+                            message, style = MaterialTheme.typography.titleMedium, color = FinneyInk,
+                            textAlign = if (icon != null) TextAlign.Start else TextAlign.Center,
+                        )
+                    }
                 }
             }
         }
@@ -286,35 +269,6 @@ internal fun PetSpeechBubble(
 
 /** Где по ширине пузыря кончик хвостика: над головой питомца, его ставит раскладка в HomeScreen. */
 private const val SpeechTailAt = 0.66f
-
-/** Высота хвостика реплики. */
-private val SpeechTail = 14.dp
-
-/**
- * Пузырь и хвостик — один контур: прямоугольник и хвост объединены, поэтому рамка
- * не перечёркивает основание хвоста. Хвост мягкий, слегка загнут к питомцу.
- */
-private class SpeechShape(private val tailAbove: Boolean) : Shape {
-    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
-        val t = with(density) { SpeechTail.toPx() }
-        val r = with(density) { 22.dp.toPx() }
-        val w = with(density) { 22.dp.toPx() }
-        val top = if (tailAbove) t else 0f
-        val bottom = if (tailAbove) size.height else size.height - t
-        val body = Path().apply { addRoundRect(RoundRect(0f, top, size.width, bottom, CornerRadius(r))) }
-        val tip = size.width * SpeechTailAt
-        // Основание хвоста заходит внутрь тела, чтобы объединение было без щели.
-        val baseY = if (tailAbove) top + t * 0.6f else bottom - t * 0.6f
-        val tipY = if (tailAbove) 0f else size.height
-        val tail = Path().apply {
-            moveTo(tip - w * 0.75f, baseY)
-            quadraticTo(tip - w * 0.1f, (baseY + tipY) / 2f, tip + w * 0.15f, tipY)
-            quadraticTo(tip + w * 0.2f, (baseY + tipY) / 2f + (if (tailAbove) t * 0.2f else -t * 0.2f), tip + w * 0.55f, baseY)
-            close()
-        }
-        return Outline.Generic(Path().apply { op(body, tail, PathOperation.Union) })
-    }
-}
 
 /** Держим последний результат до конца затухания, даже когда событие уже очищено. */
 @Composable

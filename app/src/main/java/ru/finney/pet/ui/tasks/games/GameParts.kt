@@ -9,13 +9,14 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.PathOperation
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.lerp
-import kotlin.math.PI
-import kotlin.math.cos
 import kotlin.math.sin
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -168,10 +169,9 @@ internal fun CategoryChip(category: Category, modifier: Modifier = Modifier) {
 }
 
 /**
- * Монета с номиналом: ободок с насечкой, блик и цифра. Отличается от монеты
- * игровой валюты: на кассе важен номинал, а не значок финки. Номинал подписан
- * цифрой, цвет — только помощь глазу. Плоский кружок с цифрой на плейтесте 20.10
- * на монету не походил, поэтому края и блик.
+ * Монета с номиналом по макету «Касса Финни»: гурт полосками, светлое кольцо внутри,
+ * блик и белая цифра с обводкой. Цвет у номинала свой, но номинал подписан цифрой —
+ * цвет только помощь глазу. Одна монета на все игры: в ящике кассы, в чеке и в итогах.
  */
 @Composable
 internal fun DenominationCoin(
@@ -180,12 +180,12 @@ internal fun DenominationCoin(
     size: Dp = 52.dp,
     faded: Boolean = false,
 ) {
-    val fill = when {
-        faded -> FinneySand
-        value == 1 -> FinneyYellow
-        value == 2 -> FinneyBlue
-        value == 5 -> FinneyPeach
-        else -> FinneyGreen
+    val (fill, ridge) = when {
+        faded -> FinneySand to Color(0xFFEBD3A6)
+        value == 1 -> FinneyYellow to Color(0xFFE9C766)
+        value == 2 -> FinneyBlue to Color(0xFF4F8DC6)
+        value == 5 -> FinneyPeach to Color(0xFFE87C60)
+        else -> FinneyGreen to Color(0xFF6AB874)
     }
     val ink = if (faded) FinneyInk.copy(alpha = 0.35f) else FinneyInk
     Box(
@@ -197,43 +197,43 @@ internal fun DenominationCoin(
         Canvas(Modifier.fillMaxSize()) {
             val r = this.size.minDimension / 2f
             val c = center
-            val edge = lerp(fill, FinneyInk, 0.22f)
-            // Ободок с насечкой, как гурт у настоящей монеты. Насечек столько же при любом
-            // размере, поэтому мелкая сдача в чеке и крупная монета в ящике — одна монета.
-            drawCircle(edge, r * 0.97f, c)
-            drawCircle(ink, r * 0.97f, c, style = Stroke(1.5.dp.toPx()))
-            val notch = lerp(fill, FinneyInk, 0.5f)
-            val notches = 36
-            for (i in 0 until notches) {
-                val a = (2 * PI * i / notches).toFloat()
-                val dx = cos(a)
-                val dy = sin(a)
-                drawLine(
-                    notch,
-                    Offset(c.x + r * 0.84f * dx, c.y + r * 0.84f * dy),
-                    Offset(c.x + r * 0.93f * dx, c.y + r * 0.93f * dy),
-                    strokeWidth = (r * 0.05f).coerceAtLeast(1f),
-                    cap = StrokeCap.Round,
-                )
+            // Обводка 3 при монете 52–62 dp; у мелкой сдачи в чеке — тоньше, по размеру.
+            val b = minOf(3.dp.toPx(), r * 0.115f)
+            val inner = r - b
+            drawCircle(fill, r, c)
+            // Гурт: полоски по 7°, как repeating-conic-gradient в макете.
+            val ridges = 26
+            val step = 360f / ridges
+            for (i in 0 until ridges) {
+                drawArc(ridge, i * step, step / 2f, useCenter = true, topLeft = Offset(c.x - inner, c.y - inner), size = Size(inner * 2, inner * 2))
             }
-            // Лицо монеты и тонкий ободок внутри.
-            drawCircle(fill, r * 0.80f, c)
-            drawCircle(ink, r * 0.80f, c, style = Stroke(1.5.dp.toPx()))
-            drawCircle(edge, r * 0.68f, c, style = Stroke(1.2.dp.toPx()))
-            // Блик сверху слева — монета выпуклая, а не плоская.
-            if (!faded) drawArc(
-                Color.White.copy(alpha = 0.7f),
-                startAngle = 200f, sweepAngle = 60f, useCenter = false,
-                topLeft = Offset(c.x - r * 0.58f, c.y - r * 0.58f),
-                size = Size(r * 1.16f, r * 1.16f),
-                style = Stroke(r * 0.09f, cap = StrokeCap.Round),
-            )
+            drawCircle(fill, inner * 0.849f, c)
+            // Тень по низу внутри обводки: круг минус тот же круг, поднятый на 4 dp.
+            val shade = minOf(4.dp.toPx(), inner * 0.16f)
+            val body = Path().apply { addOval(Rect(c, inner)) }
+            val lifted = Path().apply { addOval(Rect(c.copy(y = c.y - shade), inner)) }
+            drawPath(Path().apply { op(body, lifted, PathOperation.Difference) }, FinneyInk.copy(alpha = 0.22f))
+            val ring = minOf(2.dp.toPx(), inner * 0.08f)
+            drawCircle(Color.White.copy(alpha = 0.55f), inner * 0.66f - ring / 2, c, style = Stroke(ring))
+            if (!faded) {
+                val box = inner * 2
+                val glare = Offset(c.x - inner + box * 0.29f, c.y - inner + box * 0.20f)
+                rotate(-28f, pivot = glare) {
+                    drawOval(
+                        Color.White.copy(alpha = 0.85f),
+                        topLeft = Offset(glare.x - box * 0.10f, glare.y - box * 0.06f),
+                        size = Size(box * 0.20f, box * 0.12f),
+                    )
+                }
+            }
+            drawCircle(ink, r - b / 2, c, style = Stroke(b))
         }
         OutlinedText(
             value.toString(),
-            style = MaterialTheme.typography.titleLarge.copy(fontSize = (size.value * 0.40f).sp),
-            fill = if (faded) FinneySand else FinneyCream,
+            style = MaterialTheme.typography.titleLarge.copy(fontSize = (size.value * 0.42f).sp, lineHeight = (size.value * 0.42f).sp),
+            fill = if (faded) FinneySand else Color.White,
             outline = ink,
+            modifier = Modifier.offset(y = -size * 0.03f),
         )
     }
 }
