@@ -154,7 +154,7 @@ internal fun ChangeGame(task: ChangeTask, character: PetCharacter, onClose: () -
                             }
                             Bubble(ownLine(current.price, tray.sum(), checked), Tail.RIGHT)
                         }
-                        ScenePet(character, 140.dp, Modifier.width(140.dp), reactions = pet)
+                        ScenePet(character, 210.dp, Modifier.width(210.dp), reactions = pet)
                     }
                 }
 

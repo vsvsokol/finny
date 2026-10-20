@@ -186,8 +186,8 @@ internal fun TaskIntro(state: TaskUiState.Ready, onStart: () -> Unit, onBack: ()
                 )
             }
             // Сколько дадут — монеткой в пузыре, а не фразой. Уже пройдено — просто «ещё?».
-            // У короткой карточки питомец до 200 dp, у длинной заходит на её угол.
-            PetInFreeSpace(above = titleHeight + cardHeight + 12.dp, min = 128.dp, max = 200.dp) { size, modifier ->
+            // У короткой карточки питомец до 240 dp, у длинной заходит на её угол.
+            PetInFreeSpace(above = titleHeight + cardHeight + 12.dp, min = 160.dp, max = 240.dp, maxLift = 48.dp) { size, modifier ->
                 if (state.completed) {
                     PetSays(state.character, "Сыграем ещё?", modifier, petSize = size)
                 } else {
@@ -377,7 +377,7 @@ internal fun TaskResultScene(state: TaskUiState.Ready, onReplay: () -> Unit, onD
                 // Итог: получилось — два прыжка и конфетти, не вышло — грустит и капля.
                 val pet = rememberPetReactions()
                 LaunchedEffect(success) { if (success) pet.win() else pet.fail() }
-                PetAtRight(state.character, 150.dp, Modifier.padding(end = 8.dp), reactions = pet)
+                PetAtRight(state.character, 225.dp, Modifier.padding(end = 8.dp), reactions = pet)
             }
         }
         RewardCoins(flight)

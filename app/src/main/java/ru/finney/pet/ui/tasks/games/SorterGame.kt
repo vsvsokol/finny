@@ -174,15 +174,15 @@ internal fun SorterGame(
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 val wrong = mistake
                 // На низком экране места хватает только панели — питомца при ошибке тогда не видно.
-                val roomForPet = maxHeight >= 280.dp
+                val roomForPet = maxHeight >= 330.dp
                 if (wrong == null) {
                     // Вопрос «"Яблоко" — это что?» убран: вещь на ленте и две корзины понятны без слов.
                     // Стрелки «↙ Нужное / Хочется ↘» по краям убраны (плейтест 20.10): что вещь
                     // надо тащить, показывает рука в начале игры, а питомец стал крупнее.
-                    if (item != null) ScenePet(character, 180.dp, Modifier.width(180.dp), reactions = pet)
+                    if (item != null) ScenePet(character, 270.dp, Modifier.width(270.dp), reactions = pet)
                 } else {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (roomForPet) ScenePet(character, 100.dp, Modifier.width(100.dp), reactions = pet)
+                        if (roomForPet) ScenePet(character, 150.dp, Modifier.width(150.dp), reactions = pet)
                         MistakePanel(wrong, onMove = ::moveOver)
                     }
                 }

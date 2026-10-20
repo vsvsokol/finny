@@ -427,7 +427,7 @@ internal fun PetSays(
     character: PetCharacter,
     text: String,
     modifier: Modifier = Modifier,
-    petSize: Dp = 120.dp,
+    petSize: Dp = 180.dp,
     mood: PetMood = PetMood.HAPPY,
     reactions: PetReactions = rememberPetReactions(),
 ) {
@@ -456,7 +456,7 @@ internal fun PetAtRight(
  * 15 монет». Число и монетка читаются быстрее слов. Питомец справа, как в [PetSays].
  */
 @Composable
-internal fun PetOffers(character: PetCharacter, amount: Int, modifier: Modifier = Modifier, petSize: Dp = 120.dp) {
+internal fun PetOffers(character: PetCharacter, amount: Int, modifier: Modifier = Modifier, petSize: Dp = 180.dp) {
     val tailSize = 12.dp
     val shape = remember { BubbleShape(Tail.RIGHT, 16.dp, tailSize) }
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.End) {

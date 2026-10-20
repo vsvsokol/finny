@@ -158,7 +158,7 @@ internal fun ReserveGame(
                     else -> PetMood.HAPPY to "И радость есть, и запас. Поехали!"
                 }
                 // Крупнее, если под планом есть место; на угол панели заходит чуть-чуть — там полоска.
-                PetInFreeSpace(above = goalsHeight + planHeight + 12.dp, min = 100.dp, max = 150.dp, maxLift = 16.dp) { size, modifier ->
+                PetInFreeSpace(above = goalsHeight + planHeight + 12.dp, min = 150.dp, max = 225.dp, maxLift = 16.dp) { size, modifier ->
                     PetSays(character, line, modifier, petSize = size, mood = mood)
                 }
             }
@@ -272,7 +272,7 @@ internal fun ReserveGame(
             Spacer(Modifier.weight(1f))
             // Реплика «Хорошо, что был запас! / Желаемое купим потом…» повторяла объяснение
             // итога слово в слово — питомец просто стоит рядом. Лицо — по радостям недели.
-            PetAtRight(character, 100.dp, mood = if (today > 1 && joys == 0) PetMood.SAD else PetMood.HAPPY, reactions = pet)
+            PetAtRight(character, 150.dp, mood = if (today > 1 && joys == 0) PetMood.SAD else PetMood.HAPPY, reactions = pet)
         }
     }
 }

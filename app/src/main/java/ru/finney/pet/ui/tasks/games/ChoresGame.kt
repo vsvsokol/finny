@@ -101,7 +101,7 @@ internal fun ChoresGame(task: ChoresTask, character: PetCharacter, onClose: () -
             // (плейтест 20.10), дни и дела ради него сдвинуты ниже.
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 GoalCard(task, earned, rest)
-                PetSays(character, petLine(task, earned, rest, pay.tiredLoss), petSize = 88.dp, reactions = pet)
+                PetSays(character, petLine(task, earned, rest, pay.tiredLoss), petSize = 132.dp, reactions = pet)
 
                 // Все дни одним рядом: вторым рядом неделя не влезала в экран.
                 Row(horizontalArrangement = Arrangement.spacedBy(DayGap), modifier = Modifier.fillMaxWidth()) {

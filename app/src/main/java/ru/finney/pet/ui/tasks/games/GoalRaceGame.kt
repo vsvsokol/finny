@@ -627,8 +627,9 @@ private fun Road(task: GoalRaceTask, deposits: List<Int>, day: Int, character: P
         val stepX = (maxWidth - goalSlot) / task.days
         // Соседние дни разведены по высоте на ZigZag, поэтому кружок ограничен шагом через день.
         val circle = (stepX * 2 - 8.dp).coerceIn(30.dp, 48.dp)
-        val token = 64.dp
-        val top = token - 8.dp + circle / 2
+        // Фишка — голова питомца; низ головы — около 0.92 квадрата, шляпа почти до верха.
+        val token = 96.dp
+        val top = token * 0.9f + circle / 2
         fun cx(i: Int): Dp = stepX * i + stepX / 2
         fun cy(i: Int): Dp = if (i % 2 == 0) top else top + ZigZag
         val goalX = maxWidth - goalSlot / 2
@@ -686,7 +687,7 @@ private fun Road(task: GoalRaceTask, deposits: List<Int>, day: Int, character: P
         ScenePet(
             character,
             token,
-            Modifier.width(token).offset(hereX - token / 2, hereY - circle / 2 - token + 8.dp),
+            Modifier.width(token).offset(hereX - token / 2, hereY - circle / 2 - token * 0.94f),
             mood = if (sad) PetMood.SAD else PetMood.HAPPY,
             reactions = pet,
         )
@@ -697,7 +698,7 @@ private fun Road(task: GoalRaceTask, deposits: List<Int>, day: Int, character: P
 private val ZigZag = 72.dp
 
 /** Высота дороги: фишка над верхним кружком, зигзаг и картинка соблазна под нижним. */
-private val RoadHeight = 208.dp
+private val RoadHeight = 240.dp
 
 /** Сердечки настроения Финни: [count] горят из [max]. */
 @Composable
