@@ -47,6 +47,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
@@ -605,9 +606,11 @@ private fun DrawScope.drawJarFace(top: Float, mood: Int, maxMood: Int) {
 }
 
 /**
- * Дорога одной строкой: кружки дней, над текущим — фишка-питомец, под днями
- * с соблазном — его картинка (видно заранее, где будет трудно), на финише — цель
- * с ценой. Прошлый соблазн, от которого отказались, бледнеет.
+ * Дорога зигзагом: кружки дней по очереди выше и ниже, над текущим — фишка-питомец,
+ * под днями с соблазном — его картинка (видно заранее, где будет трудно), на финише —
+ * цель с ценой. Прошлый соблазн, от которого отказались, бледнеет. Одной строкой
+ * дорога была узкой полосой, и под ней пустовал экран (плейтест 20.10); зигзагом
+ * кружки и фишка крупнее, а соседние дни не налезают друг на друга.
  */
 @Composable
 private fun Road(task: GoalRaceTask, deposits: List<Int>, day: Int, character: PetCharacter, sad: Boolean) {
@@ -619,67 +622,78 @@ private fun Road(task: GoalRaceTask, deposits: List<Int>, day: Int, character: P
     ) {
         val goalSlot = 64.dp
         val stepX = (maxWidth - goalSlot) / task.days
-        val circle = (stepX - 6.dp).coerceIn(26.dp, 40.dp)
-        val token = 40.dp
-        val cy = token - 4.dp + circle / 2
+        // Соседние дни разведены по высоте на ZigZag, поэтому кружок ограничен шагом через день.
+        val circle = (stepX * 2 - 8.dp).coerceIn(30.dp, 48.dp)
+        val token = 64.dp
+        val top = token - 8.dp + circle / 2
         fun cx(i: Int): Dp = stepX * i + stepX / 2
+        fun cy(i: Int): Dp = if (i % 2 == 0) top else top + ZigZag
         val goalX = maxWidth - goalSlot / 2
+        val goalY = top + ZigZag / 2
 
         Canvas(Modifier.fillMaxSize()) {
-            val y = cy.toPx()
-            drawLine(FinneyCream, Offset(cx(0).toPx(), y), Offset(goalX.toPx(), y), 12.dp.toPx(), StrokeCap.Round)
-            drawLine(
+            val path = Path().apply {
+                moveTo(cx(0).toPx(), cy(0).toPx())
+                for (i in 1 until task.days) lineTo(cx(i).toPx(), cy(i).toPx())
+                lineTo(goalX.toPx(), goalY.toPx())
+            }
+            drawPath(path, FinneyCream, style = Stroke(12.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawPath(
+                path,
                 FinneyInk,
-                Offset(cx(0).toPx(), y),
-                Offset(goalX.toPx(), y),
-                3.dp.toPx(),
-                StrokeCap.Round,
-                PathEffect.dashPathEffect(floatArrayOf(4f, 18f)),
+                style = Stroke(3.dp.toPx(), cap = StrokeCap.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 18f))),
             )
         }
 
         (1..task.days).forEach { d ->
             val x = cx(d - 1)
+            val y = cy(d - 1)
             Box(
                 Modifier
-                    .offset(x - circle / 2, cy - circle / 2)
+                    .offset(x - circle / 2, y - circle / 2)
                     .size(circle)
                     .clip(CircleShape)
                     .background(if (d < day) FinneyYellow else if (d == day) Color.White else FinneyCream)
                     .border(if (d == day) StrokeBold else StrokeRegular, FinneyInk, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(d.toString(), style = MaterialTheme.typography.labelLarge, color = FinneyInk)
+                Text(d.toString(), style = MaterialTheme.typography.titleMedium, color = FinneyInk)
             }
+            // Картинка соблазна — под кружком: у верхнего там развилка дороги, у нижнего — пусто.
             task.events.firstOrNull { it.day == d }?.let { event ->
                 val refused = d < day && deposits.getOrNull(d - 1)?.let { !TaskEngines.raceTaken(task, event, it) } == true
                 ItemPicture(
                     event,
                     event.label,
-                    24.dp,
-                    Modifier.offset(x - 12.dp, cy + circle / 2 + 2.dp).alpha(if (refused) 0.35f else 1f),
+                    28.dp,
+                    Modifier.offset(x - 14.dp, y + circle / 2 + 2.dp).alpha(if (refused) 0.35f else 1f),
                 )
             }
         }
 
-        Column(Modifier.offset(goalX - goalSlot / 2, cy - 30.dp).width(goalSlot), horizontalAlignment = Alignment.CenterHorizontally) {
-            ItemPicture(task.goal, task.goal.label, 44.dp)
+        Column(Modifier.offset(goalX - goalSlot / 2, goalY - 30.dp).width(goalSlot), horizontalAlignment = Alignment.CenterHorizontally) {
+            ItemPicture(task.goal, task.goal.label, 48.dp)
             PriceTag(task.goal.price.toString())
         }
 
-        // Фишка переходит на следующий день плавно, а не прыжком.
-        val here by animateDpAsState(cx((day - 1).coerceIn(0, task.days - 1)), tween(500), label = "token")
+        // Фишка переходит на следующий день плавно, а не прыжком, — и вверх-вниз по зигзагу.
+        val now = (day - 1).coerceIn(0, task.days - 1)
+        val hereX by animateDpAsState(cx(now), tween(500), label = "tokenX")
+        val hereY by animateDpAsState(cy(now), tween(500), label = "tokenY")
         ScenePet(
             character,
             token,
-            Modifier.width(token).offset(here - token / 2, cy - circle / 2 - token + 8.dp),
+            Modifier.width(token).offset(hereX - token / 2, hereY - circle / 2 - token + 8.dp),
             mood = if (sad) PetMood.SAD else PetMood.HAPPY,
         )
     }
 }
 
-/** Высота дороги: фишка над кружком, сам кружок и картинка соблазна под ним. */
-private val RoadHeight = 104.dp
+/** Насколько нижние дни зигзага ниже верхних. */
+private val ZigZag = 72.dp
+
+/** Высота дороги: фишка над верхним кружком, зигзаг и картинка соблазна под нижним. */
+private val RoadHeight = 208.dp
 
 /** Сердечки настроения Финни: [count] горят из [max]. */
 @Composable
