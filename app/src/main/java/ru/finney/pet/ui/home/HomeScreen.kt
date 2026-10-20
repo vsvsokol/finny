@@ -406,6 +406,10 @@ internal fun HomeContent(
     val energyNow = sleep?.energyAt(now) ?: state.stats.energy
     var menuOpen by rememberSaveable { mutableStateOf(false) }
     var burgerBounds by remember { mutableStateOf(Rect.Zero) }
+    // Значок уровня: куда прилетают звёзды условий и как он подпрыгивает от них (LevelStars.kt).
+    var badgeBounds by remember { mutableStateOf(Rect.Zero) }
+    val badgeBump = remember { Animatable(1f) }
+    val starScope = rememberCoroutineScope()
     var savingsBounds by remember { mutableStateOf(Rect.Zero) }
     var gamesBounds by remember { mutableStateOf(Rect.Zero) }
     var headerBottom by remember { mutableFloatStateOf(0f) }
@@ -936,7 +940,10 @@ internal fun HomeContent(
                     level = state.level,
                     size = LevelBadgeSize,
                     progress = state.levelProgress,
-                    modifier = Modifier.hintTarget(hintTargets, NextStep.PLAN, NextStep.FINISH).combinedClickable(
+                    modifier = Modifier
+                        .onGloballyPositioned { badgeBounds = it.boundsInRoot() }
+                        .graphicsLayer { scaleX = badgeBump.value; scaleY = badgeBump.value }
+                        .hintTarget(hintTargets, NextStep.PLAN, NextStep.FINISH).combinedClickable(
                         onClickLabel = "Что нужно для уровня",
                         onLongClickLabel = if (isDebuggable) "Отладка" else null,
                         onLongClick = if (isDebuggable) ({ debugOpen = true }) else null,
@@ -1626,6 +1633,18 @@ internal fun HomeContent(
                 onDone = { roomEdit = null },
             )
         }
+
+        LevelStars(
+            state = state,
+            from = { petBounds().takeIf { it != Rect.Zero } ?: badgeBounds },
+            to = { badgeBounds },
+            onArrive = {
+                starScope.launch {
+                    badgeBump.snapTo(1.25f)
+                    badgeBump.animateTo(1f, spring(dampingRatio = 0.35f, stiffness = Spring.StiffnessMedium))
+                }
+            },
+        )
 
         // Карточка завершает переход даже после очистки разового события.
         HomeFeedbackToast(
