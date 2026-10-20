@@ -97,6 +97,15 @@
 - [@zYafALL]: `ui/tasks/games/ReserveGame.kt`, `ChangeGame.kt`, `ui/home/HomeDesignComponents.kt`
   (`PetSpeechBubble(icon)`), `HomeScreen.kt` (`emotionIcon`), `ui/room/CareGame.kt` (рисунки угощений).
   [@vsvsokol]: `shop.json`, `goals.json`.
+### 20 октября — прыжок в капсулу без скольжения · [@zYafALL]
+
+- Финни долетал до капсулы и обратно за 900 мс, а его прыжок (`PetAnimation.playJoy`) длится
+  670: приземлялся раньше и остаток пути скользил по полу. Теперь `WALK_MS` — приседание плюс полёт
+  (`HOP_CROUCH_MS + HOP_FLIGHT_MS`, как у прыжков по игровой), и дуга кончается вместе с приземлением.
+- По тому же `WALK_MS` идут щелчок двери и закрытие глаз в `HomeScreen` — они сдвинулись вместе
+  с прыжком. Камера (`CAMERA_MS`) не менялась.
+- Касается только `ui/room/RoomScene.kt`.
+
 ### 20 октября — карточка перед игрой по макету «вариант A» · [@lemonke68]
 
 - Карточка перед каждой из 8 игр переделана по макету карточек мини-игр (вариант A) и утверждённому
