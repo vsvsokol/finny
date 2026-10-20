@@ -70,6 +70,18 @@ class LevelMenuInteriorReviewTest {
         }
     }
 
+    @Test fun pathRevealsWithAnimationsAndKeepsItsAction() {
+        showHome({ home(3) }, animations = true)
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithContentDescription("Уровень 3").performClick()
+        for (elapsed in listOf(96L, 160L, 240L, 400L)) {
+            compose.mainClock.advanceTimeBy(elapsed)
+            shot("path-reveal-$elapsed")
+        }
+        compose.onNodeWithText("Весь путь ›").assertIsDisplayed().performClick()
+        compose.mainClock.autoAdvance = true
+    }
+
     @Test fun planAndFactFitsAtDefaultFont() = planAndFact(1f)
     @Test fun planAndFactFitsAtLargeFont() = planAndFact(1.3f)
 
@@ -160,6 +172,5 @@ class LevelMenuInteriorReviewTest {
         val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
         val directory = File(context.getExternalFilesDir(null), "level-menu-interior-review").apply { mkdirs() }
         File(directory, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        bitmap.recycle()
     }
 }
