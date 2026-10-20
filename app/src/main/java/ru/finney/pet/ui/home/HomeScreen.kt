@@ -32,6 +32,7 @@ import ru.finney.pet.ui.theme.RadiusCheckbox
 import ru.finney.pet.ui.theme.RadiusPanel
 import ru.finney.pet.ui.theme.StrokeBold
 import ru.finney.pet.ui.theme.StrokeRegular
+import ru.finney.pet.ui.motion.SteadyFrameRate
 import ru.finney.pet.ui.motion.motionEnabled
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -361,6 +362,9 @@ internal fun HomeContent(
     actionLayout: HomeActionLayout = HomeActionLayout.SPLIT,
     shopContent: @Composable (Int, () -> Unit) -> Unit = { balance, click -> HomeShopButton(balance, click) },
 ) {
+    // Комната тяжёлая для 120 Гц: на ровных 60 анимации идут без рывков (SteadyFrameRate).
+    SteadyFrameRate()
+
     // Питомец спит — это ночь: он в капсуле, свет выключен, игра на паузе
     // до утра. Глаза закрываются, когда он уже внутри, и открываются,
     // как только проснулся. Открыли приложение, а он спит, — глаза закрыты сразу.
