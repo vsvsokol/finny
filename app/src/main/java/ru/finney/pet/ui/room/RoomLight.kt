@@ -18,7 +18,9 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
@@ -79,6 +81,9 @@ private val LampBloom = Color(0xFFFFB35C)
 private val WindowCool = Color(0xFF6E7FD8)
 private val MoonPatch = Color(0xFF8C9CF0)
 private val MoonBeam = Color(0xFF7080C8)
+
+/** Яркость луча луны в полную силу окна. */
+private const val MOON_STRENGTH = 0.8f
 
 /** Купол НЛО зелёный (`#60A87C` в экспорте), и свет от него того же оттенка, только ярче. */
 private val UfoGlow = Color(0xFF8CF0B4)
@@ -241,6 +246,9 @@ private const val SOLID_BLUR = 0.006f
 /** Какой это свет: от этого зависит, что он кладёт на пол, кроме себя. */
 internal enum class LightKind { LAMP, WINDOW, MOON, UFO }
 
+/** Кисть источника: какой свет, откуда и на каком холсте. */
+private data class BrushKey(val kind: LightKind, val x: Float, val y: Float, val canvas: Size)
+
 /**
  * Откуда падают тени от источника и какой они длины.
  *
@@ -326,8 +334,13 @@ internal class RoomLighting(
      * ни круга на полу у подставки, ни теней от него.
      */
     val ceiling: Boolean = false,
-    /** Где торшер, окно и шов пола: у каждого интерьера свои. */
-    val interior: RoomInterior = Interiors.Default,
+    /**
+     * Где торшер, окно и шов пола: у каждого интерьера свои. Со сменой — пока часть
+     * меняется, свет идёт за ней (см. [lit]).
+     */
+    private val walls: PartSwap<WallSkin>,
+    private val windows: PartSwap<WindowSkin>,
+    private val lamps: PartSwap<LampSkin>,
 ) {
     val occluders = mutableStateListOf<Occluder>()
 
@@ -339,16 +352,19 @@ internal class RoomLighting(
      */
     val recorded = WeakHashMap<GraphicsLayer, Any>()
 
-    private val lampPoint = interior.lamp.point()
+    /** Шов пола, окно и торшер, которые видны сейчас. */
+    val wallSkin: WallSkin get() = walls.lit()
+    val windowSkin: WindowSkin get() = windows.lit().first
+    val lampSkin: LampSkin get() = lamps.lit().first
 
-    val lampLevel: Float get() = lamp.value * breath.value
+    val lampLevel: Float get() = lamp.value * breath.value * (if (ceiling) 1f else lamps.lit().second)
 
     /**
      * Кисти источников, которые не двигаются. Кисть — это шейдер: пересоздавать
      * его на каждый кадр для каждого предмета незачем, от кадра к кадру у торшера
      * меняется только яркость, а она идёт через прозрачность.
      */
-    private val brushes = HashMap<Pair<LightKind, Size>, Brush>()
+    private val brushes = HashMap<BrushKey, Brush>()
 
     fun brush(glow: Glow, canvas: Size): Brush {
         fun make() = Brush.radialGradient(
@@ -358,7 +374,8 @@ internal class RoomLighting(
             center = Offset(canvas.width * glow.x, canvas.height * glow.y),
             radius = canvas.width * glow.reach,
         )
-        return if (glow.kind == LightKind.UFO) make() else brushes.getOrPut(glow.kind to canvas, ::make)
+        // Место в ключе: посреди смены торшер и окно светят то со старого места, то с нового.
+        return if (glow.kind == LightKind.UFO) make() else brushes.getOrPut(BrushKey(glow.kind, glow.x, glow.y, canvas), ::make)
     }
 
     /** Ночь плюс то, чем торшер заливает комнату целиком. */
@@ -382,29 +399,31 @@ internal class RoomLighting(
                 ),
             )
         } else {
+            val lamp = lampSkin
             add(
                 Glow(
-                    LightKind.LAMP, interior.lamp.shade.x, interior.lamp.shade.y, LampWarm,
+                    LightKind.LAMP, lamp.shade.x, lamp.shade.y, LampWarm,
                     reach = Lighting.LAMP_REACH, core = 0.3f, strength = lampLevel,
-                    shadow = ShadowSource(interior.lamp.pool.x, interior.lamp.pool.y, length = 0.75f),
-                    caster = Caster.Point(lampPoint),
+                    shadow = ShadowSource(lamp.pool.x, lamp.pool.y, length = 0.75f),
+                    caster = Caster.Point(lamp.point()),
                 ),
             )
         }
-        if (window) {
+        val (glass, lit) = windows.lit()
+        if (window && lit > 0f) {
             add(
                 Glow(
-                    LightKind.WINDOW, interior.window.glow.x, interior.window.glow.y, WindowCool,
-                    reach = Lighting.WINDOW_REACH, core = 0.4f, strength = 1f,
+                    LightKind.WINDOW, glass.glow.x, glass.glow.y, WindowCool,
+                    reach = Lighting.WINDOW_REACH, core = 0.4f, strength = lit,
                 ),
             )
             add(
                 Glow(
                     LightKind.MOON, Lighting.BEAM_X, Lighting.BEAM_Y, MoonBeam,
-                    reach = Lighting.BEAM_REACH, core = 0.5f, strength = 0.8f,
+                    reach = Lighting.BEAM_REACH, core = 0.5f, strength = MOON_STRENGTH * lit,
                     // Тени от луны — от основания окна у стены: туда же, куда
                     // съезжает пятно на полу, к зрителю и влево.
-                    shadow = ShadowSource(interior.window.moonFromX, interior.wall.floorTop, length = 0.5f),
+                    shadow = ShadowSource(glass.moonFromX, wallSkin.floorTop, length = 0.5f),
                     caster = Caster.Parallel(Lighting.MoonRay),
                 ),
             )
@@ -416,7 +435,7 @@ internal class RoomLighting(
                     reach = Lighting.UFO_REACH, core = 0.35f, strength = presence,
                     // НЛО за стеной, свет приходит через окно, поэтому и тень
                     // считается от стены под ним, а не от неба.
-                    shadow = ShadowSource(centre.x, interior.wall.floorTop, length = 0.55f),
+                    shadow = ShadowSource(centre.x, wallSkin.floorTop, length = 0.55f),
                     caster = Caster.Point(RoomSpace.behind(centre, Lighting.UFO_DEPTH)),
                 ),
             )
@@ -428,9 +447,11 @@ internal class RoomLighting(
 internal fun rememberRoomLighting(
     lampOn: Boolean,
     ufo: () -> Pair<Offset, Float>?,
+    walls: PartSwap<WallSkin>,
+    windows: PartSwap<WindowSkin>,
+    lamps: PartSwap<LampSkin>,
     window: Boolean = true,
     ceiling: Boolean = false,
-    interior: RoomInterior = Interiors.Default,
 ): RoomLighting {
     val lamp = animateFloatAsState(
         targetValue = if (lampOn) 1f else 0f,
@@ -452,7 +473,11 @@ internal fun rememberRoomLighting(
     val light = remember(smooth) {
         derivedStateOf { (smooth.value / LAMP_BREATH_STEP).roundToInt() * LAMP_BREATH_STEP }
     }
-    return remember(lamp, light, window, ceiling, interior) { RoomLighting(lamp, light, ufo, window, ceiling, interior) }
+    // Летун меняется с окном, а свет остаётся тем же: он берёт летуна свежим на каждой отрисовке.
+    val currentUfo by rememberUpdatedState(ufo)
+    return remember(lamp, light, window, ceiling, walls, windows, lamps) {
+        RoomLighting(lamp, light, { currentUfo() }, window, ceiling, walls, windows, lamps)
+    }
 }
 
 /**
@@ -475,36 +500,21 @@ internal fun Modifier.roomLight(lighting: RoomLighting): Modifier = drawWithCach
     // из него и не трогают свет остальных. Торшер заслонён — луна светит.
     val casters = List(MAX_SHADOWS) { obtainGraphicsLayer().apply { blendMode = BlendMode.Plus } }
 
-    val lamp = lighting.interior.lamp
-    val shade = Offset(w * lamp.shade.x, h * lamp.shade.y)
-    val bloom = Brush.radialGradient(
-        0f to LampBloom.copy(alpha = 0.55f),
-        1f to Color.Transparent,
-        center = shade,
-        radius = w * Lighting.BLOOM_RADIUS,
-    )
-
-    val pool = Offset(w * lamp.pool.x, h * lamp.pool.y)
-    val poolGlow = Brush.radialGradient(
-        0f to LampPool,
-        1f to Color.Transparent,
-        center = pool,
-        radius = w * Lighting.POOL_RADIUS,
-    )
-
-    val patch = moonPatch(w, h, lighting.interior)
-    val patchBrush = Brush.verticalGradient(
-        0f to MoonPatch,
-        0.7f to MoonPatch.copy(alpha = 0.6f),
-        // Дальний край растворяется: резкая граница посреди пола читалась
-        // как ковёр, а не как свет.
-        1f to Color.Transparent,
-        startY = h * patchNear(lighting.interior),
-        endY = h * Lighting.PATCH_FAR,
-    )
+    // Посреди смены интерьера торшер, окно и шов пола бывают ещё старые: кисти берутся
+    // по тем, что видны, и пересобираются, только когда часть сменилась, а не на кадр.
+    var lampArt: LampArt? = null
+    var moonArt: MoonArt? = null
 
     onDrawWithContent {
         drawContent()
+        val lampSkin = lighting.lampSkin
+        val lamp = lampArt?.takeIf { it.skin == lampSkin } ?: LampArt(lampSkin, w, h).also { lampArt = it }
+        val windowSkin = lighting.windowSkin
+        val floorTop = lighting.wallSkin.floorTop
+        val moon = moonArt?.takeIf { it.window == windowSkin && it.floorTop == floorTop }
+            ?: MoonArt(windowSkin, floorTop, w, h).also { moonArt = it }
+        val pool = lamp.pool
+
         val on = lighting.lampLevel
         val glows = lighting.glows()
         val occluders = lighting.occluders.toList()
@@ -518,9 +528,10 @@ internal fun Modifier.roomLight(lighting: RoomLighting): Modifier = drawWithCach
                     drawGlow(lighting, glow, origin = Offset.Zero, canvas = full)
                     when (glow.kind) {
                         LightKind.LAMP -> scale(scaleX = 1f, scaleY = Lighting.POOL_SQUASH, pivot = pool) {
-                            drawCircle(poolGlow, w * Lighting.POOL_RADIUS, pool, alpha = on, blendMode = BlendMode.Plus)
+                            drawCircle(lamp.poolGlow, w * Lighting.POOL_RADIUS, pool, alpha = on, blendMode = BlendMode.Plus)
                         }
-                        LightKind.MOON -> drawPath(patch, patchBrush, blendMode = BlendMode.Plus)
+                        // Пятно гаснет и разгорается вместе со светом окна.
+                        LightKind.MOON -> drawPath(moon.path, moon.brush, alpha = (glow.strength / MOON_STRENGTH).coerceAtMost(1f), blendMode = BlendMode.Plus)
                         else -> Unit
                     }
                 }
@@ -541,7 +552,7 @@ internal fun Modifier.roomLight(lighting: RoomLighting): Modifier = drawWithCach
         drawLayer(light)
 
         if (on > 0f && !lighting.ceiling) {
-            drawCircle(bloom, w * Lighting.BLOOM_RADIUS, shade, alpha = on, blendMode = BlendMode.Screen)
+            drawCircle(lamp.bloom, w * Lighting.BLOOM_RADIUS, lamp.shade, alpha = on, blendMode = BlendMode.Screen)
         }
         lighting.ufoNow()?.let { (centre, presence) ->
             val at = Offset(w * centre.x, h * centre.y)
@@ -842,8 +853,40 @@ private fun GraphicsLayer.stretch() {
     scaleY = LIGHT_SCALE
 }
 
+/** Ореол абажура и круг света у подставки торшера [skin] на холсте [w]×[h] пикселей. */
+private class LampArt(val skin: LampSkin, w: Float, h: Float) {
+    val shade = Offset(w * skin.shade.x, h * skin.shade.y)
+    val bloom = Brush.radialGradient(
+        0f to LampBloom.copy(alpha = 0.55f),
+        1f to Color.Transparent,
+        center = shade,
+        radius = w * Lighting.BLOOM_RADIUS,
+    )
+    val pool = Offset(w * skin.pool.x, h * skin.pool.y)
+    val poolGlow = Brush.radialGradient(
+        0f to LampPool,
+        1f to Color.Transparent,
+        center = pool,
+        radius = w * Lighting.POOL_RADIUS,
+    )
+}
+
+/** Пятно луны на полу от окна [window] при шве пола [floorTop]. */
+private class MoonArt(val window: WindowSkin, val floorTop: Float, w: Float, h: Float) {
+    val path = moonPatch(w, h, window, floorTop)
+    val brush = Brush.verticalGradient(
+        0f to MoonPatch,
+        0.7f to MoonPatch.copy(alpha = 0.6f),
+        // Дальний край растворяется: резкая граница посреди пола читалась
+        // как ковёр, а не как свет.
+        1f to Color.Transparent,
+        startY = h * patchNear(floorTop),
+        endY = h * Lighting.PATCH_FAR,
+    )
+}
+
 /** Ближний к стене край пятна на полу: не выше шва — на плинтус оно не ложится. */
-private fun patchNear(interior: RoomInterior) = maxOf(Lighting.PATCH_NEAR, interior.wall.floorTop)
+private fun patchNear(floorTop: Float) = maxOf(Lighting.PATCH_NEAR, floorTop)
 
 /**
  * Лунный свет на полу: проекция стёкол окна — двух по сторонам перекладины
@@ -852,10 +895,7 @@ private fun patchNear(interior: RoomInterior) = maxOf(Lighting.PATCH_NEAR, inter
  * Края пятна идут вдоль досок, то есть к точке схода, иначе пятно лежало
  * бы не на полу, а висело перед ним плоской наклейкой.
  */
-private fun moonPatch(w: Float, h: Float, interior: RoomInterior): Path {
-    val window = interior.window
-    val floorTop = interior.wall.floorTop
-
+private fun moonPatch(w: Float, h: Float, window: WindowSkin, floorTop: Float): Path {
     // Где окажется точка с этой долей ширины у стены, если отойти от стены вглубь
     // до строки y: доски расходятся от оси пропорционально расстоянию до схода.
     fun x(atWall: Float, y: Float): Float {
@@ -865,7 +905,7 @@ private fun moonPatch(w: Float, h: Float, interior: RoomInterior): Path {
         return Room.ROOM_AXIS_X + (atWall - Room.ROOM_AXIS_X) * spread - drift
     }
 
-    val near = patchNear(interior)
+    val near = patchNear(floorTop)
     val far = Lighting.PATCH_FAR
     val panes = window.mullion?.let {
         listOf(window.glassLeft to it.start, it.endInclusive to window.glassRight)

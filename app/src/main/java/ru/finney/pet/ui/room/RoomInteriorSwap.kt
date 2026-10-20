@@ -138,6 +138,41 @@ internal fun <T> rememberPartSwap(value: T, durationMs: Int, onStart: suspend ()
     return swap
 }
 
+/** К этой доле смены новое окно светит в полную силу: оно уже почти раскрылось. */
+private const val WINDOW_LIT_END = 0.6f
+
+// Свет в комнате (RoomLight.kt) меняется вместе с частью, а не в миг нажатия: раньше пятно
+// луны на полу и свет торшера перескакивали на новое место, пока старая часть ещё стояла.
+
+/** Какое окно светит сейчас и насколько: свет гаснет, пока старое схлопывается, и растёт, пока раскрывается новое. */
+@JvmName("windowLit")
+internal fun PartSwap<WindowSkin>.lit(): Pair<WindowSkin, Float> {
+    val t = progress.value
+    return when {
+        t >= 1f -> now to 1f
+        t < WINDOW_IN_START -> old to 1f - phase(t, 0f, WINDOW_IN_START)
+        else -> now to phase(t, WINDOW_IN_START, WINDOW_LIT_END)
+    }
+}
+
+/** Какой торшер светит сейчас и насколько: старый гаснет, сплющиваясь, новый загорается, когда мигнул. */
+@JvmName("lampLit")
+internal fun PartSwap<LampSkin>.lit(): Pair<LampSkin, Float> {
+    val t = progress.value
+    return when {
+        t >= 1f -> now to 1f
+        t < LAMP_OUT_END -> old to 1f - phase(t, 0f, LAMP_OUT_END)
+        else -> now to phase(t, LAMP_FLICKERS, 1f)
+    }
+}
+
+/** Чей шов пола виден: новый — когда валик до него дошёл. */
+@JvmName("wallLit")
+internal fun PartSwap<WallSkin>.lit(): WallSkin {
+    val t = progress.value
+    return if (t >= 1f || rollerAt(t) >= maxOf(old.floorTop, now.floorTop)) now else old
+}
+
 /** Доля [t] внутри отрезка [from]..[to], зажатая в 0..1. */
 private fun phase(t: Float, from: Float, to: Float): Float = ((t - from) / (to - from)).coerceIn(0f, 1f)
 
