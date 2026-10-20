@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.*
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ru.finney.pet.R
@@ -32,7 +33,7 @@ import ru.finney.pet.ui.theme.StrokeThin
 
 /** Круг центрируется над всей суммой с монетой: одна ось у магазина и копилки. */
 @Composable
-fun HomeShopButton(balance: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun HomeShopButton(balance: Int, onClick: () -> Unit, modifier: Modifier = Modifier, diameter: Dp = 56.dp) {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val animations = LocalAnimations.current
@@ -47,9 +48,9 @@ fun HomeShopButton(balance: Int, onClick: () -> Unit, modifier: Modifier = Modif
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy((-8).dp),
     ) {
-        Box(Modifier.size(56.dp).testTag("home-shop-circle"), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(diameter).testTag("home-shop-circle"), contentAlignment = Alignment.Center) {
             Image(painterResource(R.drawable.home_round_button_base), null, Modifier.fillMaxSize())
-            Image(painterResource(R.drawable.home_shop_icon), null, Modifier.size(32.dp))
+            Image(painterResource(R.drawable.home_shop_icon), null, Modifier.size(diameter * (32f / 56f)))
         }
         HomeMoneyBadge(balance, Modifier.testTag("home-shop-money"))
     }

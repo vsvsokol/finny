@@ -371,7 +371,7 @@ internal fun HomeContent(
     onHidePurchased: () -> Unit = {},
     rejectShown: Boolean = false,
     actionLayout: HomeActionLayout = HomeActionLayout.SPLIT,
-    shopContent: @Composable (Int, () -> Unit) -> Unit = { balance, click -> HomeShopButton(balance, click) },
+    shopContent: @Composable (Int, () -> Unit) -> Unit = { balance, click -> HomeShopButton(balance, click, diameter = HomeButtonSize) },
 ) {
     // Комната тяжёлая для 120 Гц: на ровных 60 анимации идут без рывков (SteadyFrameRate).
     SteadyFrameRate()
@@ -983,6 +983,7 @@ internal fun HomeContent(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .offset(y = 6.dp)
+                            .hintCover(hintTargets)
                             .clip(RoundedCornerShape(percent = 50))
                             .background(FinneySand)
                             .border(StrokeThin, FinneyInk, RoundedCornerShape(percent = 50))
@@ -2348,12 +2349,14 @@ private fun LevelIcon(@DrawableRes id: Int) {
 }
 
 /**
- * Уровень в полтора раза крупнее кнопок по краям верхнего ряда — вместе с кольцом
- * прогресса. Кольцо рисуется снаружи круга и добавляет 26 % диаметра (дорожка и обводка
- * с двух сторон), поэтому круг 66 dp даёт значок 84 dp = 1,5 × 56. Вдвое крупнее
- * (112 dp) уровень перетягивал на себя весь ряд.
+ * Уровень крупнее остальных кнопок главного — вместе с кольцом прогресса.
+ * Кольцо рисуется снаружи круга и добавляет 27 % диаметра (дорожка и обводка
+ * с двух сторон, 84 dp снаружи у круга 66 dp), поэтому круг считаем от размера
+ * значка целиком. Вдвое крупнее уровень перетягивал на себя весь ряд.
  */
-private val LevelBadgeSize = 66.dp
+// 1,25 сравнивали на эмуляторе 20.10: рядом с кнопками 68 dp уровень почти не выделялся.
+private const val LevelScale = 1.5f
+private val LevelBadgeSize = HomeButtonSize * LevelScale * (66f / 84f)
 
 /**
  * Плашка-кнопка с фактом: копилка, активное задание.
