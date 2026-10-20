@@ -24,6 +24,7 @@ import ru.finney.pet.domain.game.Game
 import ru.finney.pet.domain.game.GameResult
 import ru.finney.pet.domain.game.GoalProgress
 import ru.finney.pet.domain.game.LevelCheck
+import ru.finney.pet.domain.game.PlanReport
 import ru.finney.pet.domain.game.PurchasePreview
 import ru.finney.pet.ui.room.BathShelf
 import ru.finney.pet.ui.room.BathStep
@@ -443,9 +444,8 @@ class HomeViewModel(
         val state = saved.state
         val level = game.level(state)
         val check = game.levelCheck(state)
-        val savingsPlanLeft = game.planReport(state)?.let {
-            (it.plan.savings - it.facts.savings).coerceAtLeast(0)
-        } ?: 0
+        val report = game.planReport(state)
+        val savingsPlanLeft = report?.let { (it.plan.savings - it.facts.savings).coerceAtLeast(0) } ?: 0
         return HomeUiState.Ready(
             petName = saved.profile.petName,
             appearance = saved.profile.appearance,
@@ -467,7 +467,7 @@ class HomeViewModel(
             needsHint = game.needsHint(state),
             levelGame = state.currentPeriod.levelTaskId?.let { content.task(it)?.title },
             levelGames = levelGames(state),
-            planGap = planGap(state, check),
+            planGap = planGap(report, check),
             savingsPlanLeft = savingsPlanLeft,
             reserveMode = game.isReserveMode(state),
             needsThreshold = content.economy.pet.needsThreshold,
@@ -479,8 +479,8 @@ class HomeViewModel(
             bath = bathShelf(state),
             glossary = content.glossary,
             sleepCardsPerSleep = content.economy.sleepCards.maxPerSleep,
-            needsLeft = game.planReport(state)?.let { (it.plan.needs - it.facts.needs).coerceAtLeast(0) },
-            wantsLeft = game.planReport(state)?.let { (it.plan.wants - it.facts.wants).coerceAtLeast(0) },
+            needsLeft = report?.let { (it.plan.needs - it.facts.needs).coerceAtLeast(0) },
+            wantsLeft = report?.let { (it.plan.wants - it.facts.wants).coerceAtLeast(0) },
             fromWants = content.shop.mapNotNull { item -> game.wantsToNeeds(state, item.id)?.let { item.id to it } }.toMap(),
             worn = state.worn,
             room = state.room,
@@ -577,9 +577,8 @@ class HomeViewModel(
         return "На $part уже на $over больше плана"
     }
 
-    private fun planGap(state: GameState, check: LevelCheck): PlanGap? {
-        if (check.planMatched) return null
-        val report = game.planReport(state) ?: return null
+    private fun planGap(report: PlanReport?, check: LevelCheck): PlanGap? {
+        if (check.planMatched || report == null) return null
         val tolerance = content.economy.planTolerance
         return PlanGap(
             savingsLeft = (report.plan.savings - report.facts.savings).takeIf { it > tolerance } ?: 0,
