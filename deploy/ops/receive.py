@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 """Приём проверенного релиза через ограниченный SSH-ключ."""
+import urllib.request
 import fcntl, hashlib, json, os, pathlib, re, subprocess, sys, tarfile, tempfile, time
 ROOT=pathlib.Path('/home/lemonke67/finney')
 os.umask(0o077)
@@ -46,7 +47,11 @@ with tempfile.TemporaryDirectory(dir=ROOT) as temp:
   compose('up','-d','web')
   for attempt in range(30):
    result=subprocess.run(['curl','-fsS','--max-time','10','https://finny.mango-kokos.ru/api/health'],stdout=subprocess.DEVNULL)
-   if result.returncode==0: break
+   if result.returncode==0:
+    try:
+     with urllib.request.urlopen('https://finny.mango-kokos.ru/release.json',timeout=10) as response: published=json.load(response)
+     if published['release']==manifest['release']: break
+    except Exception: pass
    time.sleep(2)
   else: raise RuntimeError('HTTPS healthcheck не прошёл')
  except BaseException:
