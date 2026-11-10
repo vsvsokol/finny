@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 """Берёт публичный пакет только после успешного CI текущей web-port."""
+import time
 import fcntl, json, pathlib, subprocess, tempfile, urllib.request
 ROOT=pathlib.Path('/home/lemonke67/finney')
 lock=open(ROOT/'pull.lock','w')
@@ -8,8 +9,13 @@ except BlockingIOError: raise SystemExit(0)
 def get(path):
  req=urllib.request.Request('https://api.github.com/repos/vsvsokol/finny/'+path,headers={'User-Agent':'finny-deploy'})
  with urllib.request.urlopen(req,timeout=30) as response: return json.load(response)
-sha=get('git/ref/heads/web-port')['object']['sha']
+sha=subprocess.check_output(['git','ls-remote','https://github.com/vsvsokol/finny.git','refs/heads/web-port'],text=True,timeout=30).split()[0]
 if (ROOT/'deployed.json').exists() and json.loads((ROOT/'deployed.json').read_text())['commit']==sha: raise SystemExit(0)
+stamp=ROOT/'last-poll.json'
+if stamp.exists():
+ last=json.loads(stamp.read_text())
+ if last['sha']==sha and time.time()-last['time']<300: raise SystemExit(0)
+stamp.write_text(json.dumps({'sha':sha,'time':time.time()}))
 runs=get('actions/workflows/web.yml/runs?branch=web-port&status=success&per_page=10')['workflow_runs']
 if not any(run['head_sha']==sha and run['event'] in ('push','workflow_dispatch') for run in runs): raise SystemExit(0)
 try: release=get('releases/tags/web-build-'+sha)
