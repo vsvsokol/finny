@@ -1,9 +1,7 @@
 package ru.finney.pet.ui.motion
 
-import kotlinx.coroutines.currentCoroutineContext
 import android.content.Context
 import android.provider.Settings
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.MotionDurationScale
 
 /**
@@ -38,13 +36,3 @@ class AppMotion(private val context: Context) : MotionDurationScale {
     private fun readSystemScale(): Float =
         Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
 }
-
-/** Включены ли анимации — для украшений, которые идут своим циклом кадров или `delay`. */
-val LocalAnimations = staticCompositionLocalOf { true }
-
-/**
- * Идут ли анимации — для корутины эффекта: множитель берётся из её контекста, как его
- * берёт сам Compose, поэтому учтена и системная «скорость анимации».
- */
-suspend fun motionEnabled(): Boolean =
-    (currentCoroutineContext()[MotionDurationScale]?.scaleFactor ?: 1f) > 0f

@@ -1,8 +1,5 @@
 package ru.finney.pet.ui.debug
 
-import android.content.Context
-import android.content.Intent
-import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -19,11 +16,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import ru.finney.pet.ui.platform.rememberRelaunch
+import ru.finney.pet.ui.platform.rememberShowMessage
 import ru.finney.pet.domain.model.PeriodPhase
 import ru.finney.pet.domain.model.PetStats
 import ru.finney.pet.ui.components.FinneyPanel
@@ -50,13 +48,14 @@ fun DebugPanel(
     viewModel: DebugViewModel = viewModel(factory = DebugViewModel.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
+    val relaunch = rememberRelaunch()
+    val showMessage = rememberShowMessage()
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             when (event) {
-                DebugEvent.Wiped -> context.relaunch()
-                is DebugEvent.Rejected -> Toast.makeText(context, event.reason, Toast.LENGTH_LONG).show()
+                DebugEvent.Wiped -> relaunch()
+                is DebugEvent.Rejected -> showMessage(event.reason)
             }
         }
     }
@@ -216,16 +215,6 @@ private val PeriodPhase.label: String
         PeriodPhase.ACTIVE -> "план подтверждён, можно покупать"
         PeriodPhase.CLOSED -> "закрыт"
     }
-
-/**
- * Запуск с нуля после стирания. Новая задача — новый стек и новые ViewModel,
- * поэтому стартовый экран считается заново и ведёт на первый запуск. Иначе
- * главный остался бы висеть без профиля.
- */
-private fun Context.relaunch() {
-    val intent = packageManager.getLaunchIntentForPackage(packageName) ?: return
-    startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
-}
 
 @Preview(widthDp = 360)
 @Composable

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#E9E1FF">
+  <title>Питомец Финни</title>
+  <link rel="icon" href="favicon.png">
+  <script>
+    // Подставляет CI (web.yml); локально — dev/local.
+    window.FINNY_BUILD = { version: "dev", commit: "local" };
+  </script>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; background: #E9E1FF; }
+    body { height: 100dvh; overscroll-behavior: none; touch-action: none; -webkit-user-select: none; user-select: none; }
+    #splash { position: fixed; inset: 0; display: flex; flex-direction: column; gap: 16px;
+      align-items: center; justify-content: center; font: 18px system-ui, sans-serif; color: #2B2250; }
+    #splash img { width: 160px; height: 160px; }
+  </style>
+</head>
+<body>
+  <div id="splash">
+    <img src="favicon.png" alt="">
+    <div id="splash-text">Финни просыпается…</div>
+  </div>
+  <script>
+    // wasm GC: Chrome/Edge 119+, Firefox 120+, Safari 18.2+.
+    if (typeof WebAssembly !== "object" || !WebAssembly.validate(new Uint8Array([0,97,115,109,1,0,0,0,1,5,1,95,1,120,0]))) {
+      document.getElementById("splash-text").textContent =
+        "Браузер устарел: обновите Chrome, Edge, Firefox или Safari, чтобы поиграть с Финни.";
+    } else {
+      var s = document.createElement("script"); s.src = "finny.js"; document.body.appendChild(s);
+    }
+  </script>
+</body>
+</html>

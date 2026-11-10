@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -36,6 +37,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import ru.finney.pet.ui.layout.LocalSceneBleed
+import ru.finney.pet.ui.layout.LocalSceneColumn
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.Spacer
@@ -170,9 +173,14 @@ internal fun GameScene(
 @Composable
 internal fun SceneStage(initial: Backdrop, content: @Composable () -> Unit) {
     val backdrop = remember { mutableStateOf(initial) }
-    Box(Modifier.fillMaxSize()) {
-        BackdropLayer(backdrop.value)
-        CompositionLocalProvider(LocalStageBackdrop provides backdrop, content = content)
+    // Широкий режим: окно шире колонки игры. Фон — во всё окно, игра — колонкой по центру.
+    val column = LocalSceneColumn.current
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val bleed = if (column != Dp.Unspecified && maxWidth > column) (maxWidth - column) / 2 else 0.dp
+        CompositionLocalProvider(LocalSceneBleed provides bleed) { BackdropLayer(backdrop.value) }
+        Box(Modifier.align(Alignment.Center).fillMaxHeight().width(maxWidth - bleed * 2)) {
+            CompositionLocalProvider(LocalStageBackdrop provides backdrop, content = content)
+        }
     }
 }
 
@@ -328,10 +336,16 @@ private fun BackdropFamily(backdrop: Backdrop, rain: () -> Float, dusk: () -> Fl
             Rain(rain)
         }
         Backdrop.ROOM_SORTER -> GameRoom(RoomLook.SORTER)
-        Backdrop.CARD_GREEN -> Canvas(Modifier.fillMaxSize()) {
-            drawRect(Color(0xFFC9EAC1))
-            drawCircle(Color(0xFFB4E0AE), size.width * 0.52f, Offset(size.width * 1.05f, size.height * 0.7f))
-            drawCircle(Color(0xFFB4E0AE), size.width * 0.31f, Offset(size.width * 0.55f, -size.height * 0.06f))
+        Backdrop.CARD_GREEN -> {
+            val bleed = LocalSceneBleed.current
+            Canvas(Modifier.fillMaxSize()) {
+                // Холмы — по колонке игры, а не по всему окну: иначе в широком раздулись бы.
+                val b = bleed.toPx()
+                val w = size.width - 2 * b
+                drawRect(Color(0xFFC9EAC1))
+                drawCircle(Color(0xFFB4E0AE), w * 0.52f, Offset(b + w * 1.05f, size.height * 0.7f))
+                drawCircle(Color(0xFFB4E0AE), w * 0.31f, Offset(b + w * 0.55f, -size.height * 0.06f))
+            }
         }
         Backdrop.CARD_LILAC -> Pattern(Color(0xFFDAD3F6), 80.dp, 80.dp) { tile ->
             star(Offset(tile * 0.26f, tile * 0.22f), tile * 0.13f, Color(0xFFC6BBF0))
@@ -417,27 +431,31 @@ private const val CROSSFADE_MS = 450
  */
 @Composable
 private fun Meadow(dusk: () -> Float) {
+    val bleed = LocalSceneBleed.current
     Canvas(Modifier.fillMaxSize()) {
         val t = dusk()
+        // В широком режиме всё стоит по колонке игры, а луг продолжается до краёв окна.
+        val b = bleed.toPx()
+        val w = size.width - 2 * b
         val horizon = size.height * HORIZON_AT
         val sky = if (t < 0.5f) lerp(SkyNoon, FinneyCream, t * 2) else lerp(FinneyCream, SkyEvening, t * 2 - 1)
         drawRect(sky, size = size.copy(height = horizon))
         // Облака встают из-за луга, низом в траву: выше они налезали на заголовки
         // панелей, а из-под утренней панели торчали обрывками.
-        cloud(Offset(size.width * 0.14f, horizon - 10.dp.toPx()), 1f)
-        cloud(Offset(size.width * 0.5f, horizon - 6.dp.toPx()), 0.7f)
+        cloud(Offset(b + w * 0.14f, horizon - 10.dp.toPx()), 1f)
+        cloud(Offset(b + w * 0.5f, horizon - 6.dp.toPx()), 0.7f)
         // Солнце до травы: садясь, оно прячется за горизонт, а не ложится поверх луга.
-        val c = Offset(size.width * 0.84f, lerp(size.height * 0.16f, horizon - 8.dp.toPx(), t))
+        val c = Offset(b + w * 0.84f, lerp(size.height * 0.16f, horizon - 8.dp.toPx(), t))
         val sun = lerp(FinneyYellow, FinneyPeach, t)
         drawCircle(sun.copy(alpha = 0.5f), 42.dp.toPx(), c)
         drawCircle(FinneyInk, 32.dp.toPx(), c)
         drawCircle(sun, 28.dp.toPx(), c)
         // Луг нарисован в пикселях скриншота шириной 900, старый горизонт там на y = 1160.
-        val s = size.width / LAWN_W
+        val s = w / LAWN_W
         withTransform({
-            translate(0f, horizon - LAWN_HORIZON * s)
+            translate(b, horizon - LAWN_HORIZON * s)
             scale(s, s, Offset.Zero)
-        }) { lawn(t) }
+        }) { mirrorRepeat(LAWN_W, -b / s, LAWN_W + b / s) { lawn(t) } }
     }
 }
 

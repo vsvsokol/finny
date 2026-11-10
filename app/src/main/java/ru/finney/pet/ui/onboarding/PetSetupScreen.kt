@@ -1,6 +1,5 @@
 package ru.finney.pet.ui.onboarding
 
-import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseIn
 import androidx.compose.animation.core.EaseInBack
@@ -109,6 +108,7 @@ import ru.finney.pet.ui.theme.FinneyPeach
 import ru.finney.pet.ui.theme.FinneyPink
 import ru.finney.pet.ui.theme.FinneyTheme
 import ru.finney.pet.ui.theme.FinneyYellow
+import ru.finney.pet.ui.platform.rememberSystemBack
 
 /**
  * Имена питомцев для TalkBack. На карточках их нет: питомца выбирают по картинке,
@@ -186,7 +186,7 @@ internal fun PetSetupContent(
         }
     }
     // Назад — как системная кнопка: на знакомство или в настройки, смотря откуда пришли.
-    val back = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+    val back = rememberSystemBack()
     val canSave = !state.isSaving && !state.isLoading
 
     Box(Modifier.fillMaxSize()) {
@@ -244,7 +244,7 @@ internal fun PetSetupContent(
                 // внутри scroll viewport, иначе его нижний край обрезает эффект.
                 modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
             ) {
-                ArtBackButton(onClick = { back?.onBackPressed() }, enabled = !entering)
+                ArtBackButton(onClick = back, enabled = !entering)
                 // «Начать игру» заряжается — начало игры бывает один раз и должно ощущаться.
                 // С неверным именем заряжать нечего: обычное нажатие сразу покажет ошибку.
                 // «Сохранить» в настройке — обычная кнопка, её жмут по делу.
@@ -591,7 +591,8 @@ private fun CharacterPicker(
             },
     ) {
         // Крайний отступ такой, чтобы первый и последний питомец вставали в середину.
-        val side = (maxWidth - CardWidth) / 2
+        // Не меньше нуля: пока экран уезжает, его могут мерить уже́ карточки.
+        val side = ((maxWidth - CardWidth) / 2).coerceAtLeast(0.dp)
         LazyRow(
             state = list,
             contentPadding = PaddingValues(horizontal = side, vertical = 10.dp),

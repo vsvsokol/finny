@@ -1,7 +1,6 @@
 package ru.finney.pet.ui.tasks.games
 
 import ru.finney.pet.ui.motion.LocalAnimations
-import android.annotation.SuppressLint
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -37,13 +36,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -71,6 +68,7 @@ import ru.finney.pet.ui.theme.FinneyYellow
 import ru.finney.pet.ui.theme.RadiusCard
 import ru.finney.pet.ui.theme.StrokeBold
 import ru.finney.pet.ui.theme.StrokeRegular
+import ru.finney.pet.ui.platform.rememberDrawableByName
 
 // Общие детали мини-игр: рамка экрана, рисунок предмета, монета с номиналом,
 // подсказка, кнопки «−» и «+». Каждая игра собрана из них, поэтому выглядят
@@ -119,13 +117,10 @@ internal fun MiniGameFrame(
  * дизайнеры потом заменяют эмодзи на рисунок одной строкой. Эмодзи — только
  * временный значок предмета; в текстах игр их нет.
  */
-@SuppressLint("DiscouragedApi") // Имя картинки приходит из JSON — R.drawable.* здесь не подставить.
 @Composable
 internal fun ItemPicture(art: ItemArt, label: String, size: Dp, modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    val drawable = remember(art.art) {
-        art.art?.let { context.resources.getIdentifier(it, "drawable", context.packageName) }?.takeIf { it != 0 }
-    }
+    // Имя картинки приходит из JSON — R.drawable.* здесь не подставить.
+    val drawable = rememberDrawableByName(art.art)
     Box(
         modifier = modifier
             .size(size)

@@ -1,6 +1,5 @@
 package ru.finney.pet.ui.room
 
-import android.graphics.BitmapFactory
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -41,7 +40,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.text.BasicText
@@ -61,12 +59,10 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -80,9 +76,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 import ru.finney.pet.R
 import ru.finney.pet.domain.model.PetCharacter
 import ru.finney.pet.ui.components.FinneyButton
@@ -104,6 +98,7 @@ import ru.finney.pet.ui.theme.FinneyTheme
 import ru.finney.pet.ui.theme.FinneyYellow
 import ru.finney.pet.ui.theme.StrokeBold
 import ru.finney.pet.ui.theme.StrokeRegular
+import ru.finney.pet.ui.platform.rememberThumbBitmap
 
 // Панель «Финни / Комната»: снизу, с переключателем на рамке, строкой вкладок
 // и рядом карточек. У Финни вкладки «Окрас / Одежда», у комнаты «Стена / Окно /
@@ -742,18 +737,8 @@ private fun DrawScope.drawLayer(image: ImageBitmap, rect: RelRect, area: RelRect
  */
 @Composable
 private fun thumbBitmap(@DrawableRes res: Int): ImageBitmap? {
-    val resources = LocalContext.current.resources
-    val image by produceState<ImageBitmap?>(null, res) {
-        value = withContext(Dispatchers.IO) {
-            val options = BitmapFactory.Options().apply { inSampleSize = 1 }
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeResource(resources, res, bounds)
-            // До 300 px по большей стороне: карточка — 92 dp, на телефоне около 280 px.
-            while (maxOf(bounds.outWidth, bounds.outHeight) / (options.inSampleSize * 2) >= 300) options.inSampleSize *= 2
-            BitmapFactory.decodeResource(resources, res, options)?.asImageBitmap()
-        }
-    }
-    return image
+    // До 300 px по большей стороне: карточка — 92 dp, на телефоне около 280 px.
+    return rememberThumbBitmap(res, maxSide = 300)
 }
 
 /** Значки вкладок обводкой ink: капля краски, обои в кирпичик, окно с перекладиной, торшер, ковёр. */

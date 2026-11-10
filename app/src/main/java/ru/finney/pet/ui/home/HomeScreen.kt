@@ -17,6 +17,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import ru.finney.pet.ui.components.CloseButton
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.unit.Density
+import ru.finney.pet.ui.layout.capWidthWhenExpanded
+import ru.finney.pet.ui.layout.isExpandedLayout
+import ru.finney.pet.ui.room.Room
+import ru.finney.pet.ui.room.RoomSides
+import ru.finney.pet.ui.room.RoomSidesState
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -37,7 +45,6 @@ import ru.finney.pet.ui.motion.SteadyFrameRate
 import ru.finney.pet.ui.motion.motionEnabled
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import android.content.pm.ApplicationInfo
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
@@ -48,7 +55,6 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.wrapContentSize
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -203,6 +209,7 @@ import ru.finney.pet.ui.motion.LocalAnimations
 import ru.finney.pet.ui.motion.PortalReveal
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
+import ru.finney.pet.ui.platform.rememberIsDebugBuild
 
 // Главный экран по обновлённому макету: компактные действия справа и состояние у питомца.
 @Composable
@@ -384,6 +391,9 @@ internal fun HomeContent(
     // Комната тяжёлая для 120 Гц: на ровных 60 анимации идут без рывков (SteadyFrameRate).
     SteadyFrameRate()
 
+    // Компьютер (веб, широкое окно): комната-сцена по центру, кнопки — по краям окна.
+    val wide = isExpandedLayout
+
     // Питомец спит — это ночь: он в капсуле, свет выключен, игра на паузе
     // до утра. Глаза закрываются, когда он уже внутри, и открываются,
     // как только проснулся. Открыли приложение, а он спит, — глаза закрыты сразу.
@@ -459,13 +469,8 @@ internal fun HomeContent(
         if (!sleeping && state.emotion in SadEmotions) sounds.play(Sfx.PetSad)
     }
 
-    // Отладочная сборка — та, что ставится как ru.finney.pet.debug. Флаг читается
-    // из манифеста, а не из BuildConfig: генерация BuildConfig в модуле выключена,
-    // а включать её — правка в build.gradle.kts, не в этой зоне.
-    val context = LocalContext.current
-    val isDebuggable = remember(context) {
-        context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
-    }
+    // Отладочная сборка — та, что ставится как ru.finney.pet.debug (см. Platform.kt).
+    val isDebuggable = rememberIsDebugBuild()
 
     // Что стоит в комнате. Живёт на экране, а не в игре: это взгляд ребёнка на
     // комнату, а не событие в правилах. Днём питомец в игровой — с неё и начинаем.
@@ -845,10 +850,20 @@ internal fun HomeContent(
             },
     ) {
 
+        // Широкий режим: комната — портретная сцена во всю высоту (холст 3:5 нельзя
+        // растянуть вширь: пол и тени построены по точке схода). По бокам — её же обои
+        // и растянутый пол (RoomSides), чтобы сцена не висела в пустоте.
+        val sides = if (wide) remember { RoomSidesState() } else null
+        if (sides != null) RoomSides(sides)
         RoomScene(
             spot = spot,
             trip = trip,
-            modifier = Modifier.fillMaxSize(),
+            modifier = if (wide) {
+                Modifier.align(Alignment.Center).fillMaxHeight()
+                    .aspectRatio(Room.CANVAS_RATIO, matchHeightConstraintsFirst = true)
+            } else {
+                Modifier.fillMaxSize()
+            },
             onTapItem = {
                 when (spot) {
                     RoomSpot.KITCHEN -> openCare(CareTarget.FOOD)
@@ -866,6 +881,7 @@ internal fun HomeContent(
             toys = state.toys,
             toysEnabled = !sleeping && playing == null && care == null && !editing,
             interior = interior,
+            sides = sides,
             focus = roomEdit?.room?.let { interior.focusOf(it) },
             focusPet = roomEdit?.pet == true,
             focusRug = roomEdit?.room == InteriorPart.RUG,
@@ -912,6 +928,8 @@ internal fun HomeContent(
             )
         }
 
+        // Широкий режим: кнопки — вплотную к комнате и крупнее (WideHud ниже).
+        WideHud(wide) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -929,7 +947,7 @@ internal fun HomeContent(
                     }
                 } else Modifier)
                 .systemBarsPadding()
-                .padding(horizontal = 8.dp, vertical = 12.dp),
+                .padding(horizontal = if (wide) 28.dp else 8.dp, vertical = if (wide) 20.dp else 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -1063,7 +1081,8 @@ internal fun HomeContent(
         // потребностей»). Сон у края: ночью три кнопки гаснут, и лампа остаётся одна в углу.
         // Четыре кольца по 70 dp с зазорами помещаются и на экране в 360 dp.
         Row(
-            modifier = Modifier.fillMaxWidth().graphicsLayer { alpha = hudAlpha },
+            // В широком режиме — док под сценой, а не полоса во всё окно.
+            modifier = Modifier.capWidthWhenExpanded(CareDockMax).fillMaxWidth().graphicsLayer { alpha = hudAlpha },
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             // Спящий не играет, не ест и не моется: кнопки полупрозрачные и не нажимаются.
@@ -1118,6 +1137,7 @@ internal fun HomeContent(
             )
         }
 
+        }
         }
 
         // Значки привязаны к реальной области питомца, в том числе при его прогулке.
@@ -1295,7 +1315,7 @@ internal fun HomeContent(
                     fromWants = state.fromWants,
                     onBuyFromWants = onBuyFromWants,
                     onDismiss = { bathShop = null },
-                    modifier = Modifier.pointerInput(Unit) { detectTapGestures { } },
+                    modifier = Modifier.capWidthWhenExpanded().pointerInput(Unit) { detectTapGestures { } },
                     block = if (state.phase == PeriodPhase.ACTIVE) {
                         null
                     } else {
@@ -1359,7 +1379,7 @@ internal fun HomeContent(
                     // между карточками уходило бы на подложку и закрывало панель.
                     // Не clickable: это не кнопка, и TalkBack не должен звать её
                     // нажимаемой.
-                    modifier = Modifier.pointerInput(Unit) { detectTapGestures { } },
+                    modifier = Modifier.capWidthWhenExpanded().pointerInput(Unit) { detectTapGestures { } },
                     title = target.title,
                     // До подтверждения плана домен покупку не пропустит
                     // (Rejection.PlanNotConfirmed). Раньше кнопка «Купить»
@@ -1479,7 +1499,7 @@ internal fun HomeContent(
                     },
                     onClose = { dreamCard = null },
                     onOpenGlossary = { dreamCard = null; onOpenGlossary() },
-                    modifier = Modifier.pointerInput(Unit) { detectTapGestures { } },
+                    modifier = Modifier.capWidthWhenExpanded().pointerInput(Unit) { detectTapGestures { } },
                 )
             }
         }
@@ -1554,7 +1574,7 @@ internal fun HomeContent(
                     onOpenBudget = { levelOpen = false; onOpenBudget() },
                     onOpenProgress = { levelOpen = false; onOpenProgress() },
                     onDismiss = { levelOpen = false },
-                    modifier = Modifier.pointerInput(Unit) { detectTapGestures { } },
+                    modifier = Modifier.capWidthWhenExpanded().pointerInput(Unit) { detectTapGestures { } },
                 )
             }
         }
@@ -1578,7 +1598,7 @@ internal fun HomeContent(
                     games = state.levelGames,
                     onPlay = { gamesOpen = false; onOpenTask(it) },
                     onDismiss = { gamesOpen = false },
-                    modifier = Modifier.pointerInput(Unit) { detectTapGestures { } },
+                    modifier = Modifier.capWidthWhenExpanded().pointerInput(Unit) { detectTapGestures { } },
                 )
             }
         }
@@ -1616,7 +1636,7 @@ internal fun HomeContent(
                     onOpenTasks = { debugOpen = false; onOpenTasks() },
                     previewStage = previewStage,
                     onPreviewStage = { previewStage = it },
-                    modifier = Modifier.pointerInput(Unit) { detectTapGestures { } },
+                    modifier = Modifier.capWidthWhenExpanded().pointerInput(Unit) { detectTapGestures { } },
                 )
             }
         }
@@ -1627,7 +1647,7 @@ internal fun HomeContent(
             visible = editing,
             enter = slideInVertically(spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMediumLow)) { it },
             exit = slideOutVertically(tween(250)) { it },
-            modifier = Modifier.align(Alignment.BottomCenter),
+            modifier = Modifier.align(Alignment.BottomCenter).capWidthWhenExpanded(),
         ) {
             var shownTab by remember { mutableStateOf(EditTab.WALL) }
             roomEdit?.let { shownTab = it }
@@ -2533,3 +2553,45 @@ private fun PlayedOutNote(petName: String, playedOutAt: Long, petTop: () -> Floa
 }
 
 private const val PlayedOutNoteMillis = 2_000L
+
+/**
+ * Ширина дока ухода в широком режиме — в единицах увеличенного слоя кнопок (WideHud),
+ * поэтому на экране док примерно по ширине комнаты.
+ */
+private val CareDockMax = 400.dp
+
+/**
+ * Слой кнопок главного в широком режиме. Кнопки стоят не по краям окна, а вплотную к
+ * комнате: слой высотой во всю сцену и шириной в [WideHudWidth] комнаты. На большом
+ * мониторе края окна далеко, и мышью до кнопок пришлось бы ехать через полэкрана.
+ *
+ * Заодно слой крупнее: плотность пикселей увеличена по высоте окна, так что кнопки,
+ * кольца, подписи и отступы растут вместе, а пропорции макета не меняются.
+ * На телефоне — без изменений.
+ */
+@Composable
+private fun WideHud(wide: Boolean, content: @Composable () -> Unit) {
+    if (!wide) {
+        content()
+        return
+    }
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        BoxWithConstraints(
+            Modifier.fillMaxHeight().aspectRatio(Room.CANVAS_RATIO * WideHudWidth, matchHeightConstraintsFirst = true),
+        ) {
+            val scale = (maxHeight / WideHudDesignHeight).coerceIn(WideHudMinScale, WideHudMaxScale)
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density * scale, density.fontScale)) {
+                content()
+            }
+        }
+    }
+}
+
+/** Ширина слоя кнопок — во столько раз шире комнаты: по колонке кнопок с каждой стороны. */
+private const val WideHudWidth = 1.7f
+
+/** Высота, под которую нарисован макет главного: окно такой высоты — масштаб 1. */
+private val WideHudDesignHeight = 720.dp
+private const val WideHudMinScale = 1.15f
+private const val WideHudMaxScale = 1.4f

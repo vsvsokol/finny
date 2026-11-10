@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.withTransform
@@ -514,15 +515,20 @@ internal fun rememberRoomLighting(
  * Здесь пятна, которым место только на полу, тени и ореолы торшера и НЛО.
  * Ореолы рисуются поверх, иначе источник был бы темнее собственного света.
  */
-internal fun Modifier.roomLight(lighting: RoomLighting): Modifier = drawWithCache {
+internal fun Modifier.roomLight(lighting: RoomLighting, sides: Boolean = false): Modifier = drawWithCache {
     val full = size
     val w = full.width
     val h = full.height
-    val small = full.shrunk()
+    // Широкий режим: свет считается и за холстом — по [SIDES_LIGHT] холста с каждой
+    // стороны, — чтобы торшер, окно и тени доходили до боков, а не обрывались по кадру.
+    val ext = if (sides) w * SIDES_LIGHT else 0f
+    val shift = ext / LIGHT_SCALE
+    val small = Size(w + 2 * ext, h).shrunk()
 
     val light = obtainGraphicsLayer().apply {
         blendMode = BlendMode.Modulate
         stretch()
+        topLeft = IntOffset(-ext.toInt(), 0)
     }
     // Свет каждого источника с тенями — в своём слое: тени вырезаются только
     // из него и не трогают свет остальных. Торшер заслонён — луна светит.
@@ -551,7 +557,7 @@ internal fun Modifier.roomLight(lighting: RoomLighting): Modifier = drawWithCach
         for (glow in glows) {
             if (glow.shadow == null || glow.strength <= 0f || used == MAX_SHADOWS) continue
             val index = used++
-            casters[index].record(small) {
+            casters[index].record(small) { translate(shift, 0f) {
                 scale(1f / LIGHT_SCALE, pivot = Offset.Zero) {
                     drawGlow(lighting, glow, origin = Offset.Zero, canvas = full)
                     when (glow.kind) {
@@ -564,20 +570,27 @@ internal fun Modifier.roomLight(lighting: RoomLighting): Modifier = drawWithCach
                     }
                 }
                 for (occluder in occluders) drawCut(occluder, glow, index, full, lighting.recorded)
-            }
+            } }
         }
 
         light.record(small) {
-            scale(1f / LIGHT_SCALE, pivot = Offset.Zero) {
-                drawRect(lighting.ambient(), size = full)
-                for (glow in glows) {
-                    if (glow.shadow == null) drawGlow(lighting, glow, origin = Offset.Zero, canvas = full)
+            translate(shift, 0f) {
+                scale(1f / LIGHT_SCALE, pivot = Offset.Zero) {
+                    drawRect(lighting.ambient(), Offset(-ext, 0f), Size(w + 2 * ext, h))
+                    for (glow in glows) {
+                        if (glow.shadow == null) drawGlow(lighting, glow, origin = Offset.Zero, canvas = full)
+                    }
                 }
             }
+            // Слои источников записаны в той же рамке, что и этот: кладутся без сдвига.
             for (i in 0 until used) drawLayer(casters[i])
-            for (occluder in occluders) drawContact(occluder, full, lighting.recorded)
+            translate(shift, 0f) {
+                for (occluder in occluders) drawContact(occluder, full, lighting.recorded)
+            }
         }
-        drawLayer(light)
+        // Свет смешивается умножением, а за слоем пусто — умножило бы всё под ним в ноль.
+        // Поэтому только в пределах слоя.
+        clipRect(-ext, 0f, w + ext, h) { drawLayer(light) }
 
         if (on > 0f && !lighting.ceiling) {
             drawCircle(lamp.bloom, w * Lighting.BLOOM_RADIUS, lamp.shade, alpha = on, blendMode = BlendMode.Screen)
@@ -910,6 +923,15 @@ private fun Size.shrunk() = IntSize(ceil(width / LIGHT_SCALE).toInt() + 1, ceil(
 private fun IntSize.shrunk() = Size(width.toFloat(), height.toFloat()).shrunk()
 
 /** Растягивает слой, записанный в [shrunk], обратно до полного размера. */
+/**
+ * Насколько за холст считается свет в широком режиме — в ширинах холста с каждой
+ * стороны. Двух хватает на окно втрое шире своей высоты: холст — 3:5 по высоте окна.
+ */
+private const val SIDES_LIGHT = 2f
+
+/** Насколько далеко за холст тянется ночь в широком режиме — с запасом на любое окно, px. */
+internal const val SIDES_REACH = 20_000f
+
 private fun GraphicsLayer.stretch() {
     pivotOffset = Offset.Zero
     scaleX = LIGHT_SCALE

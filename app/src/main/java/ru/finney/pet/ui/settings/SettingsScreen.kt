@@ -1,6 +1,5 @@
 package ru.finney.pet.ui.settings
 
-import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
@@ -12,14 +11,11 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.core.content.pm.PackageInfoCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import ru.finney.pet.ui.components.FinneyButton
@@ -34,6 +30,7 @@ import ru.finney.pet.ui.theme.FinneyInk
 import ru.finney.pet.ui.theme.FinneyPeach
 import ru.finney.pet.ui.theme.FinneyTheme
 import ru.finney.pet.ui.theme.FinneyYellow
+import ru.finney.pet.ui.platform.rememberAppVersion
 
 /**
  * Настройки из «бургера»: звук и музыка выключаются отдельно и без барьера (ТЗ п. 3.6),
@@ -52,8 +49,7 @@ fun SettingsScreen(
     val sounds = LocalSounds.current
     val settings by sounds.settings.collectAsStateWithLifecycle()
     val demo by viewModel.isDemo.collectAsStateWithLifecycle()
-    val context = LocalContext.current
-    val version = remember(context) { context.appVersion() }
+    val version = rememberAppVersion()
     SettingsContent(
         version = version,
         sound = settings.sound,
@@ -167,15 +163,6 @@ private fun ToggleRow(text: String, checked: Boolean, onChange: (Boolean) -> Uni
             ),
         )
     }
-}
-
-/**
- * «Версия 1.1.0 (10100)» из установленного пакета: номер задаёт version.properties
- * через сборку. BuildConfig в модуле выключен, поэтому читается из PackageManager.
- */
-private fun Context.appVersion(): String {
-    val info = packageManager.getPackageInfo(packageName, 0)
-    return "Версия ${info.versionName} (${PackageInfoCompat.getLongVersionCode(info)})"
 }
 
 @Preview(widthDp = 360, heightDp = 640)

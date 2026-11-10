@@ -74,7 +74,7 @@ import ru.finney.pet.ui.tasks.games.ScenePanel
 import ru.finney.pet.ui.tasks.games.TaskGame
 import ru.finney.pet.ui.tasks.games.backdropFor
 import ru.finney.pet.ui.tasks.games.introBackdropFor
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalWindowInfo
 import ru.finney.pet.ui.theme.FinneyInk
 import ru.finney.pet.ui.theme.FinneyYellow
 import ru.finney.pet.ui.theme.StrokeRegular
@@ -172,7 +172,7 @@ internal fun TaskIntro(state: TaskUiState.Ready, onStart: () -> Unit, onBack: ()
             // Карточка по центру свободного места, как в макете; не влезла — прокрутка.
             Spacer(Modifier.weight(1f))
             // Питомец — чуть больше трети ширины (136 dp на 360): на узком экране пузырю роли остаётся место.
-            val width = LocalConfiguration.current.screenWidthDp.dp
+            val width = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
             // Питомец стоит прямо на окне «Сделай»: зазор между ними — только подъём заголовка окна.
             Column {
                 CardHost(state.character, gameHelp(state.task), petSize = (width * 0.38f).coerceIn(112.dp, 156.dp))

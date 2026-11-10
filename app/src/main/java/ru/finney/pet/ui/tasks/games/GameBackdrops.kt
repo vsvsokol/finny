@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.unit.Dp
+import ru.finney.pet.ui.layout.LocalSceneBleed
 import ru.finney.pet.ui.theme.FinneyInk
 
 // Фоны мини-игр по макету «Фоны мини-игр»: луг гонки, магазин сладостей, касса
@@ -118,14 +119,49 @@ private fun DrawScope.tiles(area: Rect, size: Float, motifs: List<Motif>, ink: C
 private fun firstTile(origin: Float, from: Float, t: Float): Float =
     origin + kotlin.math.floor((from - origin) / t) * t - t
 
-/** Холст макета 900 единиц в ширину. [block] получает высоту экрана в этих единицах. */
+/**
+ * Холст макета 900 единиц в ширину. [block] получает высоту экрана в этих единицах и
+ * видимую полосу по ширине: на телефоне 0…900, в широком режиме — шире, на фон за
+ * колонкой игры ([LocalSceneBleed]). Масштаб — всегда по колонке: фон не раздувается.
+ */
 @Composable
-private fun DesignCanvas(block: DrawScope.(height: Float) -> Unit) {
+private fun DesignCanvas(block: DrawScope.(height: Float, left: Float, right: Float) -> Unit) {
+    val bleed = LocalSceneBleed.current
     Canvas(Modifier.fillMaxSize()) {
-        val s = size.width / DESIGN_W
-        scale(s, s, Offset.Zero) { block(size.height / s) }
+        val b = bleed.toPx()
+        val s = (size.width - 2 * b) / DESIGN_W
+        withTransform({
+            translate(b, 0f)
+            scale(s, s, Offset.Zero)
+        }) { block(size.height / s, -b / s, DESIGN_W + b / s) }
     }
 }
+
+/**
+ * Повторить [block], нарисованный в полосе 0…[width], до краёв [left]…[right] — через
+ * раз зеркально. Отражение у шва совпадает само с собой, поэтому холмы, полы и узоры
+ * продолжаются без разрывов, какой бы рисунок ни был. На телефоне — одна копия как есть.
+ */
+internal fun DrawScope.mirrorRepeat(width: Float, left: Float, right: Float, block: DrawScope.() -> Unit) {
+    if (left >= 0f && right <= width) {
+        block()
+        return
+    }
+    val first = kotlin.math.floor(left / width).toInt()
+    val last = kotlin.math.ceil(right / width).toInt() - 1
+    for (k in first..last) {
+        withTransform({
+            translate(k * width, 0f)
+            if (k % 2 != 0) scale(-1f, 1f, Offset(width / 2f, 0f))
+        }) {
+            // Каждая копия — только в своей полосе: то, что рисунок кладёт за край
+            // (контуры, хвосты холмов), иначе легло бы поверх соседней копии.
+            clipRect(0f, -BIG, width, BIG) { block() }
+        }
+    }
+}
+
+private const val BIG = 100_000f
 
 private const val DESIGN_W = 900f
 
@@ -171,7 +207,11 @@ private val PlankSeams = listOf(240f, 110f, 330f, 180f)
  */
 @Composable
 internal fun RaceMeadow() {
-    DesignCanvas { h ->
+    DesignCanvas { h, l, r -> mirrorRepeat(DESIGN_W, l, r) { raceMeadow(h) } }
+}
+
+private fun DrawScope.raceMeadow(h: Float) {
+    run {
         drawRect(RaceSky, size = Size(DESIGN_W, 520f))
         listOf(Motif(MotifShape.SPARK, 300f, 290f, 2f), Motif(MotifShape.SPARK, 820f, 265f, 1.5f), Motif(MotifShape.SPARK, 170f, 330f, 1.1f))
             .forEach { m ->
@@ -283,40 +323,49 @@ private val RaceLayer3 = listOf(
  */
 @Composable
 internal fun SweetShop() {
-    DesignCanvas { h ->
+    DesignCanvas { h, l, r ->
         val b = h - DESIGN_H
-        val wall = Rect(0f, 0f, DESIGN_W, 1720f + b)
-        drawRect(ShopWall, wall.topLeft, wall.size)
-        tiles(wall, 160f, ShopLayer1, ShopPattern)
-        tiles(wall, 250f, ShopLayer2, ShopPattern, shift = Offset(55f, 90f))
-        drawPath(AwningShadow, ShopShadow)
-        clipPath(Awning) {
-            drawRect(ShopAwningLight, size = Size(DESIGN_W, 330f))
-            var x = 0f
-            while (x < DESIGN_W) {
+        mirrorRepeat(DESIGN_W, l, r) {
+            val wall = Rect(0f, 0f, DESIGN_W, 1720f + b)
+            drawRect(ShopWall, wall.topLeft, wall.size)
+            tiles(wall, 160f, ShopLayer1, ShopPattern)
+            tiles(wall, 250f, ShopLayer2, ShopPattern, shift = Offset(55f, 90f))
+            drawPath(AwningShadow, ShopShadow)
+            outlinedRect(-10f, 1690f + b, 920f, 32f, ShopWood, 7f)
+            planks(1722f + b, DESIGN_H + b, ShopShelfTop, ShopSeam)
+        }
+        // Маркиза не отражается — полосы через одну сбились бы у шва в двойные;
+        // она просто тянется на всю ширину.
+        val awning = awningPath(l, r)
+        clipPath(awning) {
+            drawRect(ShopAwningLight, Offset(l, 0f), Size(r - l, 330f))
+            var x = kotlin.math.floor(l / 180f) * 180f
+            while (x < r) {
                 drawRect(ShopAwning, Offset(x, 0f), Size(90f, 330f))
                 x += 180f
             }
-            drawRect(FinneyInk.copy(alpha = 0.10f), size = Size(DESIGN_W, 46f))
+            drawRect(FinneyInk.copy(alpha = 0.10f), Offset(l, 0f), Size(r - l, 46f))
         }
-        drawPath(Awning, FinneyInk, style = Stroke(7f, join = StrokeJoin.Round))
-        outlinedRect(-10f, 1690f + b, 920f, 32f, ShopWood, 7f)
-        planks(1722f + b, DESIGN_H + b, ShopShelfTop, ShopSeam)
+        drawPath(awning, FinneyInk, style = Stroke(7f, join = StrokeJoin.Round))
     }
 }
 
-/** Маркиза: полосы до 250, дальше фестоны по 90 единиц глубиной до 308. */
-private val Awning = svgPath(
-    buildString {
-        append("M-100,-10 L1000,-10 L1000,250 L900,250")
-        var x = 900
-        while (x > -90) {
-            append(" Q${x - 45},308 ${x - 90},250")
-            x -= 90
-        }
-        append(" L-100,250 Z")
-    },
-)
+/** Маркиза от [left] до [right]: полосы до 250, дальше фестоны по 90 единиц глубиной до 308. */
+private fun awningPath(left: Float, right: Float): Path {
+    val from = kotlin.math.floor(left / 90f).toInt() * 90 - 90
+    val to = kotlin.math.ceil(right / 90f).toInt() * 90
+    return svgPath(
+        buildString {
+            append("M${from - 10},-10 L${to + 100},-10 L${to + 100},250 L$to,250")
+            var x = to
+            while (x > from) {
+                append(" Q${x - 45},308 ${x - 90},250")
+                x -= 90
+            }
+            append(" L${from - 10},250 Z")
+        },
+    )
+}
 
 /** Тень под маркизой — те же фестоны, только ниже. */
 private val AwningShadow = svgPath(
@@ -383,7 +432,11 @@ private val ShelfBrackets = svgPath("M86,40 L132,40 L86,86 Z M766,40 L720,40 L76
  */
 @Composable
 internal fun CashDesk() {
-    DesignCanvas { h ->
+    DesignCanvas { h, l, r -> mirrorRepeat(DESIGN_W, l, r) { cashDesk(h) } }
+}
+
+private fun DrawScope.cashDesk(h: Float) {
+    run {
         val d = DeskTop.floatValue - 832f
         val wall = Rect(0f, 0f, DESIGN_W, 860f + d)
         drawRect(DeskWall, wall.topLeft, wall.size)
@@ -491,7 +544,11 @@ internal enum class RoomLook(
  */
 @Composable
 internal fun GameRoom(look: RoomLook) {
-    DesignCanvas { h ->
+    DesignCanvas { h, l, r -> mirrorRepeat(DESIGN_W, l, r) { gameRoom(look, h) } }
+}
+
+private fun DrawScope.gameRoom(look: RoomLook, h: Float) {
+    run {
         val b = h - DESIGN_H
         drawRect(look.wall, size = Size(DESIGN_W, 1720f + b))
         val wall = Rect(0f, 0f, DESIGN_W, 1600f + b)

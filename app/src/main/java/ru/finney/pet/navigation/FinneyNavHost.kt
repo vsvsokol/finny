@@ -21,6 +21,7 @@ import ru.finney.pet.ui.adult.ResetProgressScreen
 import ru.finney.pet.ui.budget.BudgetScreen
 import ru.finney.pet.ui.goals.GoalsScreen
 import ru.finney.pet.ui.home.HomeScreen
+import ru.finney.pet.ui.layout.isExpandedLayout
 import ru.finney.pet.ui.onboarding.OnboardingScreen
 import ru.finney.pet.notifications.AskNotificationsOnce
 import ru.finney.pet.ui.onboarding.PetSetupScreen
@@ -54,7 +55,27 @@ fun FinneyNavHost(
 
     val navController = rememberNavController()
     BackgroundMusic(navController)
-    NavHost(navController = navController, startDestination = start, modifier = modifier) {
+    val expanded = isExpandedLayout
+    // С главного: на телефоне экран открывается поверх комнаты; в широком режиме —
+    // панелью справа, и новая панель заменяет открытую, а не копится стопкой.
+    val open: (Any) -> Unit = { route -> if (expanded) navController.openPane(route) else navController.go(route) }
+    val home: @Composable () -> Unit = {
+        HomeScreen(
+            onOpenBudget = { open(BudgetRoute) },
+            onOpenShop = { open(ShopRoute) },
+            onOpenGoals = { open(GoalsRoute) },
+            onOpenTasks = { open(TasksRoute) },
+            onOpenTask = { taskId -> navController.go(TaskRoute(taskId)) },
+            onOpenWardrobe = { open(WardrobeRoute) },
+            onOpenProgress = { open(ProgressRoute) },
+            onOpenSettings = { open(SettingsRoute) },
+            onOpenHelp = { navController.go(OnboardingRoute(isReplay = true)) },
+            onOpenGlossary = { open(GlossaryRoute) },
+            onPeriodClosed = { number -> navController.go(PeriodResultRoute(number)) },
+        )
+    }
+    WideShell(navController, enabled = expanded, home = home, modifier = modifier) { hostModifier ->
+    NavHost(navController = navController, startDestination = start, modifier = hostModifier) {
 
         // ---------- Первый запуск ----------
 
@@ -85,19 +106,9 @@ fun FinneyNavHost(
         composable<HomeRoute> {
             // Питомец уже есть — теперь понятно, о ком будут напоминания.
             AskNotificationsOnce()
-            HomeScreen(
-                onOpenBudget = { navController.go(BudgetRoute) },
-                onOpenShop = { navController.go(ShopRoute) },
-                onOpenGoals = { navController.go(GoalsRoute) },
-                onOpenTasks = { navController.go(TasksRoute) },
-                onOpenTask = { taskId -> navController.go(TaskRoute(taskId)) },
-                onOpenWardrobe = { navController.go(WardrobeRoute) },
-                onOpenProgress = { navController.go(ProgressRoute) },
-                onOpenSettings = { navController.go(SettingsRoute) },
-                onOpenHelp = { navController.go(OnboardingRoute(isReplay = true)) },
-                onOpenGlossary = { navController.go(GlossaryRoute) },
-                onPeriodClosed = { number -> navController.go(PeriodResultRoute(number)) },
-            )
+            // В широком режиме комнату рисует WideShell — вне графа, чтобы она оставалась
+            // на сцене, пока справа открыт экран.
+            if (!expanded) home()
         }
 
         composable<BudgetRoute> {
@@ -199,6 +210,7 @@ fun FinneyNavHost(
             )
         }
     }
+    }
 }
 
 /** Музыка по текущему экрану: в играх — своя, в знакомстве — своя, иначе — тема комнаты. */
@@ -228,6 +240,17 @@ private val NavController.ready: Boolean
 /** Закрыть текущий экран — один раз, сколько ни нажимай. */
 fun NavController.back() {
     if (ready) popBackStack()
+}
+
+/**
+ * Широкий режим: экран-панель справа от комнаты. Открытая панель заменяется новой
+ * (под ней всегда главный), повторное нажатие той же кнопки ничего не делает.
+ */
+fun <T : Any> NavController.openPane(route: T) {
+    navigate(route) {
+        popUpTo<HomeRoute>()
+        launchSingleTop = true
+    }
 }
 
 /** Открыть экран — один раз, сколько ни нажимай. */

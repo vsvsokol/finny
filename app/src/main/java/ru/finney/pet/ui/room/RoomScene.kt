@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,6 +43,8 @@ import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -224,6 +227,8 @@ private const val CAMERA_MS = 1200
  * и так темнее. Цвет — небо за окном, ночь остаётся синей, а не серой.
  */
 private const val NIGHT_SHADE = 0.3f
+
+
 private val UfoPauseMs = 20_000L..45_000L
 
 /**
@@ -307,6 +312,12 @@ fun RoomScene(
     focusBottom: Dp = 0.dp,
     focusSolid: Dp = focusBottom,
     trip: RoomTrip = remember { RoomTrip(spot) },
+    /**
+     * Широкий режим: по бокам сцены продолжается комната ([RoomSides]). Тогда сцена не
+     * обрезана по своему кадру — ковёр и отражённый холст игровой выходят на бока, —
+     * и сообщает бокам задник, отражение и свет. Обрезается только наезд камеры.
+     */
+    sides: RoomSidesState? = null,
     pet: @Composable BoxScope.() -> Unit = {},
 ) {
     // Где питомец в игровой сейчас: сдвиг от его обычного места, доля ширины холста.
@@ -374,7 +385,7 @@ fun RoomScene(
     }
     val shade = animateFloatAsState(if (dark) NIGHT_SHADE else 0f, tween(DOOR_MS), label = "night")
 
-    BoxWithConstraints(modifier = modifier.clipToBounds().background(FinneyCream)) {
+    BoxWithConstraints(modifier = if (sides != null) modifier else modifier.clipToBounds().background(FinneyCream)) {
         // Масштаб «накрыть экран»: холст не меньше экрана ни по одной стороне.
         val canvasW = maxOf(maxWidth, maxHeight * Room.CANVAS_RATIO)
         val canvasH = canvasW / Room.CANVAS_RATIO
@@ -642,9 +653,19 @@ fun RoomScene(
             }
         }
 
+        if (sides != null) {
+            val room = shown
+            val axis = mirrorAxis.takeIf { room == RoomSpot.PLAY }
+            SideEffect {
+                sides.wall = walls.now
+                sides.mirrorAxis = axis
+            }
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                // С боками сцена не обрезана, но крупный план камеры за кадр не выходит.
+                .then(if (sides != null) Modifier.graphicsLayer { clip = zoom.value > 0f || editCamera.first != 1f } else Modifier)
                 .graphicsLayer {
                     val z = editZoom.value
                     val s = 1f + (editCamera.first - 1f) * z
@@ -710,6 +731,7 @@ fun RoomScene(
                     pet = pet,
                     mirrorAxis = mirrorAxis.takeIf { room == RoomSpot.PLAY },
                     toysWatch = { toysWatch },
+                    sides = sides != null,
                 )
             }
         }
@@ -721,7 +743,13 @@ fun RoomScene(
         // вместе с комнатой, она съезжала бы с края экрана. Читается на отрисовке.
         Box(
             modifier = Modifier.fillMaxSize().drawBehind {
-                if (shade.value > 0f) drawRect(SkyColor, alpha = shade.value)
+                if (shade.value <= 0f) return@drawBehind
+                // С боками — во всю ширину: темнеют и они.
+                if (sides != null) {
+                    drawRect(SkyColor, Offset(-SIDES_REACH, 0f), Size(size.width + 2 * SIDES_REACH, size.height), alpha = shade.value)
+                } else {
+                    drawRect(SkyColor, alpha = shade.value)
+                }
             },
         )
 
@@ -824,6 +852,7 @@ private fun RoomCanvas(
     petVisibility: () -> Float = { 1f },
     mirrorAxis: Float? = null,
     toysWatch: () -> Boolean = { false },
+    sides: Boolean = false,
 ) {
     Box(modifier = modifier.fillMaxSize()) {
         Box(
@@ -838,8 +867,16 @@ private fun RoomCanvas(
                     } else Modifier,
                 ),
         ) {
-            Box(modifier = Modifier.fillMaxSize().roomLight(lighting)) {
-                WallSwap(walls, canvasW, canvasH)
+            Box(modifier = Modifier.fillMaxSize().roomLight(lighting, sides = sides)) {
+                // Широкий режим: от задника — только стена. Пол растянут на всё окно
+                // и лежит под сценой (RoomSides): свой пол сцены сходился бы с ним швом.
+                if (sides) {
+                    Box(Modifier.fillMaxSize().drawWithContent {
+                        clipRect(bottom = size.height * walls.now.floorTop) { this@drawWithContent.drawContent() }
+                    }) { WallSwap(walls, canvasW, canvasH) }
+                } else {
+                    WallSwap(walls, canvasW, canvasH)
+                }
                 // Ковёр плоский, лежит на полу под всем, что стоит, и свет комнаты ложится на него
                 // как на пол. Тени у него нет.
                 if (room == RoomSpot.PLAY) RugSwap(rugs, toyFloor, canvasW, canvasH, mirrored = mirrorAxis != null)

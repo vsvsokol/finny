@@ -1,7 +1,5 @@
 package ru.finney.pet.ui.home
 
-import android.content.Context
-import android.content.SharedPreferences
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -34,7 +32,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import ru.finney.pet.ui.components.SpeechLeadColor
@@ -52,26 +49,24 @@ import ru.finney.pet.ui.theme.StrokeRegular
 // Помним уровень, на котором заходили: другой уровень — снова «новое», так и после
 // новой игры с первого уровня наклейки не пропадут.
 
-internal class NewSeen(private val prefs: SharedPreferences) {
+/** Что уже видели: [read] и [write] — хранилище платформы, см. `rememberNewSeen` в NewSeenStore.kt. */
+internal class NewSeen(
+    private val read: (String) -> Int,
+    private val write: (String, Int) -> Unit,
+) {
     // Счётчик правок: чтение через него заставляет Compose перерисовать наклейку после mark().
     private var version by mutableIntStateOf(0)
 
     fun seen(place: NewPlace, level: Int): Boolean {
         version
-        return prefs.getInt(place.name, 0) == level
+        return read(place.name) == level
     }
 
     fun mark(place: NewPlace, level: Int) {
-        if (prefs.getInt(place.name, 0) == level) return
-        prefs.edit().putInt(place.name, level).apply()
+        if (read(place.name) == level) return
+        write(place.name, level)
         version++
     }
-}
-
-@Composable
-internal fun rememberNewSeen(): NewSeen {
-    val app = LocalContext.current.applicationContext
-    return remember { NewSeen(app.getSharedPreferences("new_stickers", Context.MODE_PRIVATE)) }
 }
 
 /** Слой наклеек поверх главного: каждая — у верхнего угла своей кнопки, ближе к середине экрана. */
