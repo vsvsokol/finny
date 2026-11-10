@@ -67,22 +67,34 @@ internal data class StoredGames(
  * Правила те же, что у Room (`GameDao.writeGame`): операции, попытки и расход с полки
  * только дописываются, периоды и шкалы перезаписываются.
  */
-class WebGameStorage(private val key: String = "games") : GameStorage {
+internal interface GamePersistence {
+    fun read(): StoredGames
+    fun write(games: StoredGames, replace: Set<Long>)
+}
+
+internal class GuestPersistence : GamePersistence {
+    override fun read(): StoredGames = BrowserStorage.get("games")?.let {
+        cloudJson.decodeFromString<StoredGames>(it)
+    } ?: StoredGames()
+    override fun write(games: StoredGames, replace: Set<Long>) {
+        BrowserStorage.requireSet("games", cloudJson.encodeToString(games))
+    }
+}
+
+class WebGameStorage internal constructor(private val persistence: GamePersistence = GuestPersistence()) : GameStorage {
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     private val state = MutableStateFlow(read())
 
-    private fun read(): StoredGames = BrowserStorage.get(key)?.let { text ->
-        runCatching { json.decodeFromString(StoredGames.serializer(), text) }
-            .onFailure { println("finny: сохранение не читается, начинаем заново: ${it.message}") }
-            .getOrNull()
-    } ?: StoredGames()
+    private fun read(): StoredGames = persistence.read()
 
-    private fun write(update: (StoredGames) -> StoredGames) {
+    internal fun refresh(games: StoredGames) { state.value = games }
+
+    private fun write(replace: Set<Long> = emptySet(), update: (StoredGames) -> StoredGames) {
         val next = update(state.value)
+        persistence.write(next, replace)
         state.value = next
-        BrowserStorage.set(key, json.encodeToString(StoredGames.serializer(), next))
     }
 
     private fun StoredGames.edit(profileId: Long, change: (StoredProfile) -> StoredProfile) =
@@ -94,7 +106,7 @@ class WebGameStorage(private val key: String = "games") : GameStorage {
     /** Подменить сохранение присланным из баг-репорта. */
     fun importJson(text: String) {
         val games = json.decodeFromString(StoredGames.serializer(), text)
-        write { games }
+        write(games.profiles.map { it.profile.id }.toSet()) { games }
     }
 
     override fun observeProfiles(): Flow<List<Profile>> = state
@@ -124,7 +136,7 @@ class WebGameStorage(private val key: String = "games") : GameStorage {
         games.edit(profileId) { it.applyRows(state.toRows(profileId)) }
     }
 
-    override suspend fun replace(profileId: Long, state: GameState) = write { games ->
+    override suspend fun replace(profileId: Long, state: GameState) = write(setOf(profileId)) { games ->
         games.edit(profileId) {
             it.copy(periods = emptyList(), ledger = emptyList(), attempts = emptyList(), uses = emptyList())
                 .applyRows(state.toRows(profileId))

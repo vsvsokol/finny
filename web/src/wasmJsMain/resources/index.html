@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <meta name="theme-color" content="#E9E1FF">
   <title>Питомец Финни</title>
+  <link rel="stylesheet" href="account.css">
   <link rel="icon" href="favicon.png">
   <script>
     // Подставляет CI (web.yml); локально — dev/local.
@@ -12,13 +13,15 @@
   </script>
   <style>
     html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; background: #E9E1FF; }
-    body { height: 100dvh; overscroll-behavior: none; touch-action: none; -webkit-user-select: none; user-select: none; }
+    body { height: 100dvh; overscroll-behavior: none; touch-action: auto; -webkit-user-select: none; user-select: none; }
     #splash { position: fixed; inset: 0; display: flex; flex-direction: column; gap: 16px;
       align-items: center; justify-content: center; font: 18px system-ui, sans-serif; color: #2B2250; }
     #splash img { width: 160px; height: 160px; }
   </style>
 </head>
 <body>
+  <div id="finny-game"></div>
+  <script src="account.js"></script>
   <div id="splash">
     <img src="favicon.png" alt="">
     <div id="splash-text">Финни просыпается…</div>

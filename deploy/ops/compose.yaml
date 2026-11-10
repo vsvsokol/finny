@@ -1,0 +1,38 @@
+name: finney
+services:
+  api:
+    image: ${FINNY_API_IMAGE:-finney-api:stage3}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp:size=64m]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    environment: {FINNY_ORIGIN: 'https://finny.mango-kokos.ru'}
+    volumes: ['./data:/data', './backups:/backups']
+    command: [python, -m, uvicorn, 'server:create_app', --factory, --host, '0.0.0.0', --port, '8000', --workers, '1', --no-access-log, --proxy-headers, --forwarded-allow-ips, '*', --limit-concurrency, '16']
+    networks: [private]
+    logging: {driver: json-file, options: {max-size: 10m, max-file: '3'}}
+  web:
+    image: nginx:1-alpine
+    user: '101:101'
+    entrypoint: [nginx, -g, 'daemon off;']
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp:size=64m]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    volumes: ['./nginx.conf:/etc/nginx/nginx.conf:ro', './site:/srv/site:ro']
+    networks: [private, web]
+    labels:
+      traefik.enable: 'true'
+      traefik.docker.network: web
+      traefik.http.routers.finney.rule: Host(`finny.mango-kokos.ru`)
+      traefik.http.routers.finney.entrypoints: websecure
+      traefik.http.routers.finney.tls.certresolver: myresolver
+      traefik.http.services.finney.loadbalancer.server.port: '8080'
+    logging: {driver: json-file, options: {max-size: 10m, max-file: '3'}}
+networks:
+  private: {internal: true}
+  web: {external: true}

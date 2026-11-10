@@ -7,18 +7,15 @@ import ru.finney.pet.domain.settings.SettingsStorage
 import ru.finney.pet.domain.settings.SoundSettings
 
 /** Открытый профиль — как DataStore на Android, только в localStorage. */
-class WebActiveProfileStorage : ActiveProfileStorage {
-    private val state = MutableStateFlow(BrowserStorage.get(KEY)?.toLongOrNull())
+class WebActiveProfileStorage(private val key: String = "activeProfile") : ActiveProfileStorage {
+    private val state = MutableStateFlow(BrowserStorage.get(key)?.toLongOrNull())
     override val activeProfileId: Flow<Long?> = state
 
     override suspend fun setActiveProfileId(profileId: Long?) {
-        if (profileId == null) BrowserStorage.remove(KEY) else BrowserStorage.set(KEY, profileId.toString())
+        if (profileId == null) BrowserStorage.remove(key) else BrowserStorage.requireSet(key, profileId.toString())
         state.value = profileId
     }
 
-    private companion object {
-        const val KEY = "activeProfile"
-    }
 }
 
 /** Звук, музыка, вибрация, анимации. По умолчанию включено всё, как на Android. */

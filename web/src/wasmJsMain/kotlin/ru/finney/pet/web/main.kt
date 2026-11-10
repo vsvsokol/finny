@@ -6,12 +6,15 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +35,8 @@ import ru.finney.pet.content.ContentException
 import ru.finney.pet.content.ContentParser
 import ru.finney.pet.content.ContentValidator
 import ru.finney.pet.domain.model.GameContent
+import androidx.lifecycle.viewmodel.compose.viewModel
+import ru.finney.pet.navigation.StartViewModel
 import ru.finney.pet.navigation.FinneyNavHost
 import ru.finney.pet.ui.layout.LocalWindowLayout
 import ru.finney.pet.ui.layout.PortraitColumnWidth
@@ -59,23 +64,38 @@ private suspend fun loadContent(): GameContent {
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
-    if (UrlFlags.has("reset")) BrowserStorage.clearAll()
     MainScope().launch {
         try {
+            if (!acquireGameLock()) {
+                showFatal("Финни уже открыт в другой вкладке. Закройте её и обновите эту страницу. Если вкладок нет — обновите браузер.")
+                return@launch
+            }
+            if (UrlFlags.has("reset") && BrowserStorage.get("account.selected") == null) {
+                BrowserStorage.remove("games")
+                BrowserStorage.remove("activeProfile")
+            }
             WebFonts.load()
-            AppContainer.instance = AppContainer(loadContent())
+            val account = WebAccount()
+            webAccount = account
+            AppContainer.instance = AppContainer(loadContent(), account.storage, account.activeKey)
+            account.start()
         } catch (e: Throwable) {
             showFatal("Не удалось загрузить игру: ${e.message}")
             throw e
         }
         hideSplash()
-        ComposeViewport(document.body!!) { FinnyWebApp() }
+        ComposeViewport(document.getElementById("finny-game")!!) { FinnyWebApp() }
     }
 }
+
+private lateinit var webAccount: WebAccount
 
 /** То же, что MainActivity.setContent на Android: звуки, анимации, тема, граф экранов. */
 @Composable
 fun FinnyWebApp() {
+    val epoch by webAccount.navigationEpoch.collectAsState()
+    val fatal by webAccount.localProblem.collectAsState()
+    if (fatal != null) { TextSaveFailure(fatal!!); return }
     val container = AppContainer.instance
     val sounds = container.sounds
     val settings by sounds.settings.collectAsState()
@@ -93,7 +113,10 @@ fun FinnyWebApp() {
         FinneyTheme {
             AppFrame {
                 Scaffold(modifier = Modifier.fillMaxSize(), contentWindowInsets = WindowInsets(0, 0, 0, 0)) { padding ->
-                    FinneyNavHost(modifier = Modifier.fillMaxSize())
+                    key(epoch) {
+                        FinneyNavHost(modifier = Modifier.fillMaxSize(),
+                            startViewModel = viewModel(key = "web-start-$epoch", factory = StartViewModel.Factory))
+                    }
                 }
             }
         }
@@ -120,3 +143,8 @@ private fun AppFrame(content: @Composable () -> Unit) {
 }
 
 private val DesktopBackdrop = Color(0xFFE9E1FF)
+
+@Composable
+private fun TextSaveFailure(message: String) {
+    androidx.compose.material3.Text(message, Modifier.fillMaxSize().padding(24.dp))
+}

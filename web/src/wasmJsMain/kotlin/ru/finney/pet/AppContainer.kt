@@ -16,15 +16,13 @@ import ru.finney.pet.web.WebSettingsStorage
  * Веб-версия ручного DI (Android — app/.../AppContainer.kt). Те же поля, что берут
  * ViewModel-фабрики: content, game, session. Контент уже прочитан в main.kt.
  */
-class AppContainer(val content: GameContent) {
+class AppContainer(val content: GameContent, val storage: WebGameStorage = WebGameStorage(), activeKey: String = "activeProfile") {
 
     val game: Game by lazy { Game(content) }
 
-    val storage: WebGameStorage by lazy { WebGameStorage() }
-
     val gameStore: GameStore by lazy { GameStore(game, storage) }
 
-    val session: Session by lazy { Session(gameStore, WebActiveProfileStorage()) }
+    val session: Session by lazy { Session(gameStore, WebActiveProfileStorage(activeKey)) }
 
     var appVisible: Boolean = true
 

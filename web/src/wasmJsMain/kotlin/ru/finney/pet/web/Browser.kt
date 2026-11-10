@@ -20,6 +20,8 @@ object BrowserStorage {
 
     fun get(key: String): String? = runCatching { localStorage.getItem(PREFIX + key) }.getOrNull()
 
+    fun requireSet(key: String, value: String) { localStorage.setItem(PREFIX + key, value) }
+
     fun set(key: String, value: String) {
         runCatching { localStorage.setItem(PREFIX + key, value) }
             .onFailure { println("finny: не удалось сохранить $key: ${it.message}") }

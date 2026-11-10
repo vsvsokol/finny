@@ -1,0 +1,21 @@
+#finny-game { position: fixed; inset: 56px 0 0; touch-action: none; }
+#finny-account-bar, #finny-account { box-sizing: border-box; color: #382C92; font: 16px/1.4 system-ui, sans-serif; }
+#finny-account-bar { position: fixed; inset: 0 0 auto; height: 56px; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 12px; background: #FFEDCD; border-bottom: 2px solid #382C92; }
+#finny-account-bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#finny-account-bar button { min-height: 44px; padding: 4px 12px; color: #382C92; background: #F7DC8B; border: 2px solid #382C92; border-radius: 16px; font: inherit; white-space: nowrap; }
+#finny-account { position: fixed; inset: 56px 0 0; z-index: 10; overflow-y: auto; background: #E9E1FF; padding: 16px; touch-action: pan-y; user-select: text; -webkit-user-select: text; }
+#finny-account[hidden] { display: none; }
+.account-panel { max-width: 540px; margin: 0 auto; padding: 20px; background: #FFEDCD; border: 3px solid #382C92; border-radius: 24px; }
+.account-panel h1 { margin-top: 0; font-size: 26px; font-weight: 500; }
+.account-panel h2 { font-size: 20px; font-weight: 500; }
+.account-panel label { display: block; margin: 16px 0; }
+.account-panel input { box-sizing: border-box; width: 100%; min-height: 48px; padding: 10px 12px; margin-top: 6px; border: 2px solid #382C92; border-radius: 12px; font: inherit; color: #382C92; background: white; user-select: text; -webkit-user-select: text; }
+.account-panel button { display: block; box-sizing: border-box; width: 100%; min-height: 48px; margin: 12px 0; padding: 10px 12px; border: 2px solid #382C92; border-radius: 24px; background: #F7DC8B; color: #382C92; font: inherit; cursor: pointer; }
+.account-panel button.quiet { background: #FFEDCD; }
+.account-panel button:focus-visible, .account-panel input:focus-visible { outline: 3px solid #67A6DC; outline-offset: 3px; }
+.account-panel button:disabled { opacity: .55; cursor: wait; }
+.account-error:empty { display: none; }
+.account-error { padding: 10px; border: 2px solid #F66A85; border-radius: 12px; }
+.account-error:not(:empty)::before { content: '⚠ '; }
+.account-conflict { border-top: 2px solid #382C92; padding-top: 8px; margin-top: 16px; }
+@media (max-width: 420px) { #finny-account { padding: 8px; } .account-panel { padding: 14px; } #finny-account-bar { font-size: 14px; padding-inline: 8px; } }

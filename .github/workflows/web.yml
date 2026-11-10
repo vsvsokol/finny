@@ -1,0 +1,65 @@
+name: Web CI and release
+on:
+  push:
+    branches: [web-port]
+  pull_request:
+    branches: [web-port, Main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: {lfs: true}
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '25'}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.13'}
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Python API tests
+        run: |
+          pip install -r deploy/api/requirements-test.lock
+          pytest -q deploy/api/tests
+      - name: Kotlin tests and production build
+        run: |
+          chmod +x gradlew
+          ./gradlew -p deploy/client-tests test --console=plain
+          ./gradlew :app:compileDebugKotlin :app:testDebugUnitTest :web:wasmJsBrowserDistribution --console=plain
+      - name: Package and integration test
+        run: |
+          python deploy/prepare_release.py web/build/dist/wasmJs/productionExecutable package/web
+          export FINNY_STATIC="$PWD/package/web"
+          export FINNY_DATABASE="$RUNNER_TEMP/integration.sqlite3"
+          (cd deploy && python -m uvicorn dev_server:create_dev_app --factory --host 127.0.0.1 --port 18086 --no-access-log) > /tmp/finny-api.log 2>&1 &
+          for attempt in $(seq 1 30); do curl -fsS http://127.0.0.1:18086/api/health && break || sleep 1; done
+          FINNY_LIVE_TEST=1 ./gradlew -p deploy/client-tests test --console=plain
+          cp -a deploy/api package/api
+          printf '%s\n' "$GITHUB_SHA" > package/revision.txt
+          tar -czf finny-web.tar.gz -C package web api revision.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: finny-web
+          path: finny-web.tar.gz
+          retention-days: 14
+  release:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/web-port'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions: {contents: write}
+    steps:
+      - uses: actions/download-artifact@v4
+        with: {name: finny-web}
+      - name: Publish deployment package
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          gh release view "web-build-$RELEASE_SHA" >/dev/null 2>&1 || gh release create "web-build-$RELEASE_SHA" --target "$RELEASE_SHA" --prerelease --title "Web $RELEASE_SHA" --notes "Проверенный пакет веб-версии."
+          gh release upload "web-build-$RELEASE_SHA" finny-web.tar.gz --clobber
