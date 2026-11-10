@@ -2,6 +2,8 @@
 import argparse
 import hashlib
 import json
+import os
+import re
 from pathlib import Path
 import shutil
 
@@ -14,6 +16,11 @@ def prepare(source: Path, destination: Path):
     if source.resolve() in destination.resolve().parents:
         raise ValueError('Назначение не должно быть внутри исходной сборки')
     shutil.copytree(source, destination, ignore=shutil.ignore_patterns('*.map'))
+    commit = os.environ.get('GITHUB_SHA')
+    if commit:
+        if not re.fullmatch('[0-9a-f]{40}', commit): raise ValueError('Некорректный SHA сборки')
+        html = destination/'index.html'
+        html.write_text(re.sub(r'window\.FINNY_BUILD = \{[^}]*\};', 'window.FINNY_BUILD = '+json.dumps({'version':'web-'+commit[:12], 'commit':commit})+';', html.read_text()))
     template = (destination/'offline-worker.js').read_text()
     (destination/'offline-worker.js').unlink()
     assets = sorted(str(path.relative_to(destination)) for path in destination.rglob('*') if path.is_file())
