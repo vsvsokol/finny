@@ -341,18 +341,18 @@ internal fun ArtDots(current: Int, total: Int, modifier: Modifier = Modifier) {
  * между блоками.
  */
 @Composable
-internal fun ArtSay(text: AnnotatedString, tailUp: Boolean, modifier: Modifier = Modifier) {
-    SpeechBubble(
-        text,
-        if (tailUp) Tail.UP else Tail.DOWN,
-        modifier.layout { measurable, constraints ->
-            val tail = TailLength.roundToPx()
-            val placeable = measurable.measure(constraints.offset(vertical = tail))
-            layout(placeable.width, placeable.height - tail) { placeable.place(0, if (tailUp) -tail else 0) }
-        },
-        style = artText(22f, 1.18f),
-        textAlign = TextAlign.Center,
-    )
+internal fun ArtSay(text: AnnotatedString, tail: Tail, modifier: Modifier = Modifier) {
+    val bubbleModifier = when (tail) {
+        Tail.UP, Tail.DOWN -> modifier.layout { measurable, constraints ->
+            val length = TailLength.roundToPx()
+            val placeable = measurable.measure(constraints.offset(vertical = length))
+            layout(placeable.width, placeable.height - length) {
+                placeable.place(0, if (tail == Tail.UP) -length else 0)
+            }
+        }
+        Tail.LEFT, Tail.RIGHT -> modifier
+    }
+    SpeechBubble(text, tail, bubbleModifier, style = artText(22f, 1.18f), textAlign = TextAlign.Center)
 }
 
 // ---------- Лучи ----------

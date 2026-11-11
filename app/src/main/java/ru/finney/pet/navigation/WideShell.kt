@@ -26,6 +26,7 @@ import androidx.navigation.NavController
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.toRoute
 import ru.finney.pet.ui.layout.LocalSceneColumn
 import ru.finney.pet.ui.layout.PaneWidth
 import ru.finney.pet.ui.layout.PortraitColumnWidth
@@ -34,8 +35,8 @@ import ru.finney.pet.ui.theme.FinneyCream
 /**
  * Экраны, которые в широком режиме открываются панелью справа, а не поверх комнаты:
  * ребёнок раскладывает деньги или покупает и тут же видит питомца.
- * Итоги уровня и знакомство — по-прежнему целым экраном (по центру окна), мини-игры —
- * во всё окно: игра колонкой, а её фон до краёв (SceneStage).
+ * Знакомство и создание питомца занимают всю ширину. У мини-игр фон доходит
+ * до краёв окна, а сама игра остаётся в колонке (SceneStage).
  */
 private val PaneRoutes = listOf(
     BudgetRoute::class, ShopRoute::class, WardrobeRoute::class, GoalsRoute::class,
@@ -80,7 +81,12 @@ internal fun WideShell(
         // в ноль (вёрстка экранов на это не рассчитана), а оставляем на прежнем месте
         // невидимым. Пустой граф нажатий не перехватывает — они доходят до комнаты.
         var lastPlace by remember { mutableStateOf(Place.FULL) }
-        val fullPlace = if (destination?.hasRoute<TaskRoute>() == true) Place.SCENE else Place.FULL
+        val fullPlace = when {
+            destination?.hasRoute<TaskRoute>() == true -> Place.WIDE
+            destination?.hasRoute<OnboardingRoute>() == true -> Place.WIDE
+            destination?.hasRoute<PetSetupRoute>() == true && entry?.toRoute<PetSetupRoute>()?.isEditing == false -> Place.WIDE
+            else -> Place.FULL
+        }
         if (inPane) lastPlace = Place.PANE else if (!atHome && destination != null) lastPlace = fullPlace
         val place = if (atHome) lastPlace else if (inPane) Place.PANE else fullPlace
         val navModifier = when (place) {
@@ -92,8 +98,7 @@ internal fun WideShell(
                 .clip(RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp))
                 .background(FinneyCream)
             Place.FULL -> Modifier.align(Alignment.Center).fillMaxHeight().widthIn(max = PortraitColumnWidth)
-            // Мини-игра: во всё окно. Сама игра — колонкой (SceneStage), фон сцены — до краёв.
-            Place.SCENE -> Modifier.fillMaxSize()
+            Place.WIDE -> Modifier.fillMaxSize()
         }
         // Прозрачность — первой в цепочке: иначе фон и тень панели остались бы видны.
         CompositionLocalProvider(LocalSceneColumn provides PortraitColumnWidth) {
@@ -102,7 +107,7 @@ internal fun WideShell(
     }
 }
 
-private enum class Place { PANE, FULL, SCENE }
+private enum class Place { PANE, FULL, WIDE }
 
 /** Фон окна вокруг сцены — сиреневый, как у полей вокруг портретной игры. */
 internal val WideBackdrop = androidx.compose.ui.graphics.Color(0xFFE9E1FF)

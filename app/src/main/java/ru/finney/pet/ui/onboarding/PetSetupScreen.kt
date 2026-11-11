@@ -87,6 +87,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -97,6 +98,8 @@ import kotlinx.coroutines.launch
 import ru.finney.pet.domain.model.PetCharacter
 import ru.finney.pet.domain.profile.PetNameError
 import ru.finney.pet.ui.components.ChargeButton
+import ru.finney.pet.ui.components.Tail
+import ru.finney.pet.ui.layout.isExpandedLayout
 import ru.finney.pet.ui.motion.LocalAnimations
 import ru.finney.pet.ui.motion.PortalArrival
 import ru.finney.pet.ui.motion.drawPortal
@@ -188,6 +191,7 @@ internal fun PetSetupContent(
     // Назад — как системная кнопка: на знакомство или в настройки, смотря откуда пришли.
     val back = rememberSystemBack()
     val canSave = !state.isSaving && !state.isLoading
+    val expanded = isExpandedLayout && !state.isEditing
 
     Box(Modifier.fillMaxSize()) {
         SetupLayout(
@@ -196,6 +200,7 @@ internal fun PetSetupContent(
                 .dotsBackdrop(FinneyCream)
                 .systemBarsPadding()
                 .padding(ArtPagePadding),
+            expanded = expanded,
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -217,6 +222,7 @@ internal fun PetSetupContent(
             ) {
                 CharacterPicker(
                     selected = state.appearance.character,
+                    expanded = expanded,
                     // Карусель стоит, пока питомец уходит: иначе выбор сменился бы на полпути.
                     enabled = !state.isLoading && !entering,
                     onSelect = onCharacterChange,
@@ -300,12 +306,40 @@ private fun DemoBadge() {
  * Сцена кладётся под остальными блоками: лучи шире её и заходят под заголовок и карусель.
  */
 @Composable
-private fun SetupLayout(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+private fun SetupLayout(modifier: Modifier, expanded: Boolean, content: @Composable () -> Unit) {
     BoxWithConstraints(modifier) {
         val viewportHeight = constraints.maxHeight
-        Layout(content, Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) { measurables, constraints ->
+        Layout(
+            content,
+            Modifier.align(Alignment.TopCenter)
+                .widthIn(max = if (expanded) 1120.dp else Dp.Unspecified)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
+        ) { measurables, constraints ->
             val (title, stage, form, buttons) = measurables
             val loose = constraints.copy(minWidth = 0, minHeight = 0)
+            if (expanded) {
+                val gutter = 48.dp.roundToPx()
+                val formWidth = (constraints.maxWidth - gutter) * 54 / 100
+                val stageWidth = constraints.maxWidth - formWidth - gutter
+                val formConstraints = loose.copy(maxWidth = formWidth)
+                val t = title.measure(formConstraints)
+                val f = form.measure(formConstraints)
+                val b = buttons.measure(formConstraints)
+                val gap = ArtGap.roundToPx()
+                val formHeight = t.height + f.height + b.height + gap * 2
+                val s = stage.measure(loose.copy(maxWidth = stageWidth, maxHeight = 380.dp.roundToPx()))
+                val height = maxOf(viewportHeight, formHeight, s.height)
+                return@Layout layout(constraints.maxWidth, height) {
+                    val formStart = stageWidth + gutter
+                    val top = (height - formHeight) / 2
+                    s.placeRelative((stageWidth - s.width) / 2, (height - s.height) / 2, zIndex = -1f)
+                    t.placeRelative(formStart + (formWidth - t.width) / 2, top)
+                    f.placeRelative(formStart + (formWidth - f.width) / 2, top + t.height + gap)
+                    b.placeRelative(formStart, top + t.height + f.height + gap * 2)
+                }
+            }
+
             val t = title.measure(loose)
             val f = form.measure(loose)
             val b = buttons.measure(loose)
@@ -349,7 +383,7 @@ private fun Stage(character: PetCharacter, name: String, portal: PortalRun) {
     ) {
         ArtSay(
             AnnotatedString(if (name.isEmpty()) "Как меня зовут?" else "Ура! Меня зовут $name!"),
-            tailUp = false,
+            tail = Tail.DOWN,
             modifier = Modifier
                 .widthIn(max = 270.dp)
                 .semantics { liveRegion = LiveRegionMode.Polite },
@@ -548,9 +582,27 @@ private fun Modifier.fieldFrame(focused: Boolean, error: Boolean): Modifier = dr
 @Composable
 private fun CharacterPicker(
     selected: PetCharacter,
+    expanded: Boolean,
     enabled: Boolean,
     onSelect: (PetCharacter) -> Unit,
 ) {
+    if (expanded) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            for (character in PetCharacter.entries) {
+                CharacterCard(
+                    character = character,
+                    isSelected = character == selected,
+                    enabled = enabled,
+                    onSelect = { onSelect(character) },
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        return
+    }
     val list = rememberLazyListState(initialFirstVisibleItemIndex = selected.ordinal)
     val scope = rememberCoroutineScope()
     val latestSelected by rememberUpdatedState(selected)

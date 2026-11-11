@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Text
@@ -65,6 +66,8 @@ import ru.finney.pet.R
 import ru.finney.pet.domain.model.PetCharacter
 import ru.finney.pet.ui.components.Coin
 import ru.finney.pet.ui.components.LevelBadge
+import ru.finney.pet.ui.components.Tail
+import ru.finney.pet.ui.layout.isExpandedLayout
 import ru.finney.pet.ui.motion.LocalAnimations
 import ru.finney.pet.ui.pet.PetMood
 import ru.finney.pet.ui.pet.PetPose
@@ -119,6 +122,7 @@ fun OnboardingScreen(
 /** Страница прототипа: своя подложка во весь экран, поля 30/22/24, шаг 16. */
 @Composable
 private fun Page(backdrop: Modifier, footer: @Composable () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    val expanded = isExpandedLayout
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(ArtGap),
@@ -128,7 +132,7 @@ private fun Page(backdrop: Modifier, footer: @Composable () -> Unit, content: @C
             .systemBarsPadding()
             .padding(ArtPagePadding),
     ) {
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+        BoxWithConstraints(Modifier.weight(1f).widthIn(max = if (expanded) 1120.dp else Dp.Unspecified).fillMaxWidth()) {
             // Сохраняем раскладку на высоком экране; на низком прокручивается только тело.
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -140,7 +144,7 @@ private fun Page(backdrop: Modifier, footer: @Composable () -> Unit, content: @C
                 content = content,
             )
         }
-        footer()
+        Box(Modifier.widthIn(max = if (expanded) 480.dp else Dp.Unspecified).fillMaxWidth()) { footer() }
     }
 }
 
@@ -171,27 +175,56 @@ private fun Footer(
 
 @Composable
 private fun MeetPage(onNext: () -> Unit) {
+    val expanded = isExpandedLayout
     Page(Modifier.dotsBackdrop(FinneyCream), footer = {
         Footer(page = 0, next = "Дальше", onNext = onNext)
     }) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.semantics(mergeDescendants = true) { heading() },
-        ) {
-            ArtBody("Знакомься:", 28f, line = 1f)
-            ArtSign("Финни", 88f)
+        if (expanded) {
+            Row(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(48.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Hero(Modifier.weight(1f))
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(28.dp),
+                ) {
+                    MeetTitle()
+                    MeetGreeting(Tail.LEFT)
+                }
+            }
+        } else {
+            MeetTitle()
+            Hero(Modifier.weight(1f).fillMaxWidth())
+            MeetGreeting(Tail.UP)
         }
-        Hero(Modifier.weight(1f).fillMaxWidth())
-        ArtSay(
-            buildAnnotatedString {
-                append("Привет! Я твой питомец.\nДавай вместе копить ")
-                withStyle(SpanStyle(color = ArtHighlight)) { append("на мечту!") }
-            },
-            tailUp = true,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
-        )
     }
+}
+
+@Composable
+private fun MeetTitle() {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.semantics(mergeDescendants = true) { heading() },
+    ) {
+        ArtBody("Знакомься:", 28f, line = 1f)
+        ArtSign("Финни", 88f)
+    }
+}
+
+@Composable
+private fun MeetGreeting(tail: Tail) {
+    ArtSay(
+        buildAnnotatedString {
+            append("Привет! Я твой питомец.\nДавай вместе копить ")
+            withStyle(SpanStyle(color = ArtHighlight)) { append("на мечту!") }
+        },
+        tail = tail,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp),
+    )
 }
 
 /** Финни на белом круге, на лучах, вокруг мерцают четыре звёздочки. */
@@ -281,70 +314,91 @@ private fun DecisionsPage(onBack: () -> Unit, onNext: () -> Unit) {
     Page(Modifier.dotsBackdrop(ArtYellowPage), footer = {
         Footer(page = 1, next = "Дальше", onNext = onNext, onBack = onBack)
     }) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            ArtSign("Решение за тобой!", 46f, Modifier.semantics { heading() })
-            ArtBody("Куда потратить финки?", 21f)
+        if (isExpandedLayout) {
+            Row(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(48.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.weight(2f), contentAlignment = Alignment.Center) { DecisionsTitle() }
+                DecisionCards(Modifier.weight(3f).padding(top = 12.dp))
+            }
+        } else {
+            DecisionsTitle()
+            DecisionCards(Modifier.weight(1f).fillMaxWidth())
         }
-        Column(
-            verticalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterVertically),
-            modifier = Modifier.weight(1f).fillMaxWidth(),
+    }
+}
+
+@Composable
+private fun DecisionsTitle() {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        ArtSign("Решение за тобой!", 46f, Modifier.semantics { heading() })
+        ArtBody("Куда потратить финки?", 21f)
+    }
+}
+
+@Composable
+private fun DecisionCards(modifier: Modifier) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterVertically),
+        modifier = modifier,
+    ) {
+        Choice(
+            title = "Нужное",
+            text = "Еда и мытьё",
+            icon = { SvgIcon(ForkKnife, Modifier.size(40.dp)) },
+            tag = "Сначала!",
         ) {
-            Choice(
-                title = "Нужное",
-                text = "Еда и мытьё",
-                icon = { SvgIcon(ForkKnife, Modifier.size(40.dp)) },
-                tag = "Сначала!",
-            ) {
-                Image(
-                    painterResource(R.drawable.item_food_apple), null,
-                    contentScale = ContentScale.FillWidth,
-                    modifier = Modifier.offset(y = 4.dp).width(70.dp),
-                )
-                Image(
-                    painterResource(R.drawable.item_care_soap), null,
-                    contentScale = ContentScale.FillWidth,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .offset(x = 4.dp, y = (-2).dp)
-                        .width(52.dp)
-                        .graphicsLayer { rotationZ = -10f },
-                )
-            }
-            Choice(
-                title = "Хочется",
-                text = "Игрушки и сладости",
-                icon = { SvgIcon(WantStar, Modifier.size(40.dp), outline = 1.4f) },
-            ) {
-                Image(
-                    painterResource(R.drawable.item_toy_bear), null,
-                    contentScale = ContentScale.FillHeight,
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .height(88.dp)
-                        .graphicsLayer { rotationZ = 6f },
-                )
-            }
-            Choice(
-                title = "Отложить",
-                text = "В копилку на большую цель",
-                icon = {
-                    Box(Modifier.size(40.dp)) {
-                        SvgIcon(Piggy, Modifier.matchParentSize())
-                        // Глаз — жёлтая точка на тёмном силуэте.
-                        Canvas(Modifier.matchParentSize()) {
-                            val k = size.minDimension / 24f
-                            drawCircle(FinneyYellow, radius = 1f * k, center = Offset(16.4f * k, 12.4f * k))
-                        }
+            Image(
+                painterResource(R.drawable.item_food_apple), null,
+                contentScale = ContentScale.FillWidth,
+                modifier = Modifier.offset(y = 4.dp).width(70.dp),
+            )
+            Image(
+                painterResource(R.drawable.item_care_soap), null,
+                contentScale = ContentScale.FillWidth,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .offset(x = 4.dp, y = (-2).dp)
+                    .width(52.dp)
+                    .graphicsLayer { rotationZ = -10f },
+            )
+        }
+        Choice(
+            title = "Хочется",
+            text = "Игрушки и сладости",
+            icon = { SvgIcon(WantStar, Modifier.size(40.dp), outline = 1.4f) },
+        ) {
+            Image(
+                painterResource(R.drawable.item_toy_bear), null,
+                contentScale = ContentScale.FillHeight,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .height(88.dp)
+                    .graphicsLayer { rotationZ = 6f },
+            )
+        }
+        Choice(
+            title = "Отложить",
+            text = "В копилку на большую цель",
+            icon = {
+                Box(Modifier.size(40.dp)) {
+                    SvgIcon(Piggy, Modifier.matchParentSize())
+                    // Глаз — жёлтая точка на тёмном силуэте.
+                    Canvas(Modifier.matchParentSize()) {
+                        val k = size.minDimension / 24f
+                        drawCircle(FinneyYellow, radius = 1f * k, center = Offset(16.4f * k, 12.4f * k))
                     }
-                },
-            ) {
-                Coin(Modifier.align(Alignment.BottomStart).offset(y = (-2).dp), size = 46.dp)
-                Coin(Modifier.align(Alignment.BottomEnd).offset(y = (-2).dp), size = 46.dp)
-                Coin(Modifier.offset(x = 19.dp), size = 46.dp)
-            }
+                }
+            },
+        ) {
+            Coin(Modifier.align(Alignment.BottomStart).offset(y = (-2).dp), size = 46.dp)
+            Coin(Modifier.align(Alignment.BottomEnd).offset(y = (-2).dp), size = 46.dp)
+            Coin(Modifier.offset(x = 19.dp), size = 46.dp)
         }
     }
 }
@@ -428,48 +482,74 @@ private fun HowToPlayPage(onBack: () -> Unit, onFinish: () -> Unit, onStartDemo:
             },
         )
     }) {
-        ArtSign("Как играть?", 46f, Modifier.semantics { heading() })
-        // Пунктир держит шаги одной дорожкой: от 14 % до 86 % высоты, по центру картинок.
-        Column(
-            verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .drawBehind {
-                    val x = 45.dp.toPx()
-                    drawLine(
-                        FinneyInk.copy(alpha = 0.32f),
-                        Offset(x, size.height * 0.14f),
-                        Offset(x, size.height * 0.86f),
-                        strokeWidth = 4.dp.toPx(),
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10.dp.toPx(), 7.dp.toPx())),
-                    )
-                },
-        ) {
-            Step(1, "Получай финки", "Это игровые монетки") { Coin(size = 84.dp) }
-            Step(2, "Ставь цель", "И копи на неё") {
-                SvgIcon(GoalStar, Modifier.size(84.dp), color = FinneyYellow, outline = 1.5f)
+        if (isExpandedLayout) {
+            Row(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(48.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier.weight(2f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(24.dp),
+                ) {
+                    ArtSign("Как играть?", 46f, Modifier.semantics { heading() })
+                    PlayEncouragement()
+                }
+                PlaySteps(Modifier.weight(3f))
             }
-            Step(3, "Заботься о питомце", "Корми, купай, играй") {
-                PetView(
-                    character = PetCharacter.PUSHISTIK,
-                    mood = PetMood.HAPPY,
-                    pose = StillPose,
-                    modifier = Modifier.size(92.dp),
-                )
-            }
-            Step(4, "Достигай высот", "Новый уровень — новые игры") {
-                LevelBadge(level = 9, size = 66.dp, progress = 0.5f)
-            }
+        } else {
+            ArtSign("Как играть?", 46f, Modifier.semantics { heading() })
+            PlaySteps(Modifier.weight(1f))
+            PlayEncouragement()
         }
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            SvgIcon(Heart, Modifier.size(28.dp), color = FinneyPink, outline = 1.8f)
-            ArtBody("Ошибаться не страшно!", 21f, line = 1f)
-        }
+    }
+}
 
+@Composable
+private fun PlaySteps(modifier: Modifier) {
+    // Пунктир держит шаги одной дорожкой: от 14 % до 86 % высоты, по центру картинок.
+    Column(
+        verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
+        modifier = modifier
+            .fillMaxWidth()
+            .drawBehind {
+                val x = 45.dp.toPx()
+                drawLine(
+                    FinneyInk.copy(alpha = 0.32f),
+                    Offset(x, size.height * 0.14f),
+                    Offset(x, size.height * 0.86f),
+                    strokeWidth = 4.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(10.dp.toPx(), 7.dp.toPx())),
+                )
+            },
+    ) {
+        Step(1, "Получай финки", "Это игровые монетки") { Coin(size = 84.dp) }
+        Step(2, "Ставь цель", "И копи на неё") {
+            SvgIcon(GoalStar, Modifier.size(84.dp), color = FinneyYellow, outline = 1.5f)
+        }
+        Step(3, "Заботься о питомце", "Корми, купай, играй") {
+            PetView(
+                character = PetCharacter.PUSHISTIK,
+                mood = PetMood.HAPPY,
+                pose = StillPose,
+                modifier = Modifier.size(92.dp),
+            )
+        }
+        Step(4, "Достигай высот", "Новый уровень — новые игры") {
+            LevelBadge(level = 9, size = 66.dp, progress = 0.5f)
+        }
+    }
+}
+
+@Composable
+private fun PlayEncouragement() {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        SvgIcon(Heart, Modifier.size(28.dp), color = FinneyPink, outline = 1.8f)
+        ArtBody("Ошибаться не страшно!", 21f, line = 1f)
     }
 }
 
