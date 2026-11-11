@@ -1,21 +1,159 @@
-#finny-game { position: fixed; inset: 56px 0 0; touch-action: none; }
-#finny-account-bar, #finny-account { box-sizing: border-box; color: #382C92; font: 16px/1.4 system-ui, sans-serif; }
-#finny-account-bar { position: fixed; inset: 0 0 auto; height: 56px; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 12px; background: #FFEDCD; border-bottom: 2px solid #382C92; }
-#finny-account-bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#finny-account-bar button { min-height: 44px; padding: 4px 12px; color: #382C92; background: #F7DC8B; border: 2px solid #382C92; border-radius: 16px; font: inherit; white-space: nowrap; }
-#finny-account { position: fixed; inset: 56px 0 0; z-index: 10; overflow-y: auto; background: #E9E1FF; padding: 16px; touch-action: pan-y; user-select: text; -webkit-user-select: text; }
-#finny-account[hidden] { display: none; }
-.account-panel { max-width: 540px; margin: 0 auto; padding: 20px; background: #FFEDCD; border: 3px solid #382C92; border-radius: 24px; }
-.account-panel h1 { margin-top: 0; font-size: 26px; font-weight: 500; }
-.account-panel h2 { font-size: 20px; font-weight: 500; }
-.account-panel label { display: block; margin: 16px 0; }
-.account-panel input { box-sizing: border-box; width: 100%; min-height: 48px; padding: 10px 12px; margin-top: 6px; border: 2px solid #382C92; border-radius: 12px; font: inherit; color: #382C92; background: white; user-select: text; -webkit-user-select: text; }
-.account-panel button { display: block; box-sizing: border-box; width: 100%; min-height: 48px; margin: 12px 0; padding: 10px 12px; border: 2px solid #382C92; border-radius: 24px; background: #F7DC8B; color: #382C92; font: inherit; cursor: pointer; }
-.account-panel button.quiet { background: #FFEDCD; }
-.account-panel button:focus-visible, .account-panel input:focus-visible { outline: 3px solid #67A6DC; outline-offset: 3px; }
-.account-panel button:disabled { opacity: .55; cursor: wait; }
+@font-face {
+  font-family: "Finney Glina";
+  src: url("composeResources/ru.finney.pet.web.res/font/glina_script.ttf") format("truetype");
+  font-display: swap;
+}
+
+:root {
+  --account-ink: #382c92;
+  --account-cream: #ffedcd;
+  --account-sand: #fce7be;
+  --account-peach: #fa987c;
+  --account-blue: #67a6dc;
+  --account-pink: #f66a85;
+  --account-lavender: #e9e1ff;
+  --account-heading: "Finney Glina", system-ui, sans-serif;
+  --account-bar-height: calc(68px + env(safe-area-inset-top));
+}
+
+#finny-game { position: fixed; inset: var(--account-bar-height) 0 0; touch-action: none; }
+
+#finny-account-bar, #finny-account {
+  box-sizing: border-box;
+  color: var(--account-ink);
+  font: 1rem/1.45 system-ui, sans-serif;
+}
+
+#finny-account-bar {
+  position: fixed;
+  inset: 0 0 auto;
+  height: var(--account-bar-height);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: env(safe-area-inset-top) max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left));
+  background: var(--account-cream);
+  border-bottom: 3px solid var(--account-ink);
+}
+
+.account-brand { display: none; }
+.account-brand img { width: 52px; height: auto; }
+.account-status { min-width: 0; overflow-wrap: anywhere; font-size: .875rem; line-height: 1.25; }
+
+#finny-account {
+  width: min(100% - 24px, 500px);
+  max-width: none;
+  max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  padding: 0;
+  border: 3px solid var(--account-ink);
+  border-radius: 28px;
+  background: var(--account-cream);
+  box-shadow: 0 5px 0 var(--account-ink);
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+#finny-account::backdrop { background: rgb(43 34 80 / .56); }
+
+.account-panel { min-width: 0; padding: clamp(16px, 4vw, 32px); }
+.account-art { display: none; }
+.account-panel h1, .account-panel h2, .account-brand {
+  margin: 0;
+  font-family: var(--account-heading);
+  font-weight: 400;
+  line-height: 1.1;
+}
+.account-panel h1 { font-size: clamp(1.75rem, 4vw, 2.5rem); }
+.account-panel h2 { font-size: 1.375rem; overflow-wrap: anywhere; }
+.account-panel p { margin: 8px 0 0; overflow-wrap: anywhere; }
+.account-panel .account-intro { margin-bottom: 16px; }
+.account-panel form, .account-actions, .account-section { display: grid; gap: 8px; }
+.account-panel form { gap: 16px; }
+.account-actions { margin-top: 8px; }
+.account-section {
+  align-content: start;
+  border: 2px solid var(--account-ink);
+  border-radius: 20px;
+  padding: 16px;
+  background: var(--account-sand);
+  min-width: 0;
+}
+.account-sections { display: grid; gap: 16px; }
+.account-panel label { display: grid; gap: 6px; }
+.account-panel label small { font-size: .875rem; }
+
+.account-panel input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 3px solid var(--account-ink);
+  border-radius: 16px;
+  font: inherit;
+  color: inherit;
+  background: #fff;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.account-button {
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 8px 16px;
+  border: 3px solid var(--account-ink);
+  border-radius: 999px;
+  background: var(--account-peach);
+  color: var(--account-ink);
+  box-shadow: 0 2px 0 var(--account-ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.account-button.quiet { background: var(--account-cream); box-shadow: none; border-width: 2px; }
+.account-button:disabled { opacity: .65; cursor: default; }
+.account-panel h1:focus { outline: none; }
+.account-button:focus-visible, .account-panel input:focus-visible {
+  outline: 3px solid var(--account-blue);
+  outline-offset: 3px;
+}
+@media (hover: hover) {
+  .account-button:not(:disabled):hover { filter: brightness(.96); }
+}
+#finny-account-bar .account-button { flex: none; }
+.account-footer { margin-top: 16px; }
+.account-footer[hidden] { display: none; }
+.account-footer button { width: 100%; }
 .account-error:empty { display: none; }
-.account-error { padding: 10px; border: 2px solid #F66A85; border-radius: 12px; }
+.account-panel .account-error { margin-bottom: 16px; padding: 8px 12px; border: 2px solid var(--account-pink); border-radius: 16px; }
 .account-error:not(:empty)::before { content: '⚠ '; }
-.account-conflict { border-top: 2px solid #382C92; padding-top: 8px; margin-top: 16px; }
-@media (max-width: 420px) { #finny-account { padding: 8px; } .account-panel { padding: 14px; } #finny-account-bar { font-size: 14px; padding-inline: 8px; } }
+.account-recovery { display: grid; gap: 16px; }
+
+@media (min-width: 640px) {
+  #finny-account-bar { padding-inline: clamp(24px, 4vw, 56px); gap: 24px; }
+  .account-brand { display: flex; gap: 8px; align-items: center; margin-right: auto; font-size: 1.5rem; }
+  .account-status { font-size: 1rem; }
+}
+
+@media (min-width: 800px) {
+  #finny-account { width: min(100% - 64px, 880px); }
+  .account-layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
+  .account-art {
+    display: grid;
+    place-items: center;
+    padding: 32px;
+    border-right: 3px solid var(--account-ink);
+    background: radial-gradient(circle, #fff5e3 0 41%, transparent 41.5%), var(--account-lavender);
+  }
+  .account-art img { width: 100%; max-width: 260px; height: auto; }
+  .account-actions { grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); }
+  #finny-account[data-view="settings"] .account-layout { display: block; }
+  #finny-account[data-view="settings"] .account-art { display: none; }
+  .account-sections { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .account-conflict { grid-column: 1 / -1; }
+  .account-footer { display: flex; justify-content: flex-end; }
+  .account-footer button { width: auto; }
+}

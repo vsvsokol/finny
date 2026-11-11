@@ -2,127 +2,299 @@
 (() => {
   'use strict';
   let send, state = {}, opened = false, mode = 'login', dismissedFirst = false;
-  const bar = document.createElement('header'); bar.id = 'finny-account-bar';
-  const status = document.createElement('span'); status.setAttribute('role', 'status');
-  const open = document.createElement('button'); open.type = 'button'; open.textContent = 'Сохранения';
-  open.disabled = true;
-  open.onclick = () => { opened = true; render(); panel.querySelector('input')?.focus(); };
-  bar.append(status, open); document.body.append(bar);
-  const overlay = document.createElement('section'); overlay.id = 'finny-account'; overlay.hidden = true;
-  overlay.setAttribute('aria-label', 'Учётная запись и сохранения');
-  overlay.setAttribute('role', 'dialog'); overlay.setAttribute('aria-modal', 'true');
-  const panel = document.createElement('div'); panel.className = 'account-panel';
-  const title = document.createElement('h1'); title.textContent = 'Сохранения Финни';
-  const intro = document.createElement('p');
-  const error = document.createElement('p'); error.className = 'account-error'; error.setAttribute('role', 'alert');
-  const content = document.createElement('div');
-  const close = button('Вернуться в игру', () => {
-    opened = false; dismissedFirst = true; send('guest', ''); render();
-  }, true);
-  panel.append(title, intro, error, content, close); overlay.append(panel); document.body.append(overlay);
   let contentKey = '';
-  const offline = document.createElement('span'); offline.className = 'offline-state';
-  offline.setAttribute('role', 'status'); bar.insertBefore(offline, open);
+
+  const bar = document.createElement('header');
+  bar.id = 'finny-account-bar';
+  const brand = element('span', 'account-brand');
+  brand.append(mascot(), 'Питомец Финни');
+  const status = element('span', 'account-status');
+  status.setAttribute('role', 'status');
+  const open = button('Войти', () => {
+    mode = 'login';
+    opened = true;
+    render();
+  });
+  open.disabled = true;
+  open.setAttribute('aria-haspopup', 'dialog');
+  open.setAttribute('aria-controls', 'finny-account');
+  bar.append(brand, status, open);
+  document.body.append(bar);
+
+  const dialog = document.createElement('dialog');
+  dialog.id = 'finny-account';
+  dialog.setAttribute('aria-labelledby', 'finny-account-title');
+  dialog.addEventListener('keydown', event => {
+    if (event.key === 'Escape') dismiss(event);
+  });
+  dialog.addEventListener('cancel', dismiss);
+  dialog.addEventListener('close', () => {
+    if (!opened || dialog.open) return;
+    if (canClose()) closeAccount();
+    else render();
+  });
+
+  function dismiss(event) {
+    event.preventDefault();
+    if (canClose()) closeAccount();
+  }
+
+  function canClose() {
+    return !state.busy && !state.recoveryCode && !state.fatal;
+  }
+
+  const layout = element('div', 'account-layout');
+  const art = element('div', 'account-art');
+  art.append(mascot());
+  const panel = element('div', 'account-panel');
+  const title = document.createElement('h1');
+  title.id = 'finny-account-title';
+  title.tabIndex = -1;
+  const intro = element('p', 'account-intro');
+  const error = element('p', 'account-error');
+  error.setAttribute('role', 'alert');
+  const content = document.createElement('div');
+  const footer = element('footer', 'account-footer');
+  const close = button('К игре', closeAccount, true);
+  footer.append(close);
+  panel.append(title, intro, error, content, footer);
+  layout.append(art, panel);
+  dialog.append(layout);
+  document.body.append(dialog);
+
+  const offline = document.createElement('p');
+  offline.hidden = true;
+  offline.setAttribute('role', 'status');
+  offline.textContent = '✓ Игра доступна без сети';
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').then(() => navigator.serviceWorker.ready).then(() => {
-      offline.textContent = 'Офлайн ✓'; offline.title = 'Файлы игры сохранены для открытия без сети';
-    }).catch(() => { offline.textContent = ''; });
+      offline.hidden = false;
+    }).catch(() => { offline.hidden = true; });
   }
+
+  const titles = {
+    login: 'Вход в игру',
+    reauth: 'Повторный вход',
+    register: 'Создать аккаунт',
+    recover: 'Восстановить доступ',
+    password: 'Сменить пароль',
+    'recovery-code': 'Новый код восстановления'
+  };
+
+  function element(tag, className) {
+    const node = document.createElement(tag);
+    node.className = className;
+    return node;
+  }
+
+  function mascot() {
+    const image = document.createElement('img');
+    image.src = 'favicon.png';
+    image.alt = '';
+    image.width = 523;
+    image.height = 323;
+    return image;
+  }
+
   function button(text, callback, quiet = false) {
-    const b = document.createElement('button'); b.type = 'button'; b.textContent = text;
-    b.className = quiet ? 'quiet' : ''; b.onclick = callback; return b;
+    const node = element('button', quiet ? 'account-button quiet' : 'account-button');
+    node.type = 'button';
+    node.textContent = text;
+    node.onclick = callback;
+    return node;
   }
-  function action(name, data = {}) { send(name, JSON.stringify(data)); }
-  function field(form, caption, name, type = 'text', autocomplete = '') {
-    const label = document.createElement('label'); label.textContent = caption;
-    const input = document.createElement('input'); input.name = name; input.type = type;
-    input.autocomplete = autocomplete; input.required = true;
+
+  function paragraph(text) {
+    const node = document.createElement('p');
+    node.textContent = text;
+    return node;
+  }
+
+  function closeAccount() {
+    opened = false;
+    dismissedFirst = true;
+    send('guest', '');
+    render();
+    open.focus();
+  }
+
+  function changeMode(next) {
+    mode = next;
+    render();
+    dialog.scrollTop = 0;
+    title.focus({ preventScroll: true });
+  }
+
+  function action(name, data = {}) {
+    send(name, JSON.stringify(data));
+  }
+
+  function field(form, caption, name, type, autocomplete, hint) {
+    const label = document.createElement('label');
+    const captionText = document.createElement('span');
+    captionText.textContent = caption;
+    label.append(captionText);
+    const input = document.createElement('input');
+    input.name = name;
+    input.type = type;
+    input.autocomplete = autocomplete;
+    input.required = true;
     input.maxLength = name.toLowerCase().includes('password') ? 128 : name === 'login' ? 32 : 128;
-    if (name === 'login') { input.pattern = '[a-zA-Z0-9_.-]{3,32}'; input.autocapitalize = 'none'; input.spellcheck = false; }
+    if (name === 'login') {
+      input.pattern = '[a-zA-Z0-9_.\\-]{3,32}';
+      input.autocapitalize = 'none';
+      input.spellcheck = false;
+    }
     if (name === 'password' || name === 'newPassword') input.minLength = 10;
-    label.append(input); form.append(label); return input;
+    label.append(input);
+    if (hint) {
+      const description = document.createElement('small');
+      description.id = 'account-hint-' + name;
+      description.textContent = hint;
+      input.setAttribute('aria-describedby', description.id);
+      label.append(description);
+    }
+    form.append(label);
+    return input;
   }
+
   function authForm() {
     const form = document.createElement('form');
     if (!['password', 'recovery-code'].includes(mode)) {
-      const login = field(form, 'Логин (латинские буквы, цифры, _ . -)', 'login', 'text', 'username');
+      const hint = mode === 'register' ? '3–32 символа: латинские буквы, цифры, точка, дефис и подчёркивание.' : '';
+      const login = field(form, 'Логин', 'login', 'text', 'username', hint);
       login.value = state.login || '';
     }
     if (mode === 'recover') field(form, 'Код восстановления', 'recoveryCode', 'text', 'off');
     if (mode === 'password') field(form, 'Текущий пароль', 'currentPassword', 'password', 'current-password');
-    field(form, mode === 'recover' || mode === 'password' ? 'Новый пароль (от 10 символов)' : 'Пароль (от 10 символов)',
-      mode === 'recover' || mode === 'password' ? 'newPassword' : 'password', 'password',
-      mode === 'register' || mode === 'recover' || mode === 'password' ? 'new-password' : 'current-password');
-    const submit = document.createElement('button'); submit.type = 'submit';
-    submit.textContent = ({login:'Войти', reauth:'Войти', register:'Создать учётную запись', recover:'Восстановить доступ',
-      password:'Сменить пароль', 'recovery-code':'Получить новый код'})[mode];
+    const replacingPassword = mode === 'recover' || mode === 'password';
+    const creatingPassword = replacingPassword || mode === 'register';
+    field(form, replacingPassword ? 'Новый пароль' : 'Пароль',
+      replacingPassword ? 'newPassword' : 'password', 'password',
+      creatingPassword ? 'new-password' : 'current-password',
+      creatingPassword ? 'Не меньше 10 символов.' : '');
+
+    const submit = element('button', 'account-button');
+    submit.type = 'submit';
+    submit.textContent = ({
+      login: 'Войти', reauth: 'Войти', register: 'Создать аккаунт', recover: 'Восстановить доступ',
+      password: 'Сменить пароль', 'recovery-code': 'Получить новый код'
+    })[mode];
     form.append(submit);
     form.onsubmit = event => {
-      event.preventDefault(); if (state.busy) return;
+      event.preventDefault();
+      if (state.busy) return;
       const data = Object.fromEntries(new FormData(form));
       form.querySelectorAll('input[type=password]').forEach(input => { input.value = ''; });
       action(mode === 'reauth' ? 'login' : mode, data);
     };
-    content.append(form);
-    if (!state.login) {
-      for (const [name, text] of [['login','Уже есть учётная запись'], ['register','Создать учётную запись'], ['recover','Забыли пароль?']]) {
-        if (mode !== name) content.append(button(text, () => { mode = name; contentKey = ''; render(); }, true));
-      }
-      const note = document.createElement('p');
-      note.textContent = 'Почта и настоящее имя не нужны. Придумайте логин-псевдоним. Код восстановления сохраните вместе со взрослым.';
-      content.append(note);
-    } else content.append(button('Назад к сохранениям', () => { mode = 'login'; contentKey = ''; render(); }, true));
-  }
-  function accountView() {
-    const who = document.createElement('p'); who.textContent = 'Учётная запись: ' + state.login; content.append(who);
-    if (state.needsLogin) content.append(button('Войти снова', () => { mode = 'reauth'; contentKey = ''; render(); }));
-    if (state.needsLogin) content.append(button('Забыли пароль?', () => { mode = 'recover'; contentKey = ''; render(); }, true));
-    if (state.guestImport) content.append(button('Перенести гостевых питомцев', () => action('import')));
-    for (const conflict of state.conflicts || []) {
-      const box = document.createElement('section'); box.className = 'account-conflict';
-      const heading = document.createElement('h2'); heading.textContent = conflict.name;
-      const text = document.createElement('p');
-      text.textContent = 'Этот профиль изменился на другом устройстве. Можно взять серверную версию или сохранить местную отдельным питомцем. Перед выбором обе версии попадут в резервную копию этого браузера.';
-      box.append(heading, text,
-        button('Сохранить обе версии', () => send('both', String(conflict.id))),
-        button('Взять серверную версию', () => send('server', String(conflict.id)), true));
-      content.append(box);
+
+    const actions = element('div', 'account-actions');
+    if (!state.login && mode === 'login') {
+      actions.append(button('Создать аккаунт', () => changeMode('register'), true),
+        button('Забыли пароль?', () => changeMode('recover'), true));
+    } else {
+      actions.append(button(state.login ? 'Назад в аккаунт' : 'Назад ко входу', () => changeMode('login'), true));
+      if (mode === 'reauth') actions.append(button('Забыли пароль?', () => changeMode('recover'), true));
     }
-    content.append(button('Скачать местную резервную копию', () => send('export', ''), true));
-    content.append(button('Сменить пароль', () => { mode = 'password'; contentKey = ''; render(); }, true));
-    content.append(button('Новый код восстановления', () => { mode = 'recovery-code'; contentKey = ''; render(); }, true));
-    content.append(button('Выйти из учётной записи', () => action('logout'), true));
-    const note = document.createElement('p');
-    note.textContent = 'Неотправленные изменения останутся в этом браузере для следующего входа в ту же учётную запись. Демо-питомцы на сервер не отправляются.';
-    content.append(note);
+    content.append(form, actions);
+    if (!state.login && mode === 'login') content.append(offline);
   }
+
+  function section(heading, className = 'account-section') {
+    const box = element('section', className);
+    const title = document.createElement('h2');
+    title.textContent = heading;
+    box.append(title);
+    return box;
+  }
+
+  function accountView() {
+    const sections = element('div', 'account-sections');
+    const saves = section('Сохранения');
+    saves.append(offline);
+    if (state.guestImport) saves.append(button('Перенести гостевых питомцев', () => action('import')));
+    saves.append(button('Скачать копию из браузера', () => send('export', ''), true));
+
+    const access = section('Вход и пароль');
+    if (state.needsLogin) {
+      access.append(button('Войти снова', () => changeMode('reauth')),
+        button('Забыли пароль?', () => changeMode('recover'), true));
+    } else {
+      access.append(button('Сменить пароль', () => changeMode('password'), true),
+        button('Новый код восстановления', () => changeMode('recovery-code'), true));
+    }
+    access.append(button('Выйти из аккаунта', () => action('logout'), true));
+    sections.append(saves, access);
+
+    for (const conflict of state.conflicts || []) {
+      const box = section(conflict.name, 'account-section account-conflict');
+      box.append(
+        paragraph('Этот питомец изменился на другом устройстве. Перед выбором обе версии сохранятся в копии этого браузера.'),
+        button('Сохранить обе версии', () => send('both', String(conflict.id))),
+        button('Взять версию с сервера', () => send('server', String(conflict.id)), true)
+      );
+      sections.append(box);
+    }
+    content.append(sections);
+  }
+
+  function recoveryView() {
+    const box = element('div', 'account-recovery');
+    const code = document.createElement('input');
+    code.readOnly = true;
+    code.value = state.recoveryCode;
+    code.setAttribute('aria-label', 'Код восстановления');
+    box.append(code, button('Я сохранил код', () => send('recovery-saved', '')));
+    content.append(box);
+  }
+
   function render() {
     const nextStatus = state.status || 'Сохранения Финни';
     if (status.textContent !== nextStatus) status.textContent = nextStatus;
-    open.textContent = state.login ? 'Учётная запись' : 'Войти / сохранения';
-    if (state.firstVisit && !dismissedFirst) opened = true;
-    if (state.recoveryCode || state.fatal) opened = true;
-    overlay.hidden = !opened;
-    document.getElementById('finny-game').inert = opened;
+    open.textContent = state.login ? 'Аккаунт' : 'Войти';
+    if ((state.firstVisit && !dismissedFirst) || state.recoveryCode || state.fatal) opened = true;
+    open.disabled = !send || !!state.busy;
     open.setAttribute('aria-expanded', String(opened));
-    intro.textContent = state.login ? 'Ваши питомцы и прогресс сохраняются на сервере.' : 'Войдите, чтобы открыть питомцев на другом устройстве. Можно играть и без входа — прогресс останется в этом браузере.';
+
+    const settings = state.login && mode === 'login' && !state.recoveryCode && !state.fatal;
+    dialog.dataset.view = settings ? 'settings' : 'form';
+    title.textContent = state.fatal ? 'Сохранения Финни' :
+      state.recoveryCode ? 'Код восстановления' : settings ? 'Аккаунт' : titles[mode];
+    intro.textContent = state.fatal ? '' :
+      state.recoveryCode ? 'Сохраните код вместе со взрослым. Он поможет вернуть доступ, если вы забудете пароль.' :
+      settings ? state.login + ' · ' + nextStatus :
+      mode === 'register' ? 'Придумайте логин. Почта и настоящее имя не нужны.' :
+      mode === 'login' ? 'Войдите, чтобы играть с тем же питомцем на другом устройстве.' : '';
+    intro.hidden = !intro.textContent;
+
     const nextError = state.fatal || state.error || '';
     if (error.textContent !== nextError) error.textContent = nextError;
-    close.hidden = !!state.recoveryCode || !!state.fatal;
-    const key = JSON.stringify([mode, state.login, state.recoveryCode, state.guestImport, state.conflicts, state.needsLogin]);
+    footer.hidden = !!state.recoveryCode || !!state.fatal;
+    close.textContent = state.login ? 'К игре' : 'Играть без входа';
+
+    const key = JSON.stringify([mode, state.login, state.recoveryCode, state.guestImport, state.conflicts, state.needsLogin, state.fatal]);
     if (key !== contentKey) {
-      contentKey = key; content.replaceChildren();
-      if (state.recoveryCode) {
-        const text = document.createElement('p'); text.textContent = 'Сохраните код: он поможет вернуть доступ, если пароль забудется. Сервер больше не покажет этот код.';
-        const code = document.createElement('input'); code.readOnly = true; code.value = state.recoveryCode;
-        code.setAttribute('aria-label', 'Код восстановления');
-        content.append(text, code, button('Я сохранил код', () => send('recovery-saved', '')));
-      } else if (state.login && mode === 'login') accountView();
-      else authForm();
+      const focusWasInContent = content.contains(document.activeElement);
+      contentKey = key;
+      content.replaceChildren();
+      if (!state.fatal) {
+        if (state.recoveryCode) recoveryView();
+        else if (settings) accountView();
+        else authForm();
+      }
+      if (focusWasInContent) title.focus({ preventScroll: true });
     }
-    panel.querySelectorAll('button,input').forEach(element => { element.disabled = !!state.busy || !!state.fatal; });
-    open.disabled = !!state.busy;
+    panel.querySelectorAll('button,input').forEach(node => { node.disabled = !!state.busy; });
+    if (opened && !dialog.open) {
+      dialog.showModal();
+      dialog.scrollTop = 0;
+      title.focus({ preventScroll: true });
+    } else if (!opened && dialog.open) {
+      dialog.close();
+    }
   }
+
   globalThis.finnyAccount = {
     start(callback) { send = callback; },
     render(next) { state = next; render(); }
