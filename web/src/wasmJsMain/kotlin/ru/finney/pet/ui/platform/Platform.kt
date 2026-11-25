@@ -7,9 +7,14 @@ import kotlinx.browser.window
 import ru.finney.pet.web.UrlFlags
 import ru.finney.pet.web.WebBack
 import ru.finney.pet.web.WebBuild
+import ru.finney.pet.web.openAccountUi
 import ru.finney.pet.web.res.drawableNames
 
 // Веб-реализация того, что экранам нужно от платформы (Android — app/.../ui/platform/Platform.kt).
+
+internal val webAccountAction: (() -> Unit)? = { openAccountUi("login") }
+internal val webFriendsAction: (() -> Unit)? = { openAccountUi("friends") }
+internal val useCompactBathShelf = true
 
 /** Отладочные кнопки на вебе — по флагу ?debug=1 или в сборке разработчика. */
 @Composable

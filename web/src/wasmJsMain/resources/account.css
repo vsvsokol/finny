@@ -13,36 +13,15 @@
   --account-pink: #f66a85;
   --account-lavender: #e9e1ff;
   --account-heading: "Finney Glina", system-ui, sans-serif;
-  --account-bar-height: calc(68px + env(safe-area-inset-top));
 }
 
-#finny-game { position: fixed; inset: var(--account-bar-height) 0 0; touch-action: none; }
+#finny-game { position: fixed; inset: 0; touch-action: none; }
+.account-screen #finny-game { visibility: hidden; }
 
-#finny-account-bar, #finny-account {
+#finny-account {
   box-sizing: border-box;
   color: var(--account-ink);
   font: 1rem/1.45 system-ui, sans-serif;
-}
-
-#finny-account-bar {
-  position: fixed;
-  inset: 0 0 auto;
-  height: var(--account-bar-height);
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: env(safe-area-inset-top) max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left));
-  background: var(--account-cream);
-  border-bottom: 3px solid var(--account-ink);
-}
-
-.account-brand { display: none; }
-.account-brand img { width: 52px; height: auto; }
-.account-status { min-width: 0; overflow-wrap: anywhere; font-size: .875rem; line-height: 1.25; }
-
-#finny-account {
   width: min(100% - 24px, 500px);
   max-width: none;
   max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
@@ -58,10 +37,13 @@
 }
 
 #finny-account::backdrop { background: rgb(43 34 80 / .56); }
+#finny-account.account-standalone::backdrop {
+  background: radial-gradient(ellipse at center, #fff4e2, var(--account-lavender) 75%);
+}
 
 .account-panel { min-width: 0; padding: clamp(16px, 4vw, 32px); }
 .account-art { display: none; }
-.account-panel h1, .account-panel h2, .account-brand {
+.account-panel h1, .account-panel h2 {
   margin: 0;
   font-family: var(--account-heading);
   font-weight: 400;
@@ -123,7 +105,6 @@
 @media (hover: hover) {
   .account-button:not(:disabled):hover { filter: brightness(.96); }
 }
-#finny-account-bar .account-button { flex: none; }
 .account-footer { margin-top: 16px; }
 .account-footer[hidden] { display: none; }
 .account-footer button { width: 100%; }
@@ -132,10 +113,18 @@
 .account-error:not(:empty)::before { content: '⚠ '; }
 .account-recovery { display: grid; gap: 16px; }
 
-@media (min-width: 640px) {
-  #finny-account-bar { padding-inline: clamp(24px, 4vw, 56px); gap: 24px; }
-  .account-brand { display: flex; gap: 8px; align-items: center; margin-right: auto; font-size: 1.5rem; }
-  .account-status { font-size: 1rem; }
+.account-panel .friend-form { align-items: end; gap: 8px; }
+.friends-notice:empty { display: none; }
+.friends-list { display: grid; gap: 12px; margin-top: 16px; }
+.friend-rows { list-style: none; margin: 0; padding: 0; }
+.friend-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-block: 8px; }
+.friend-row + .friend-row { border-top: 1px solid rgb(56 44 146 / .24); }
+.friend-login { overflow-wrap: anywhere; min-width: 0; font-weight: 600; margin-right: auto; }
+.friend-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+
+@media (min-width: 560px) {
+  #finny-account[data-view="friends"] { width: min(100% - 40px, 620px); }
+  .account-panel .friend-form { grid-template-columns: minmax(0, 1fr) auto; }
 }
 
 @media (min-width: 800px) {
@@ -150,8 +139,8 @@
   }
   .account-art img { width: 100%; max-width: 260px; height: auto; }
   .account-actions { grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); }
-  #finny-account[data-view="settings"] .account-layout { display: block; }
-  #finny-account[data-view="settings"] .account-art { display: none; }
+  #finny-account:not([data-view="form"]) .account-layout { display: block; }
+  #finny-account:not([data-view="form"]) .account-art { display: none; }
   .account-sections { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .account-conflict { grid-column: 1 / -1; }
   .account-footer { display: flex; justify-content: flex-end; }

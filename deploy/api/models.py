@@ -15,8 +15,11 @@ class Model(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
 
-class Credentials(Model):
+class AccountLogin(Model):
     login: str = Field(min_length=3, max_length=32, pattern=r"^[a-zA-Z0-9_.-]+$")
+
+
+class Credentials(AccountLogin):
     password: str = Field(min_length=10, max_length=128)
 
 
@@ -25,14 +28,17 @@ class PasswordChange(Model):
     newPassword: str = Field(min_length=10, max_length=128)
 
 
-class Recovery(Model):
-    login: str = Field(min_length=3, max_length=32, pattern=r"^[a-zA-Z0-9_.-]+$")
+class Recovery(AccountLogin):
     recoveryCode: str = Field(min_length=1, max_length=128)
     newPassword: str = Field(min_length=10, max_length=128)
 
 
 class ConfirmPassword(Model):
     password: str = Field(min_length=1, max_length=128)
+
+
+class FriendshipAction(Model):
+    action: Literal["accept", "decline", "cancel", "remove"]
 
 
 class Profile(Model):

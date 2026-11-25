@@ -210,6 +210,7 @@ import ru.finney.pet.ui.motion.PortalReveal
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import ru.finney.pet.ui.platform.rememberIsDebugBuild
+import ru.finney.pet.ui.platform.useCompactBathShelf
 
 // Главный экран по обновлённому макету: компактные действия справа и состояние у питомца.
 @Composable
@@ -674,6 +675,7 @@ internal fun HomeContent(
     var bathNudge by remember { mutableIntStateOf(0) }
     // Магазин шага ванны: открыт с плитки «Купить» — мыло или щётка с пастой.
     var bathShop by rememberSaveable { mutableStateOf<BathStep?>(null) }
+    var careDockTop by remember { mutableStateOf<Float?>(null) }
 
     fun openCare(target: CareTarget) {
         // У ванны окна нет: шаги — на панели в самой ванной (BathRoom).
@@ -1082,7 +1084,9 @@ internal fun HomeContent(
         // Четыре кольца по 70 dp с зазорами помещаются и на экране в 360 dp.
         Row(
             // В широком режиме — док под сценой, а не полоса во всё окно.
-            modifier = Modifier.capWidthWhenExpanded(CareDockMax).fillMaxWidth().graphicsLayer { alpha = hudAlpha },
+            modifier = Modifier.capWidthWhenExpanded(CareDockMax).fillMaxWidth().graphicsLayer { alpha = hudAlpha }
+                .then(if (useCompactBathShelf) Modifier.onGloballyPositioned { careDockTop = it.boundsInRoot().top }
+                    else Modifier),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             // Спящий не играет, не ест и не моется: кнопки полупрозрачные и не нажимаются.
@@ -1288,6 +1292,7 @@ internal fun HomeContent(
                 onOpenShop = { bathShop = it },
                 onTickle = { if (animations) animation.playGiggle() },
                 onDone = { if (animations) animation.playJoy() },
+                dockTop = careDockTop,
             )
         }
 

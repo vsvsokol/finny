@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -79,6 +81,7 @@ import ru.finney.pet.ui.components.WarningBadge
 import ru.finney.pet.ui.components.drawPointingHand
 import ru.finney.pet.ui.components.pulse
 import ru.finney.pet.ui.motion.LocalAnimations
+import ru.finney.pet.ui.platform.useCompactBathShelf
 import ru.finney.pet.ui.sound.LocalSounds
 import ru.finney.pet.ui.sound.Sfx
 import ru.finney.pet.ui.theme.FinneyBlue
@@ -240,12 +243,14 @@ fun BathRoom(
     onTickle: () -> Unit,
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
+    dockTop: Float? = null,
 ) {
     val density = LocalDensity.current
     val sounds = LocalSounds.current
     val animations = LocalAnimations.current
     val session = remember { BathSession() }
     var origin by remember { mutableStateOf(Offset.Zero) }
+    var roomBottom by remember { mutableFloatStateOf(0f) }
     val currentShelf by rememberUpdatedState(shelf)
     val currentOnUse by rememberUpdatedState(onUse)
     val currentOnTickle by rememberUpdatedState(onTickle)
@@ -350,7 +355,10 @@ fun BathRoom(
         if (step != BathStep.SOAP) currentOnDone()
     }
 
-    Box(modifier = modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }) {
+    Box(modifier = modifier.fillMaxSize().onGloballyPositioned {
+        origin = it.positionInRoot()
+        if (useCompactBathShelf) roomBottom = origin.y + it.size.height
+    }) {
         Canvas(Modifier.fillMaxSize()) {
             val now = session.nowMs
             val pop = if (session.poppedAtMs < 0) 0f else ((now - session.poppedAtMs) / POP_MS.toFloat()).coerceIn(0f, 1f)
@@ -507,20 +515,21 @@ fun BathRoom(
             BathNote(note, kind = kind, modifier = Modifier.graphicsLayer { translationY = jump.value * density.density })
         }
 
-        // Панель шагов над нижним рядом: сплошная, с толстой обводкой, как окна приложения, —
-        // чтобы не сливалась с комнатой. Номера и стрелки говорят порядок без слов.
+        val shelfBottom = dockTop?.let { top ->
+            with(density) { (roomBottom - top).coerceAtLeast(0f).toDp() } + 8.dp
+        } ?: 104.dp
+        val shelfInsets = Modifier.systemBarsPadding().padding(start = 10.dp, end = 10.dp, bottom = shelfBottom)
+        val shelfFrame = if (useCompactBathShelf) {
+            shelfInsets.widthIn(max = 390.dp).fillMaxWidth()
+        } else {
+            Modifier.fillMaxWidth().then(shelfInsets)
+                .clip(RoundedCornerShape(24.dp)).background(FinneyCream)
+                .border(StrokeBold, FinneyInk, RoundedCornerShape(24.dp)).padding(8.dp)
+        }
         Row(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .systemBarsPadding()
-                .padding(start = 10.dp, end = 10.dp, bottom = 104.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(FinneyCream)
-                .border(StrokeBold, FinneyInk, RoundedCornerShape(24.dp))
-                .padding(8.dp),
+            modifier = Modifier.align(Alignment.BottomCenter).then(shelfFrame),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (useCompactBathShelf) 8.dp else 2.dp),
         ) {
             fun tile(s: BathStep): TileState = when {
                 step == s -> TileState.Now
@@ -534,13 +543,13 @@ fun BathRoom(
                 left = shelf.soapLeft, state = tile(BathStep.SOAP), done = BathStep.SOAP in session.done,
                 onClick = { begin(BathStep.SOAP) }, modifier = Modifier.weight(1f),
             )
-            StepArrow()
+            if (!useCompactBathShelf) StepArrow()
             StepTile(
                 number = 2, step = BathStep.RINSE, picture = null,
                 left = null, state = tile(BathStep.RINSE), done = BathStep.RINSE in session.done,
                 onClick = { begin(BathStep.RINSE) }, modifier = Modifier.weight(1f),
             )
-            StepArrow()
+            if (!useCompactBathShelf) StepArrow()
             StepTile(
                 number = 3, step = BathStep.TEETH, picture = brushPicture,
                 left = shelf.teethLeft, state = tile(BathStep.TEETH), done = BathStep.TEETH in session.done,
@@ -612,10 +621,14 @@ private fun StepTile(
     lockedUntil: Int? = null,
 ) {
     val shape = RoundedCornerShape(16.dp)
+    val guided = state == TileState.Next
+    val emphasis = state == TileState.Now || useCompactBathShelf && guided
+    val pictureSize = if (useCompactBathShelf) 30.dp else 44.dp
     val empty = left == 0
     val action = if (empty && lockedUntil == null) "Купить" else step.label
     val spoken = "$number. ${step.short()}" + when {
         state == TileState.Now -> ", сейчас"
+        useCompactBathShelf && guided -> ", следующий шаг"
         lockedUntil != null -> ", откроется на уровне $lockedUntil"
         empty -> ", нет на полочке"
         done -> ", сделано"
@@ -624,26 +637,28 @@ private fun StepTile(
     }
     Box(
         modifier = modifier
-            .pulse(state == TileState.Next)
-            .tapHand(state == TileState.Next)
+            .pulse(guided && !useCompactBathShelf)
+            .tapHand(guided && !useCompactBathShelf)
             .clip(shape)
-            .background(if (state == TileState.Now) FinneyYellow else FinneyGlare)
-            .border(if (state == TileState.Now) StrokeBold else StrokeRegular, FinneyInk, shape)
+            .background(if (emphasis) FinneyYellow else if (useCompactBathShelf) FinneyCream else FinneyGlare)
+            .border(if (emphasis) StrokeBold else StrokeRegular, FinneyInk, shape)
             .clickable(onClickLabel = action, onClick = onClick)
             .clearAndSetSemantics {
                 contentDescription = spoken
                 onClick(label = action) { onClick(); true }
             },
+        contentAlignment = Alignment.Center,
     ) {
         Column(
-            Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            Modifier.fillMaxWidth().then(if (useCompactBathShelf) Modifier.defaultMinSize(minHeight = 86.dp) else Modifier)
+                .padding(vertical = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
         ) {
             if (picture != null) {
-                ItemPicture(picture, itemFallback(picture), size = 44.dp, modifier = Modifier.alpha(if (empty) 0.35f else 1f))
+                ItemPicture(picture, itemFallback(picture), size = pictureSize, modifier = Modifier.alpha(if (empty) 0.35f else 1f))
             } else {
-                Canvas(Modifier.size(44.dp)) {
+                Canvas(Modifier.size(pictureSize)) {
                     drawShower(Offset(size.width / 2, size.height * 0.45f), size.height, 0L, size.width / 80f, 1f)
                 }
             }

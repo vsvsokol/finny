@@ -2,24 +2,7 @@
 (() => {
   'use strict';
   let send, state = {}, opened = false, mode = 'login', dismissedFirst = false;
-  let contentKey = '';
-
-  const bar = document.createElement('header');
-  bar.id = 'finny-account-bar';
-  const brand = element('span', 'account-brand');
-  brand.append(mascot(), 'Питомец Финни');
-  const status = element('span', 'account-status');
-  status.setAttribute('role', 'status');
-  const open = button('Войти', () => {
-    mode = 'login';
-    opened = true;
-    render();
-  });
-  open.disabled = true;
-  open.setAttribute('aria-haspopup', 'dialog');
-  open.setAttribute('aria-controls', 'finny-account');
-  bar.append(brand, status, open);
-  document.body.append(bar);
+  let contentKey = '', friendsKey = '', friendsList, friendLogin, returnFocus;
 
   const dialog = document.createElement('dialog');
   dialog.id = 'finny-account';
@@ -111,14 +94,17 @@
   }
 
   function closeAccount() {
+    if (mode === 'friends') send('friends-close', '');
     opened = false;
     dismissedFirst = true;
-    send('guest', '');
+    if (state.firstVisit) send('guest', '');
     render();
-    open.focus();
+    if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
+    returnFocus = undefined;
   }
 
   function changeMode(next) {
+    if (mode === 'friends' && next !== 'friends') send('friends-close', '');
     mode = next;
     render();
     dialog.scrollTop = 0;
@@ -249,42 +235,126 @@
     content.append(box);
   }
 
+  function friendsView() {
+    if (!state.login || state.needsLogin) {
+      content.append(button(state.login ? 'Войти снова' : 'Войти', () => changeMode(state.login ? 'reauth' : 'login')));
+      return;
+    }
+    const form = element('form', 'friend-form');
+    friendLogin = field(form, 'Ник друга', 'login', 'text', 'off');
+    const submit = element('button', 'account-button');
+    submit.type = 'submit';
+    submit.textContent = 'Отправить запрос';
+    form.append(submit);
+    form.onsubmit = event => {
+      event.preventDefault();
+      if (!state.busy) action('friend-request', { login: friendLogin.value });
+    };
+    const notice = element('p', 'friends-notice');
+    notice.setAttribute('role', 'status');
+    friendsList = element('div', 'friends-list');
+    content.append(form, notice, friendsList);
+  }
+
+  function renderFriends() {
+    if (!friendsList || !content.contains(friendsList)) return;
+    const notice = content.querySelector('.friends-notice');
+    if (notice.textContent !== state.friendsNotice) {
+      notice.textContent = state.friendsNotice || '';
+      if (state.friendsNotice === 'Запрос отправлен.' || state.friendsNotice === 'Вы уже друзья.') friendLogin.value = '';
+    }
+    const key = JSON.stringify([state.friends, !!state.friendsError]);
+    if (key === friendsKey) return;
+    friendsKey = key;
+    const listHadFocus = friendsList.contains(document.activeElement);
+    friendsList.replaceChildren();
+    if (!state.friends) {
+      friendsList.append(state.friendsError
+        ? button('Обновить список', () => send('friends-refresh', ''), true)
+        : paragraph('Загружаем список…'));
+    } else {
+      const groups = [
+        ['incoming', 'Входящие запросы', [['Принять', 'accept'], ['Отклонить', 'decline']]],
+        ['outgoing', 'Отправленные запросы', [['Отменить запрос', 'cancel']]],
+        ['friend', 'Мои друзья', [['Удалить', 'remove']]]
+      ];
+      for (const [status, heading, actions] of groups) {
+        const rows = state.friends.filter(row => row.status === status);
+        if (!rows.length && status !== 'friend') continue;
+        const group = section(heading);
+        if (!rows.length) group.append(paragraph('Здесь появятся друзья, когда вы примете запрос.'));
+        else {
+          const list = element('ul', 'friend-rows');
+          for (const row of rows) {
+            const item = element('li', 'friend-row');
+            const login = element('span', 'friend-login');
+            login.textContent = row.login;
+            const controls = element('div', 'friend-controls');
+            for (const [label, name] of actions) {
+              const control = button(label, () => action('friend-change', { id: row.id, action: name }), name !== 'accept');
+              control.setAttribute('aria-label', `${label} · ${row.login}`);
+              controls.append(control);
+            }
+            item.append(login, controls);
+            list.append(item);
+          }
+          group.append(list);
+        }
+        friendsList.append(group);
+      }
+    }
+    if (listHadFocus) title.focus({ preventScroll: true });
+  }
+
+  function openAccount(view) {
+    if (!send || opened || !canClose()) return;
+    returnFocus = document.activeElement;
+    mode = view;
+    opened = true;
+    send(view === 'friends' ? 'friends-open' : 'account-open', '');
+    render();
+  }
+
   function render() {
     const nextStatus = state.status || 'Сохранения Финни';
-    if (status.textContent !== nextStatus) status.textContent = nextStatus;
-    open.textContent = state.login ? 'Аккаунт' : 'Войти';
     if ((state.firstVisit && !dismissedFirst) || state.recoveryCode || state.fatal) opened = true;
-    open.disabled = !send || !!state.busy;
-    open.setAttribute('aria-expanded', String(opened));
 
     const settings = state.login && mode === 'login' && !state.recoveryCode && !state.fatal;
-    dialog.dataset.view = settings ? 'settings' : 'form';
+    const social = mode === 'friends' && !state.recoveryCode && !state.fatal;
+    dialog.dataset.view = social ? 'friends' : settings ? 'settings' : 'form';
+    const standalone = opened && !settings && !social;
+    document.body.classList.toggle('account-screen', standalone);
+    dialog.classList.toggle('account-standalone', standalone);
     title.textContent = state.fatal ? 'Сохранения Финни' :
-      state.recoveryCode ? 'Код восстановления' : settings ? 'Аккаунт' : titles[mode];
+      state.recoveryCode ? 'Код восстановления' : social ? 'Друзья' : settings ? 'Аккаунт' : titles[mode];
     intro.textContent = state.fatal ? '' :
       state.recoveryCode ? 'Сохраните код вместе со взрослым. Он поможет вернуть доступ, если вы забудете пароль.' :
+      social ? (state.login && !state.needsLogin ? 'Ваш ник в игре — ' + state.login : 'Войдите в игру, чтобы добавлять друзей.') :
       settings ? state.login + ' · ' + nextStatus :
       mode === 'register' ? 'Придумайте логин. Почта и настоящее имя не нужны.' :
       mode === 'login' ? 'Войдите, чтобы играть с тем же питомцем на другом устройстве.' : '';
     intro.hidden = !intro.textContent;
 
-    const nextError = state.fatal || state.error || '';
+    const nextError = state.fatal || (social ? state.friendsError : state.error) || '';
     if (error.textContent !== nextError) error.textContent = nextError;
     footer.hidden = !!state.recoveryCode || !!state.fatal;
-    close.textContent = state.login ? 'К игре' : 'Играть без входа';
+    close.textContent = social || state.login ? 'К игре' : 'Играть без входа';
 
     const key = JSON.stringify([mode, state.login, state.recoveryCode, state.guestImport, state.conflicts, state.needsLogin, state.fatal]);
     if (key !== contentKey) {
       const focusWasInContent = content.contains(document.activeElement);
       contentKey = key;
+      friendsKey = '';
       content.replaceChildren();
       if (!state.fatal) {
         if (state.recoveryCode) recoveryView();
+        else if (social) friendsView();
         else if (settings) accountView();
         else authForm();
       }
       if (focusWasInContent) title.focus({ preventScroll: true });
     }
+    if (social) renderFriends();
     panel.querySelectorAll('button,input').forEach(node => { node.disabled = !!state.busy; });
     if (opened && !dialog.open) {
       dialog.showModal();
@@ -297,6 +367,7 @@
 
   globalThis.finnyAccount = {
     start(callback) { send = callback; },
+    open: openAccount,
     render(next) { state = next; render(); }
   };
 })();

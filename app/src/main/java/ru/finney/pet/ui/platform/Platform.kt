@@ -21,6 +21,10 @@ import kotlinx.coroutines.withContext
 // То, что экранам нужно от платформы. Здесь — Android; у веб-сборки (web/) такой же
 // файл со своей реализацией. Экраны зовут только эти функции и не знают про Context.
 
+internal val webAccountAction: (() -> Unit)? = null
+internal val webFriendsAction: (() -> Unit)? = null
+internal val useCompactBathShelf = false
+
 /**
  * Отладочная сборка — та, что ставится как ru.finney.pet.debug. Флаг читается
  * из манифеста, а не из BuildConfig: генерация BuildConfig в модуле выключена.

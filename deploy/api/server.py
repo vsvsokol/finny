@@ -21,7 +21,12 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from database import Database
-from models import Credentials, PasswordChange, Recovery, ConfirmPassword, CreateProfile, SaveProfile, DeleteProfile
+from models import (
+    AccountLogin, Credentials, PasswordChange, Recovery, ConfirmPassword,
+    FriendshipAction, CreateProfile, SaveProfile, DeleteProfile, SafeId,
+)
+
+MAX_FRIENDSHIPS = 100
 
 
 def digest(text):
@@ -66,7 +71,8 @@ class RequestGuard:
                 return await reject(403, "origin_required")
             if headers.get(b"content-type", b"").split(b";", 1)[0].strip().lower() != b"application/json":
                 return await reject(415, "json_required")
-        limit = min(self.limit, 16_384) if scope["path"].startswith("/api/auth/") else self.limit
+        small_request = scope["path"].startswith(("/api/auth/", "/api/friends"))
+        limit = min(self.limit, 16_384) if small_request else self.limit
         try:
             length = int(headers.get(b"content-length", b"0"))
         except ValueError:
@@ -320,6 +326,84 @@ def create_app(settings: Settings | None = None):
             conn.execute("DELETE FROM sessions WHERE user_id=?", (user["id"],))
             result = issue_session(conn, response, user)
         return {**result, "recoveryCode": recovery}
+
+    def friend_list(conn, user_id):
+        rows = conn.execute("""
+            SELECT f.id, f.sender_id, f.accepted, u.login
+            FROM friendships f JOIN users u
+              ON u.id = CASE WHEN f.sender_id = :owner THEN f.recipient_id ELSE f.sender_id END
+            WHERE f.sender_id = :owner OR f.recipient_id = :owner
+            ORDER BY u.login
+        """, {"owner": user_id})
+        return {"friends": [
+            {"id": row["id"], "login": row["login"], "status": (
+                "friend" if row["accepted"] else "outgoing" if row["sender_id"] == user_id else "incoming"
+            )} for row in rows
+        ]}
+
+    def friend_write_limit(request):
+        with db.connect() as conn:
+            user = session(conn, request, csrf=True)
+        rate(request, "friend-write", 30, 60, identity=str(user["id"]))
+
+    @app.get("/api/friends")
+    def get_friends(request: Request):
+        with db.connect() as conn:
+            user = session(conn, request)
+            return friend_list(conn, user["id"])
+
+    @app.post("/api/friends")
+    def request_friend(data: AccountLogin, request: Request):
+        friend_write_limit(request)
+        with db.connect(write=True) as conn:
+            sender = session(conn, request, csrf=True)["id"]
+            recipient = conn.execute("SELECT id FROM users WHERE login=?", (data.login.lower(),)).fetchone()
+            if recipient is None:
+                raise HTTPException(404, "friend_login_not_found")
+            target = recipient["id"]
+            if target == sender:
+                raise HTTPException(422, "friend_is_self")
+            pair = (min(sender, target), max(sender, target))
+            existing = conn.execute("""
+                SELECT sender_id, accepted FROM friendships
+                WHERE min(sender_id, recipient_id)=? AND max(sender_id, recipient_id)=?
+            """, pair).fetchone()
+            if existing:
+                if not existing["accepted"] and existing["sender_id"] != sender:
+                    raise HTTPException(409, "friend_request_incoming")
+                return friend_list(conn, sender)
+            for user_id in (sender, target):
+                count = conn.execute("""
+                    SELECT count(*) FROM friendships WHERE sender_id=? OR recipient_id=?
+                """, (user_id, user_id)).fetchone()[0]
+                if count >= MAX_FRIENDSHIPS:
+                    raise HTTPException(409, "friend_limit")
+            conn.execute("INSERT INTO friendships(sender_id,recipient_id) VALUES (?,?)", (sender, target))
+            return friend_list(conn, sender)
+
+    @app.post("/api/friends/{friendship_id}")
+    def change_friendship(friendship_id: SafeId, data: FriendshipAction, request: Request):
+        friend_write_limit(request)
+        with db.connect(write=True) as conn:
+            owner = session(conn, request, csrf=True)["id"]
+            row = conn.execute("""
+                SELECT * FROM friendships WHERE id=? AND (sender_id=? OR recipient_id=?)
+            """, (friendship_id, owner, owner)).fetchone()
+            if row is None:
+                raise HTTPException(404, "friendship_not_found")
+            if row["accepted"]:
+                allowed = {"remove"}
+            elif row["sender_id"] == owner:
+                allowed = {"cancel"}
+            else:
+                allowed = {"accept", "decline"}
+            if data.action not in allowed:
+                raise HTTPException(409, "friendship_changed")
+            if data.action == "accept":
+                conn.execute("UPDATE friendships SET accepted=1 WHERE id=?", (friendship_id,))
+            else:
+                conn.execute("DELETE FROM friendships WHERE id=?", (friendship_id,))
+            return friend_list(conn, owner)
 
     def profile_row(conn, user, profile_id):
         if not 0 < profile_id <= 9_007_199_254_740_991:

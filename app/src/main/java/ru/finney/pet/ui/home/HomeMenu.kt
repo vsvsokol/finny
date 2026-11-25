@@ -24,8 +24,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -57,8 +59,10 @@ import kotlinx.coroutines.launch
 import ru.finney.pet.ui.components.CloseButton
 import ru.finney.pet.ui.components.FinneyIcon
 import ru.finney.pet.ui.components.FinneyIcons
+import ru.finney.pet.ui.components.HeartIcon
 import ru.finney.pet.ui.motion.LocalAnimations
 import ru.finney.pet.ui.motion.motionEnabled
+import ru.finney.pet.ui.platform.webFriendsAction
 import ru.finney.pet.ui.progress.GlossaryBook
 import ru.finney.pet.ui.sound.LocalSounds
 import ru.finney.pet.ui.sound.Sfx
@@ -110,7 +114,8 @@ internal fun HomeMenu(
     var shown by remember { mutableStateOf(false) }
     if (visible) shown = true
     if (shown && burger != Rect.Zero) {
-        val entries = listOf(
+        val friends = webFriendsAction
+        val entries = listOfNotNull(
             MenuEntry("План расходов", { FinneyIcon(FinneyIcons.Plan, size = it) }, onOpenBudget),
             // Раньше «Гардероб», но в панели не только одежда: окрас и комната тоже.
             // Карта уровней — и здесь, и мини-дорожкой в панели уровня: кнопку «Итоги и история» не находили.
@@ -121,6 +126,7 @@ internal fun HomeMenu(
             // Справочник раньше жил только в «Прогрессе» и настройках — его не находили
             // (плейтест 29.09). Здесь он рядом с «Как играть»: оба — «что это значит».
             MenuEntry("Справочник", { GlossaryBook(size = it) }, onOpenGlossary),
+            friends?.let { MenuEntry("Друзья", { HeartIcon(filled = true, size = it) }, it) },
             MenuEntry("Настройки", { FinneyIcon(FinneyIcons.Gear, size = it) }, onOpenSettings),
         )
 
@@ -224,7 +230,8 @@ internal fun HomeMenu(
                             top = itemsTop.toDp(),
                             end = (width - b.center.x - Circle.toPx() / 2f).coerceAtLeast(0f).toDp(),
                         )
-                        .onSizeChanged { columnHeight = it.height },
+                        .onSizeChanged { columnHeight = it.height }
+                        .then(if (friends != null) Modifier.verticalScroll(rememberScrollState()) else Modifier),
                     horizontalAlignment = Alignment.End,
                     verticalArrangement = Arrangement.spacedBy(Gap),
                 ) {

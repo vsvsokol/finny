@@ -84,6 +84,7 @@ fun main() {
             throw e
         }
         hideSplash()
+        webAccount.awaitGameEntry()
         ComposeViewport(document.getElementById("finny-game")!!) { FinnyWebApp() }
     }
 }

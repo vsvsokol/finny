@@ -35,6 +35,23 @@ CREATE TABLE rate_limits (
 PRAGMA user_version=1;
 """
 
+# The previous API only opens schema version 1. This additive migration leaves
+# that version in place so deployment can roll back without restoring a database.
+FRIENDS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS friendships (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ sender_id INTEGER NOT NULL REFERENCES users(id),
+ recipient_id INTEGER NOT NULL REFERENCES users(id),
+ accepted INTEGER NOT NULL DEFAULT 0 CHECK(accepted IN (0, 1)),
+ CHECK(sender_id <> recipient_id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS friendships_pair ON friendships(
+ min(sender_id, recipient_id), max(sender_id, recipient_id)
+);
+CREATE INDEX IF NOT EXISTS friendships_sender ON friendships(sender_id);
+CREATE INDEX IF NOT EXISTS friendships_recipient ON friendships(recipient_id);
+"""
+
 
 class Database:
     def __init__(self, path: Path):
@@ -45,12 +62,12 @@ class Database:
             db.execute("PRAGMA journal_mode=WAL")
             db.execute("BEGIN IMMEDIATE")
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version == 0:
-                for statement in SCHEMA.split(";"):
-                    if statement.strip():
-                        db.execute(statement)
-            elif version != 1:
+            if version not in (0, 1):
                 raise RuntimeError("Неизвестная версия базы; нужна совместимая версия API")
+            migration = SCHEMA + FRIENDS_SCHEMA if version == 0 else FRIENDS_SCHEMA
+            for statement in migration.split(";"):
+                if statement.strip():
+                    db.execute(statement)
             db.commit()
         finally:
             db.close()

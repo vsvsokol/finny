@@ -31,6 +31,7 @@ import ru.finney.pet.ui.theme.FinneyPeach
 import ru.finney.pet.ui.theme.FinneyTheme
 import ru.finney.pet.ui.theme.FinneyYellow
 import ru.finney.pet.ui.platform.rememberAppVersion
+import ru.finney.pet.ui.platform.webAccountAction
 
 /**
  * Настройки из «бургера»: звук и музыка выключаются отдельно и без барьера (ТЗ п. 3.6),
@@ -94,6 +95,10 @@ private fun SettingsContent(
         },
     ) {
         OutlinedText("Настройки", style = MaterialTheme.typography.headlineLarge)
+
+        webAccountAction?.let { openAccount ->
+            FinneyButton(text = "Аккаунт", onClick = openAccount)
+        }
 
         FinneyPanel(title = "Звук и анимации") {
             ToggleRow(if (sound) "Звуки: включены" else "Звуки: выключены", sound, onSound)

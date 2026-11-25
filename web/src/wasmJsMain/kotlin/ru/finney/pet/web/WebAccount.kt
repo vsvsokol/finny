@@ -19,11 +19,15 @@ private external fun startAccountUi(callback: (String, String) -> Unit)
 @JsFun("(state) => globalThis.finnyAccount.render(JSON.parse(state))")
 private external fun renderAccountUi(state: String)
 
+@JsFun("(view) => globalThis.finnyAccount.open(view)")
+internal external fun openAccountUi(view: String)
+
 /** Один экземпляр на вкладку; переключение учётки всегда создаёт новую игровую сессию. */
 internal class WebAccount {
     private val scope = MainScope()
     private val gate = Mutex()
     val account = BrowserStorage.get("account.selected")?.let { cloudJson.decodeFromString<CachedAccount>(it) }
+    private val gameEntry = CompletableDeferred<Unit>()
     val activeKey = account?.let { "account.${it.id}.activeProfile" } ?: "activeProfile"
     val navigationEpoch = MutableStateFlow(0)
     val localProblem = MutableStateFlow<String?>(null)
@@ -36,6 +40,11 @@ internal class WebAccount {
     private var needsLogin = false
     private var recovery: String? = null
     private var nextAccount: CachedAccount? = null
+    private var friendsVisible = false
+    private var friends: JsonArray? = null
+    private var friendsError: String? = null
+    private var friendsNotice: String? = null
+    private var friendsUnavailable: String? = null
     private val initial = cacheKey?.let { key -> BrowserStorage.get(key)?.let { cloudJson.decodeFromString<CloudState>(it) } } ?: CloudState()
     private val sync: CloudSync? = account?.let { owner ->
         CloudSync(owner.id, initial, { next ->
@@ -66,6 +75,12 @@ internal class WebAccount {
     private fun publishData() {
         storage.refresh(checkNotNull(sync).state.games())
         render()
+    }
+
+    private fun firstVisit() = account == null && BrowserStorage.get("guest.chosen") != "true"
+
+    suspend fun awaitGameEntry() {
+        if (firstVisit()) gameEntry.await()
     }
 
     fun start() {
@@ -106,6 +121,27 @@ internal class WebAccount {
                 delay(if (account == null) 15_000 else 5_000)
             }
         }
+        if (account != null) scope.launch {
+            while (isActive) {
+                delay(5_000)
+                if (friendsVisible && !busy) refreshFriends()
+            }
+        }
+    }
+
+    private suspend fun refreshFriends() {
+        gate.withLock {
+            if (!friendsVisible || busy) return@withLock
+            try {
+                friends = api.request("GET", "/api/friends").getValue("friends").jsonArray
+                friendsUnavailable = null
+            } catch (failure: CancellationException) {
+                throw failure
+            } catch (failure: Throwable) {
+                friendsUnavailable = friendly(failure)
+            }
+            render()
+        }
     }
 
     private fun render() {
@@ -115,9 +151,12 @@ internal class WebAccount {
             put("error", error ?: "")
             put("busy", busy)
             put("needsLogin", needsLogin)
+            put("friends", friends ?: JsonNull)
+            put("friendsError", friendsError ?: friendsUnavailable ?: "")
+            put("friendsNotice", friendsNotice ?: "")
             put("fatal", localProblem.value ?: "")
             put("recoveryCode", recovery ?: "")
-            put("firstVisit", account == null && BrowserStorage.get("guest.chosen") != "true")
+            put("firstVisit", firstVisit())
             put("guestImport", sync != null && !sync.state.guestImported && runCatching { GuestPersistence().read().profiles.any { !it.profile.isDemo } }.getOrDefault(false))
             put("conflicts", JsonArray(sync?.conflicts?.map {
                 buildJsonObject { put("id", it.localId); put("name", it.snapshot?.petName() ?: "Удалённый профиль") }
@@ -126,9 +165,31 @@ internal class WebAccount {
     }
 
     private suspend fun act(action: String, raw: String) {
+        when (action) {
+            "account-open" -> { error = null; render(); return }
+            "friends-open" -> {
+                friendsVisible = true
+                friendsNotice = null
+                friendsError = null
+                if (account != null) refreshFriends()
+                return
+            }
+            "friends-close" -> { friendsVisible = false; return }
+            "friends-refresh" -> { if (account != null) refreshFriends(); return }
+        }
         if (busy) return
+        val friendAction = action == "friend-request" || action == "friend-change"
         error = null
-        if (action == "guest") { BrowserStorage.requireSet("guest.chosen", "true"); render(); return }
+        if (friendAction) {
+            friendsError = null
+            friendsNotice = null
+        }
+        if (action == "guest") {
+            BrowserStorage.set("guest.chosen", "true")
+            gameEntry.complete(Unit)
+            render()
+            return
+        }
         if (action == "recovery-saved") {
             BrowserStorage.requireSet("account.selected", cloudJson.encodeToString(checkNotNull(nextAccount)))
             window.location.reload()
@@ -145,6 +206,7 @@ internal class WebAccount {
         try {
             gate.withLock {
                 when (action) {
+                    "friend-request", "friend-change" -> changeFriendship(action, raw)
                     "import" -> {
                         val snapshots = GuestPersistence().read().profiles.map { cloudJson.encodeToJsonElement(it).jsonObject }
                         checkNotNull(sync).importGuest(snapshots)
@@ -178,11 +240,44 @@ internal class WebAccount {
                 }
             }
         } catch (failure: CancellationException) { throw failure }
-        catch (failure: Throwable) { error = friendly(failure) }
+        catch (failure: Throwable) {
+            if (friendAction) friendsError = friendly(failure)
+            else error = friendly(failure)
+        }
         finally {
             busy = false
             switching = recovery != null
             render()
+        }
+    }
+
+    private suspend fun changeFriendship(action: String, raw: String) {
+        checkNotNull(account)
+        if (api.csrf.isEmpty()) {
+            api.csrf = api.request("GET", "/api/auth/me").getValue("csrfToken").jsonPrimitive.content
+        }
+        val data = cloudJson.parseToJsonElement(raw).jsonObject
+        val result = if (action == "friend-request") {
+            api.request("POST", "/api/friends", raw)
+        } else {
+            val id = data.getValue("id").jsonPrimitive.long
+            val body = buildJsonObject { put("action", data.getValue("action")) }
+            api.request("POST", "/api/friends/$id", body.toString())
+        }
+        friends = result.getValue("friends").jsonArray
+        friendsUnavailable = null
+        friendsNotice = if (action == "friend-request") {
+            val login = data.getValue("login").jsonPrimitive.content.lowercase()
+            val alreadyFriends = checkNotNull(friends).any {
+                val row = it.jsonObject
+                row.getValue("login").jsonPrimitive.content == login && row.getValue("status").jsonPrimitive.content == "friend"
+            }
+            if (alreadyFriends) "Вы уже друзья." else "Запрос отправлен."
+        } else when (data.getValue("action").jsonPrimitive.content) {
+            "accept" -> "Теперь вы друзья."
+            "decline" -> "Запрос отклонён."
+            "cancel" -> "Запрос отменён."
+            else -> "Друг удалён."
         }
     }
 
@@ -194,6 +289,11 @@ internal class WebAccount {
             "login_unavailable" -> "Этот логин занят. Выберите другой."
             "invalid_request" -> "Проверьте поля: логин 3–32 латинских символа, пароль 10–128 символов."
             "profile_limit", "profile_history_limit" -> "Достигнут лимит профилей. Локальная версия сохранена."
+            "friend_login_not_found" -> "Такого ника нет. Проверьте написание."
+            "friend_is_self" -> "Это ваш ник. Введите ник друга."
+            "friend_request_incoming" -> "Этот игрок уже отправил вам запрос. Проверьте входящие."
+            "friend_limit" -> "У одного из вас слишком много друзей или запросов."
+            "friendship_not_found", "friendship_changed" -> "Статус изменился. Проверьте список друзей."
             "account_changed" -> "В браузере изменилась учётная запись. Войдите снова."
             else -> when (failure.status) {
                 401, 403 -> "Войдите в учётную запись ещё раз."
